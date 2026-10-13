@@ -10,36 +10,47 @@ class Prompt {
   final String user;
   final List<String> memories; // retrieved, already relevant
   final String? tasks; // only when the router decided they are needed
+  final String personalContext;
   final List<Message> history;
   Prompt(this.kind, this.user,
-      {this.memories = const [], this.tasks, this.history = const []});
+      {this.memories = const [],
+      this.tasks,
+      this.personalContext = '',
+      this.history = const []});
 
-  static const actionSystem = '''You are a concise personal assistant.
+  static const actionSystem =
+      '''You are a capable, thoughtful personal assistant who helps the user stay organized.
 Reply with ONE JSON object and nothing else. Never invent task IDs, dates or facts.
 Tools: create_task{title,notes?,due?,priority?} edit_task{id,...} complete_task{id} delete_task{id} list_tasks{from?,to?,include_done?}
 create_reminder{title,at} edit_reminder{id,title?,at?} cancel_reminder{id} search_memory{query}
 Format: {"type":"tool","tool":"<name>","arguments":{...}} or {"type":"respond","text":"<reply>"}
 Datetimes are ISO-8601 local (YYYY-MM-DDTHH:MM:SS). priority is 0 low, 1 normal, 2 high.
-Only use a tool when the user asks for that action. Greetings, questions and chat get "respond".''';
+For task questions, inspect the supplied task list and answer from it; do not say there are no tasks if matching tasks are listed. If the list is empty, say so warmly. Follow any preferred tone in the personal context. Be natural and personable, not generic. Greetings and casual chat should sound like a thoughtful personal assistant.''';
 
   /// Few-shot turns (dates relative to [now]) so a 0.6B model sees when NOT to call a tool.
   static List<Message> examples(DateTime now) {
-    final t = DateTime(now.year, now.month, now.day + 1, 8).toIso8601String().substring(0, 19);
+    final t = DateTime(now.year, now.month, now.day + 1, 8)
+        .toIso8601String()
+        .substring(0, 19);
     return [
       Message('user', 'hello'),
       Message('assistant', '{"type":"respond","text":"Hi! How can I help?"}'),
       Message('user', 'add task buy milk'),
-      Message('assistant', '{"type":"tool","tool":"create_task","arguments":{"title":"buy milk"}}'),
+      Message('assistant',
+          '{"type":"tool","tool":"create_task","arguments":{"title":"buy milk"}}'),
       Message('user', 'remind me tomorrow at 8 to call mom'),
-      Message('assistant', '{"type":"tool","tool":"create_reminder","arguments":{"title":"call mom","at":"$t"}}'),
+      Message('assistant',
+          '{"type":"tool","tool":"create_reminder","arguments":{"title":"call mom","at":"$t"}}'),
     ];
   }
 
-  static const memoryGrammar = r'root ::= "{\"remember\":false}" | "{\"remember\":true,\"memory\":" str '
+  static const memoryGrammar =
+      r'root ::= "{\"remember\":false}" | "{\"remember\":true,\"memory\":" str '
       r'",\"category\":" ("\"preference\"" | "\"fact\"" | "\"person\"") "}"'
       '\n$jsonStrRule';
 
-  static const memorySystem ='''Extract one durable fact or preference about the user from their message, if any.
+  static const memorySystem =
+      '''Extract one durable personal fact or preference explicitly stated by the user, if any. Ignore greetings, casual acknowledgements, requests, chores, temporary plans, and facts about the assistant or a language model.
 Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"preference|fact|person"} or {"remember":false}.''';
 
   /// Plain prompt text (ChatML for Qwen3). Thinking is off: /no_think plus a pre-filled
@@ -48,12 +59,18 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
     final b = StringBuffer('<|im_start|>system\n')
       ..writeln(kind == PromptKind.action ? actionSystem : memorySystem);
     if (kind == PromptKind.action) {
-      b.writeln('Now: ${(now ?? DateTime.now()).toIso8601String().substring(0, 19)}');
-      if (memories.isNotEmpty) b.writeln('Relevant memories:\n- ${memories.join('\n- ')}');
+      b.writeln(
+          'Now: ${(now ?? DateTime.now()).toIso8601String().substring(0, 19)}');
+      if (memories.isNotEmpty)
+        b.writeln('Relevant memories:\n- ${memories.join('\n- ')}');
+      if (personalContext.isNotEmpty)
+        b.writeln('Personal context:\n$personalContext');
       if (tasks != null) b.writeln('Tasks:\n$tasks');
     }
     b.write('<|im_end|>\n');
-    final shots = kind == PromptKind.action ? examples(now ?? DateTime.now()) : const <Message>[];
+    final shots = kind == PromptKind.action
+        ? examples(now ?? DateTime.now())
+        : const <Message>[];
     for (final m in [...shots, ...history]) {
       b.write('<|im_start|>${m.role}\n${m.content}<|im_end|>\n');
     }
@@ -103,7 +120,8 @@ class LlamaChannelEngine implements LlmEngine {
       await _ch.invokeMethod<String>('generate', {
         'prompt': p.render(),
         'maxTokens': p.kind == PromptKind.action ? 160 : 80,
-        'grammar': p.kind == PromptKind.action ? toolGrammar : Prompt.memoryGrammar,
+        'grammar':
+            p.kind == PromptKind.action ? toolGrammar : Prompt.memoryGrammar,
       }) ??
       '';
 

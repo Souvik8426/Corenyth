@@ -18,19 +18,30 @@ enum SessionState {
 
 const _allowed = <SessionState, Set<SessionState>>{
   SessionState.idle: {SessionState.initializing},
-  SessionState.initializing: {SessionState.listening, SessionState.shuttingDown},
+  SessionState.initializing: {
+    SessionState.listening,
+    SessionState.shuttingDown
+  },
   SessionState.listening: {
-    SessionState.transcribing, SessionState.processing, SessionState.shuttingDown
+    SessionState.transcribing,
+    SessionState.processing,
+    SessionState.shuttingDown
   },
   SessionState.transcribing: {
-    SessionState.processing, SessionState.listening, SessionState.shuttingDown
+    SessionState.processing,
+    SessionState.listening,
+    SessionState.shuttingDown
   },
   SessionState.processing: {
-    SessionState.executing, SessionState.speaking, SessionState.listening,
+    SessionState.executing,
+    SessionState.speaking,
+    SessionState.listening,
     SessionState.shuttingDown
   },
   SessionState.executing: {
-    SessionState.speaking, SessionState.listening, SessionState.shuttingDown
+    SessionState.speaking,
+    SessionState.listening,
+    SessionState.shuttingDown
   },
   SessionState.speaking: {SessionState.listening, SessionState.shuttingDown},
   SessionState.shuttingDown: {SessionState.idle},
@@ -44,6 +55,7 @@ class AssistantSession {
   final RuleEngine _fallback;
   final ToolExecutor tools;
   final MemoryRepo memory;
+  final ProfileRepo profile;
   final TaskRepo taskRepo;
   final ConversationRepo conversations;
   final Duration idleTimeout;
@@ -63,6 +75,7 @@ class AssistantSession {
     required this.engine,
     required this.tools,
     required this.memory,
+    required this.profile,
     required this.taskRepo,
     required this.conversations,
     DateTime Function()? clock,
@@ -72,7 +85,8 @@ class AssistantSession {
   }) : _fallback = RuleEngine(clock: clock);
 
   void _go(SessionState n) {
-    if (!_allowed[_s]!.contains(n)) throw StateError('illegal transition $_s -> $n');
+    if (!_allowed[_s]!.contains(n))
+      throw StateError('illegal transition $_s -> $n');
     _s = n;
     state.add(n);
   }
@@ -121,16 +135,30 @@ class AssistantSession {
   /// Deterministic context router: only fetch what the request needs.
   Future<Prompt> _prompt(String text) async {
     final t = text.toLowerCase();
-    final mems = (await memory.search(text)).map((m) => m.content).toList();
+    final mems = (await memory.search(text))
+        .map((m) => m.content)
+        .where(isUsefulPersonalMemory)
+        .toList();
+    final userProfile = await profile.get() ?? const UserProfile();
+    final important = (await memory.important()).map((m) => m.content).toList();
+    final context = buildPersonalContext(userProfile, important);
     String? tasks;
-    if (RegExp(r'\b(task|tasks|todo|to-do|today|tomorrow|due|task #?\d+)\b').hasMatch(t)) {
-      final l = await taskRepo.list();
+    if (RegExp(r'\b(task|tasks|todo|to-do|today|tomorrow|due|task #?\d+)\b')
+        .hasMatch(t)) {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final asksToday = RegExp(r'\b(today|tonight|this day)\b').hasMatch(t);
+      final l = await taskRepo.list(
+        from: asksToday ? todayStart : null,
+        to: asksToday ? todayStart.add(const Duration(days: 1)) : null,
+      );
       tasks = l.isEmpty ? '(none)' : l.take(10).join('\n');
     }
     // history excludes the current user turn (already persisted just before).
     final hist = (await conversations.recent(id, n: 9));
     if (hist.isNotEmpty && hist.last.role == 'user') hist.removeLast();
-    return Prompt(PromptKind.action, text, memories: mems, tasks: tasks, history: hist);
+    return Prompt(PromptKind.action, text,
+        memories: mems, tasks: tasks, personalContext: context, history: hist);
   }
 
   Future<ToolCall> _plan(String text) async {
@@ -155,7 +183,8 @@ class AssistantSession {
     _go(SessionState.shuttingDown);
     final saved = <String>[];
     try {
-      final users = (await conversations.recent(id, n: 30)).where((m) => m.role == 'user');
+      final users = (await conversations.recent(id, n: 30))
+          .where((m) => m.role == 'user');
       for (final m in users.take(10)) {
         final mem = await _extract(m.content);
         if (mem != null) saved.add(mem);
@@ -168,13 +197,25 @@ class AssistantSession {
   }
 
   Future<String?> _extract(String text) async {
+    final candidate = text.trim().toLowerCase();
+    final explicit =
+        RegExp(r'^(?:please\s+)?remember(?:\s+that)?\b').hasMatch(candidate);
+    final personalFact = RegExp(
+      r'^(?:i\s+(?:(?:usually|normally|always|never)\s+)?(?:am|\x27m|work|live|prefer|like|love|hate|dislike|study|use)\b|'
+      r'i\s+have\s+(?:a|an|one|two|three|four|five)\b|'
+      r'my\s+(?:name|job|role|goal|preference)\s+is\b)',
+    ).hasMatch(candidate);
+    if (!explicit && !personalFact) return null;
     final p = Prompt(PromptKind.memory, text);
     for (final e in [if (engineInUse == engine.name) engine, _fallback]) {
       try {
         final j = extractJsonObject(await e.complete(p));
         if (j['remember'] != true) return null;
         final m = j['memory'];
-        if (m is! String || m.trim().isEmpty || m.length > 300) return null;
+        if (m is! String ||
+            m.trim().isEmpty ||
+            m.length > 300 ||
+            (!explicit && !isUsefulPersonalMemory(m))) return null;
         final cat = j['category'];
         await memory.add(m,
             category: cat is String && cat.length < 20 ? cat : 'fact');

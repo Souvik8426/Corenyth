@@ -13,7 +13,32 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.4
 dev_dependencies:
+  flutter_launcher_icons: ^0.14.4
   flutter_test:
     sdk: flutter
 flutter:
   uses-material-design: true
+  assets:
+    - branding/corenyth-logo.png
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: branding/corenyth-logo.png
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: branding/corenyth-logo.png
+  adaptive_icon_foreground_inset: 20
+  min_sdk_android: 24

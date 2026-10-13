@@ -7,7 +7,7 @@ const dbFileName = 'assistant.db';
 
 Future<Database> openAppDb({String? path}) async {
   path ??= p.join(await getDatabasesPath(), dbFileName);
-  return openDatabase(path, version: 1, onConfigure: (db) async {
+  return openDatabase(path, version: 2, onConfigure: (db) async {
     await db.execute('PRAGMA foreign_keys = ON');
   }, onCreate: (db, _) async {
     await db.execute('''CREATE TABLE tasks(
@@ -26,7 +26,8 @@ Future<Database> openAppDb({String? path}) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL,
       created_at INTEGER NOT NULL)''');
-    await db.execute('CREATE INDEX conv_session ON conversations(session_id, id)');
+    await db
+        .execute('CREATE INDEX conv_session ON conversations(session_id, id)');
     // embedding: reserved for a later ONNX embedder.
     await db.execute('''CREATE TABLE memories(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,9 +40,22 @@ Future<Database> openAppDb({String? path}) async {
         'CREATE VIRTUAL TABLE memories_fts USING fts4(content, tokenize=unicode61)');
     await db.execute('''CREATE TRIGGER mem_ai AFTER INSERT ON memories BEGIN
       INSERT INTO memories_fts(docid, content) VALUES (new.id, new.content); END''');
-    await db.execute('''CREATE TRIGGER mem_au AFTER UPDATE OF content ON memories BEGIN
+    await db.execute(
+        '''CREATE TRIGGER mem_au AFTER UPDATE OF content ON memories BEGIN
       UPDATE memories_fts SET content = new.content WHERE docid = new.id; END''');
     await db.execute('''CREATE TRIGGER mem_ad AFTER DELETE ON memories BEGIN
       DELETE FROM memories_fts WHERE docid = old.id; END''');
+    await _createProfileTable(db);
+  }, onUpgrade: (db, oldVersion, newVersion) async {
+    if (oldVersion < 2) await _createProfileTable(db);
   });
 }
+
+Future<void> _createProfileTable(DatabaseExecutor db) => db.execute('''
+  CREATE TABLE assistant_profile(
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    name TEXT NOT NULL DEFAULT '',
+    occupation TEXT NOT NULL DEFAULT '',
+    tone TEXT NOT NULL DEFAULT 'cheerful',
+    onboarding_complete INTEGER NOT NULL DEFAULT 0)
+''');

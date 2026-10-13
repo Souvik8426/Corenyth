@@ -20,6 +20,7 @@ class AppServices {
   final TaskRepo tasks;
   final ReminderRepo reminders;
   final MemoryRepo memory;
+  final ProfileRepo profile;
   final ConversationRepo conversations;
   final ReminderScheduler scheduler;
   final String modelPath;
@@ -28,13 +29,15 @@ class AppServices {
       : tasks = TaskRepo(db),
         reminders = ReminderRepo(db),
         memory = MemoryRepo(db),
+        profile = ProfileRepo(db),
         conversations = ConversationRepo(db);
 
   static Future<AppServices> open() async {
     final db = await openAppDb();
     final sched = AlarmReminderScheduler();
     await sched.init();
-    final models = await NativeBridge.modelsDir(); // creates Documents/localmodels on every boot
+    final models = await NativeBridge
+        .modelsDir(); // creates Documents/localmodels on every boot
     final s = AppServices._(db, sched, p.join(models.path, modelFileName));
     await sched.rescheduleAll(s.reminders);
     return s;
@@ -48,8 +51,9 @@ class AppServices {
   Future<void> loadModel() async {
     if (modelLoad.value == ModelLoad.loading) return;
     modelLoad.value = ModelLoad.loading;
-    modelLoad.value =
-        await LlamaChannelEngine(modelPath).load() ? ModelLoad.loaded : ModelLoad.failed;
+    modelLoad.value = await LlamaChannelEngine(modelPath).load()
+        ? ModelLoad.loaded
+        : ModelLoad.failed;
   }
 
   /// Re-checks storage access + the model file (also re-creates the folder if it vanished).
@@ -59,17 +63,20 @@ class AppServices {
   }
 
   /// Uses llama.cpp only if the complete model file is installed; otherwise rules.
-  LlmEngine _engine() => checkModel(modelPath, granted: true) == ModelState.ready
-      ? LlamaChannelEngine(modelPath)
-      : RuleEngine();
+  LlmEngine _engine() =>
+      checkModel(modelPath, granted: true) == ModelState.ready
+          ? LlamaChannelEngine(modelPath)
+          : RuleEngine();
 
   ToolExecutor executor() => ToolExecutor(tasks, reminders, memory, scheduler,
       onTasksChanged: NativeBridge.refreshWidget);
 
-  AssistantSession newSession({void Function()? onIdleTimeout}) => AssistantSession(
+  AssistantSession newSession({void Function()? onIdleTimeout}) =>
+      AssistantSession(
         engine: _engine(),
         tools: executor(),
         memory: memory,
+        profile: profile,
         taskRepo: tasks,
         conversations: conversations,
         onIdleTimeout: onIdleTimeout,

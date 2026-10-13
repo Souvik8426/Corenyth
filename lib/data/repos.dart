@@ -170,8 +170,26 @@ class MemoryRepo {
 
   static final _word = RegExp(r'[\p{L}\p{N}]{2,}', unicode: true);
   static const _stop = {
-    'the', 'and', 'what', 'did', 'you', 'when', 'do', 'is', 'are', 'about',
-    'tell', 'me', 'my', 'for', 'with', 'that', 'this', 'how', 'who', 'have',
+    'the',
+    'and',
+    'what',
+    'did',
+    'you',
+    'when',
+    'do',
+    'is',
+    'are',
+    'about',
+    'tell',
+    'me',
+    'my',
+    'for',
+    'with',
+    'that',
+    'this',
+    'how',
+    'who',
+    'have',
   };
 
   static List<String> terms(String s) => _word
@@ -236,4 +254,90 @@ class MemoryRepo {
 
   Future<List<Memory>> all() async =>
       (await db.query('memories', orderBy: 'id DESC')).map(Memory.new).toList();
+
+  Future<List<Memory>> important({int limit = 3}) async {
+    final rows =
+        await db.query('memories', orderBy: 'importance DESC, updated_at DESC');
+    return rows
+        .map(Memory.new)
+        .where((memory) => isUsefulPersonalMemory(memory.content))
+        .take(limit)
+        .toList();
+  }
+}
+
+class UserProfile {
+  final String name;
+  final String occupation;
+  final String tone;
+
+  const UserProfile(
+      {this.name = '', this.occupation = '', this.tone = 'cheerful'});
+
+  factory UserProfile.fromRow(Map<String, Object?> row) => UserProfile(
+        name: row['name'] as String? ?? '',
+        occupation: row['occupation'] as String? ?? '',
+        tone: row['tone'] as String? ?? 'cheerful',
+      );
+}
+
+bool isUsefulPersonalMemory(String content) {
+  final value = content.trim().toLowerCase();
+  if (value.contains('language model') ||
+      value.contains('assistant that helps') ||
+      value.contains('various tasks') ||
+      value.contains('...')) {
+    return false;
+  }
+  return RegExp(
+    r'^(?:user\s+(?:is|works|lives|prefers|likes|loves|hates|dislikes|studies|uses|has|usually|normally|always|never)\b|'
+    r"i\s+(?:(?:usually|normally|always|never)\s+)?(?:am|'m|work|live|prefer|like|love|hate|dislike|study|use)\b|"
+    r'i\s+have\s+(?:a|an|one|two|three|four|five)\b|my\s+(?:name|job|role|goal|preference)\s+is\b)',
+  ).hasMatch(value);
+}
+
+String buildPersonalContext(UserProfile profile, List<String> memories) {
+  final parts = <String>[];
+  final name = profile.name.trim();
+  final occupation = profile.occupation.trim();
+  if (name.isNotEmpty && occupation.isNotEmpty) {
+    parts.add('The user is $name and works as $occupation.');
+  } else if (name.isNotEmpty) {
+    parts.add('The user is $name.');
+  } else if (occupation.isNotEmpty) {
+    parts.add('The user works as $occupation.');
+  }
+  parts.add('Preferred assistant tone: ${profile.tone}.');
+  final useful = memories
+      .map((m) => m.trim())
+      .where(isUsefulPersonalMemory)
+      .take(3)
+      .toList();
+  if (useful.isNotEmpty)
+    parts.add('Important things the user has shared: ${useful.join('; ')}.');
+  return parts.join(' ');
+}
+
+class ProfileRepo {
+  final Database db;
+  ProfileRepo(this.db);
+
+  Future<UserProfile?> get() async {
+    final rows = await db.query('assistant_profile', where: 'id = 1');
+    if (rows.isEmpty || rows.first['onboarding_complete'] != 1) return null;
+    return UserProfile.fromRow(rows.first);
+  }
+
+  Future<void> save(UserProfile profile) async {
+    await db.insert(
+        'assistant_profile',
+        {
+          'id': 1,
+          'name': profile.name.trim(),
+          'occupation': profile.occupation.trim(),
+          'tone': profile.tone,
+          'onboarding_complete': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
 }
