@@ -8,11 +8,15 @@ class AppShell extends StatefulWidget {
   final VoidCallback onProfile;
   final VoidCallback onSettings;
   final ValueChanged<int>? onDestinationChanged;
+  final Widget? sidebar;
+  final int? selectedDestination;
   const AppShell(
       {required this.pages,
       required this.onProfile,
       required this.onSettings,
       this.onDestinationChanged,
+      this.sidebar,
+      this.selectedDestination,
       super.key})
       : assert(pages.length == 3);
 
@@ -22,6 +26,13 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selected = 0;
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedDestination != null) {
+      _selected = widget.selectedDestination!;
+    }
+  }
   static const _labels = ['Chat', 'Tasks', 'Memories'];
   static const _icons = [
     Icons.chat_bubble_outline_rounded,
@@ -40,11 +51,20 @@ class _AppShellState extends State<AppShell> {
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
+      drawer: !wide && widget.sidebar != null
+          ? Drawer(child: SafeArea(child: widget.sidebar!))
+          : null,
       body: SafeArea(
           child: Column(children: [
         Padding(
           padding: EdgeInsets.fromLTRB(wide ? 24 : 16, 8, wide ? 24 : 16, 12),
           child: Row(children: [
+            if (!wide && widget.sidebar != null)
+              Builder(builder: (context) => IconButton(
+                tooltip: 'Chat history',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                icon: const Icon(Icons.menu_rounded),
+              )),
             Image.asset('branding/corenyth-logo.png',
                 width: 36, height: 36, excludeFromSemantics: true),
             const SizedBox(width: 10),
@@ -74,6 +94,9 @@ class _AppShellState extends State<AppShell> {
         ),
         Expanded(
             child: Row(children: [
+          if (wide)
+            if (widget.sidebar != null)
+              SizedBox(width: 260, child: widget.sidebar!),
           if (wide)
             Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

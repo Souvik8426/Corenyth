@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Android-side helpers (implemented in MainActivity.kt).
@@ -5,11 +6,15 @@ class NativeBridge {
   static const _ch = MethodChannel('assistant/native');
 
   /// Re-render the home-screen widget (it reads the same SQLite file).
+  /// Best effort, never throws: callers run it after a committed write, and a
+  /// failure here must not look like the write failed (which invites a retry).
   static Future<void> refreshWidget() async {
     try {
       await _ch.invokeMethod('refreshWidget');
     } on MissingPluginException {
       // not on Android
+    } catch (e) {
+      debugPrint('widget refresh failed: $e');
     }
   }
 

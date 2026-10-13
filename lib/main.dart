@@ -12,6 +12,10 @@ import 'services/native_bridge.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'ui/chat_view.dart';
+import 'ui/app_shell.dart';
+import 'ui/chat_sidebar.dart';
+import 'ui/tasks_page.dart';
+import 'ui/memories_page.dart';
 import 'ui/model_status_view.dart';
 
 Future<void> main() async {
@@ -93,31 +97,192 @@ Widget _assistantHome(AppServices services, bool voice) => voice
           ),
         ),
       )
-    : DefaultTabController(
-        length: 3,
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Assistant'),
-            bottom: const TabBar(tabs: [
-              Tab(text: 'Chat'),
-              Tab(text: 'Tasks'),
-              Tab(text: 'Memories'),
-            ]),
-          ),
-          body: TabBarView(children: [
-            Column(children: [
-              Flexible(
-                  child:
-                      SingleChildScrollView(child: ModelSetupCard(services))),
-              Expanded(child: ChatPage(services)),
-            ]),
-            ListPage(() async => (await services.tasks.list(includeDone: true))
-                .map((t) => t.toString())
-                .toList()),
-            MemoryPage(services),
-          ]),
-        ),
-      );
+    : AssistantHome(services);
+
+class AssistantHome extends StatefulWidget {
+  final AppServices services;
+  const AssistantHome(this.services, {super.key});
+  @override
+  State<AssistantHome> createState() => _AssistantHomeState();
+}
+
+class _AssistantHomeState extends State<AssistantHome> {
+  List<ChatSummary> _chats = [];
+  String? _selected;
+  String _name = '';
+  String? _error;
+  bool _loading = true;
+  bool _busy = false; // switching/deleting chats
+  bool _chatBusy = false; // the open chat is sending
+  int _refresh = 0;
+  int _destination = 0;
+  // A fresh key (so a fresh ChatPage state) per selected chat: no stale log,
+  // stream or session can leak from the previous chat.
+  var _chat = GlobalKey<_ChatPageState>();
+  final _drafts = <String, String>{};
+
+  void _setSelected(String? id) {
+    if (id == _selected) return;
+    _selected = id;
+    _chat = GlobalKey<_ChatPageState>();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void>? _loadOp;
+  bool _loadAgain = false;
+
+  /// Serialized: a call during a running load re-runs it once afterwards, so
+  /// overlapping refreshes never create extra chats or apply stale results.
+  Future<void> _load() {
+    if (_loadOp != null) {
+      _loadAgain = true;
+      return _loadOp!;
+    }
+    return _loadOp = () async {
+      try {
+        do {
+          _loadAgain = false;
+          await _loadOnce();
+        } while (_loadAgain && mounted);
+      } finally {
+        _loadOp = null;
+      }
+    }();
+  }
+
+  Future<void> _loadOnce() async {
+    final want = _selected;
+    try {
+      final c = widget.services.conversations;
+      var chats = await c.listChats();
+      final profile = await widget.services.profile.get();
+      var selected = want;
+      if (selected == null || !chats.any((chat) => chat.id == selected)) {
+        if (chats.isEmpty) {
+          selected = await c.createChat();
+          chats = await c.listChats(); // include the chat just created
+        } else {
+          selected = chats.first.id;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _chats = chats;
+        // A switch that happened meanwhile wins over this load's choice.
+        if (_selected == want) _setSelected(selected);
+        _name = profile?.name ?? '';
+        _error = null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _error = 'Could not load chats.'; _loading = false; });
+    }
+  }
+
+  Future<void> _switch(String? id) async {
+    if (_busy || _chatBusy || _loading) return;
+    if (id != null && id == _selected) {
+      setState(() => _destination = 0); // already open: just show it
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await _loadOp; // never race a load that may itself create a chat
+      final old = _selected;
+      if (old != null) _drafts[old] = _chat.currentState?.input.text ?? '';
+      await _chat.currentState?.shutdown();
+      final next = id ?? await widget.services.conversations.createChat();
+      if (!mounted) return;
+      setState(() { _setSelected(next); _destination = 0; });
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not open that chat. Try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _delete(ChatSummary chat) async {
+    if (_busy || _chatBusy) return;
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Delete chat?'),
+      content: Text('Delete “${chat.title.trim().isEmpty ? 'New chat' : chat.title}” and its messages? Your tasks and memories are kept.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+      ],
+    ));
+    if (confirmed != true || !mounted || _busy || _chatBusy) return;
+    setState(() => _busy = true);
+    try {
+      await _loadOp;
+      if (_selected == chat.id) await _chat.currentState?.shutdown();
+      await widget.services.conversations.deleteChat(chat.id);
+      _drafts.remove(chat.id);
+      if (_selected == chat.id) _setSelected(null);
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not delete chat. Try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _profile() async {
+    if (await showProfileEditor(context, widget.services.profile) && mounted) {
+      setState(() => _refresh++);
+      await _load();
+    }
+  }
+
+  void _settings() => showModalBottomSheet<void>(
+    context: context, isScrollControlled: true, showDragHandle: true,
+    builder: (_) => SafeArea(child: SingleChildScrollView(
+      padding: const EdgeInsets.all(16), child: ModelSetupCard(widget.services))),
+  );
+
+  @override
+  Widget build(BuildContext context) => AppShell(
+    onProfile: _profile, onSettings: _settings,
+    selectedDestination: _destination,
+    onDestinationChanged: (index) {
+      setState(() { _destination = index; _refresh++; });
+      _load();
+    },
+    sidebar: Builder(builder: (context) {
+      void dismiss() { if (Scaffold.maybeOf(context)?.isDrawerOpen == true) Navigator.pop(context); }
+      return ChatSidebar(chats: _chats, selectedId: _selected,
+        busy: _busy || _chatBusy || _loading, error: _error, onRetry: _load,
+        onNewChat: () { dismiss(); _switch(null); },
+        onSelect: (id) { dismiss(); _switch(id); },
+        onDelete: _delete);
+    }),
+    pages: [
+      Column(children: [
+        ModelSetupCard(widget.services, compact: true),
+        if (widget.services.schedulingIssue != null)
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text(widget.services.schedulingIssue!,
+              style: TextStyle(color: AppColors.error))),
+        Expanded(child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _selected == null
+            ? Center(child: TextButton(onPressed: _load, child: const Text('Retry loading chats')))
+            : ChatPage(widget.services, key: _chat, conversationId: _selected,
+                name: _name, draft: _drafts[_selected] ?? '',
+                onBusyChanged: (busy) { if (mounted) setState(() => _chatBusy = busy); },
+                onChanged: () { if (mounted) { setState(() => _refresh++); _load(); } })),
+      ]),
+      TasksPage(widget.services.tasks, refreshToken: _refresh),
+      MemoriesPage(memory: widget.services.memory, profile: widget.services.profile, refreshToken: _refresh),
+    ],
+  );
+}
 
 class WelcomeQuestionnaire extends StatefulWidget {
   final Future<void> Function(UserProfile profile) onSave;
@@ -232,129 +397,153 @@ class ChatPage extends StatefulWidget {
   final AppServices services;
   final bool closeOnEnd;
   final String name;
-  const ChatPage(this.services,
-      {this.closeOnEnd = false, this.name = '', super.key});
+  final String? conversationId;
+  final String draft;
+  final ValueChanged<bool>? onBusyChanged;
+  final VoidCallback? onChanged;
+  const ChatPage(this.services, {this.closeOnEnd = false, this.name = '',
+    this.conversationId, this.draft = '', this.onBusyChanged, this.onChanged, super.key});
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
 
 class _ChatPageState extends State<ChatPage> {
-  late AssistantSession session;
+  AssistantSession? session;
   final log = <Message>[];
   final input = TextEditingController();
   final _scroll = ScrollController();
   StreamSubscription<SessionState>? _subscription;
   Future<void>? _opening;
+  String? _conversationId;
   bool _sending = false;
+  bool _loading = true;
+  bool _stopping = false;
   String? _error;
+  String? _streaming;
+  String? _fallback;
   var state = SessionState.idle;
 
   @override
   void initState() {
     super.initState();
+    input.text = widget.draft;
     widget.services.modelLoad.addListener(_onModelLoad);
-    _open();
+    _loadConversation();
   }
 
-  /// The model finished loading while this session was running on rules: restart
-  /// onto it. Mid-turn the restart is skipped and the next session picks it up.
-  Future<void> _onModelLoad() async {
-    final onModel = session.engine is LlamaChannelEngine &&
-        session.engineInUse == session.engine.name;
-    if (widget.services.modelLoad.value != ModelLoad.loaded ||
-        onModel ||
-        state != SessionState.listening ||
-        _sending) {
-      return;
+  Future<void> _loadConversation() async {
+    setState(() { _loading = true; _error = null; _fallback = null; log.clear(); });
+    try {
+      await shutdown();
+      final id = widget.conversationId ?? await widget.services.conversations.createChat();
+      final messages = await widget.services.conversations.messages(id);
+      if (!mounted) return;
+      _conversationId = id;
+      setState(() { log.addAll(messages); _loading = false; });
+      await _open();
+      _scrollToEnd();
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _error = 'Could not load this conversation. Try again.'; });
     }
-    await session.close();
-    if (!mounted) return;
-    _open();
+  }
+
+  Future<void> _onModelLoad() async {
+    final current = session;
+    if (current == null || widget.services.modelLoad.value != ModelLoad.loaded ||
+        current.engine is LlamaChannelEngine && current.engineInUse == current.engine.name ||
+        state != SessionState.listening || _sending) return;
+    await shutdown();
+    if (mounted) await _open();
   }
 
   Future<void> _open() {
     final pending = _opening;
     if (pending != null) return pending;
-    final future = _startSession();
-    _opening = future;
-    return future.whenComplete(() => _opening = null);
+    return _opening = _startSession().whenComplete(() => _opening = null);
   }
 
   Future<void> _startSession() async {
     await _subscription?.cancel();
-    session = widget.services.newSession(onIdleTimeout: _end);
-    _subscription = session.state.stream.listen((s) {
-      if (mounted) setState(() => state = s);
+    final current = widget.services.newSession(conversationId: _conversationId, onIdleTimeout: _end);
+    session = current;
+    _subscription = current.state.stream.listen((value) {
+      if (mounted) setState(() => state = value);
     });
     try {
-      await session.start();
-      if (!mounted) {
-        await session.close();
-        return;
-      }
-      setState(() {
-        state = session.current;
-        _error = null;
-      });
+      await current.start();
+      if (!mounted) { await current.close(); return; }
+      setState(() { state = current.current; _error = null; });
     } catch (_) {
-      if (mounted)
-        setState(() => _error = 'Could not start the assistant. Try again.');
+      if (mounted) setState(() => _error = 'Could not start the assistant. Try again.');
     }
   }
 
   Future<void> _send() async {
     final text = input.text.trim();
-    if (text.isEmpty || _sending) return;
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
+    if (text.isEmpty || _sending || _loading) return;
+    setState(() { _sending = true; _error = null; _fallback = null; _streaming = null; });
+    widget.onBusyChanged?.call(true);
     try {
       if (state == SessionState.idle) await _open();
-      if (!mounted || session.current != SessionState.listening) return;
+      final current = session;
+      if (!mounted || current == null || current.current != SessionState.listening) return;
       input.clear();
       setState(() => log.add(Message('user', text)));
       _scrollToEnd();
-      final reply = await session.handle(text);
+      final reply = await current.handle(text, onText: (text) {
+        if (mounted) { setState(() => _streaming = text); _scrollToEnd(); }
+      });
       if (mounted) {
-        setState(() => log.add(Message('assistant', reply)));
+        // '' = cancelled before any reply: drop the streamed draft, add nothing.
+        setState(() {
+          if (reply.isNotEmpty) log.add(Message('assistant', reply));
+          _streaming = null;
+          _fallback = current.lastFallbackReason;
+          if (reply.isEmpty && _stopping) _error = 'Response stopped.';
+        });
         _scrollToEnd();
+        widget.onChanged?.call();
       }
     } catch (_) {
-      if (mounted)
-        setState(() {
-          input.text = text;
-          _error =
-              'Could not finish that message. Check your tasks before retrying.';
-        });
+      if (mounted) setState(() {
+        _streaming = null;
+        _error = _stopping ? 'Response stopped.' : 'Could not finish that message. Check your tasks before retrying.';
+      });
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) { setState(() { _sending = false; _stopping = false; }); widget.onBusyChanged?.call(false); }
     }
+  }
+
+  Future<void> _stop() async {
+    if (_stopping) return;
+    setState(() => _stopping = true);
+    try { await session?.cancel(); }
+    catch (_) { if (mounted) setState(() => _error = 'Could not stop the response.'); }
   }
 
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 240), curve: Curves.easeOut);
-      }
+      if (mounted && _scroll.hasClients) _scroll.animateTo(_scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 160), curve: Curves.easeOut);
     });
   }
 
+  Future<void> shutdown() async {
+    await _opening;
+    await session?.close();
+  }
+
   Future<void> _end() async {
-    await session.close();
-    if (widget.closeOnEnd) {
-      await NativeBridge.closeActivity();
-    } else if (mounted) {
-      setState(() => state = SessionState.idle);
-    }
+    await shutdown();
+    if (widget.closeOnEnd) { await NativeBridge.closeActivity(); }
+    else if (mounted) setState(() => state = SessionState.idle);
   }
 
   @override
   void dispose() {
     widget.services.modelLoad.removeListener(_onModelLoad);
     _subscription?.cancel();
-    if (_opening == null) session.close();
+    unawaited(shutdown());
     input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -362,122 +551,24 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) => Column(children: [
-        if (widget.closeOnEnd)
-          Row(children: [
-            Padding(padding: const EdgeInsets.all(12), child: Text(state.name)),
-            const Spacer(),
-            IconButton(
-                tooltip: 'Close chat',
-                icon: const Icon(Icons.close),
-                onPressed: _sending ? null : _end),
-          ]),
-        if (_error != null)
-          Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(children: [
-                Expanded(
-                    child: Text(_error!,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall!
-                            .copyWith(color: AppColors.error))),
-                if (!_sending)
-                  TextButton(
-                      onPressed: () async {
-                        await session.close();
-                        if (mounted) await _open();
-                      },
-                      child: const Text('Retry'))
-              ])),
-        Expanded(
-            child: ChatView(
-                name: widget.name,
-                messages: log,
-                input: input,
-                scroll: _scroll,
-                busy: _sending,
-                ready: state == SessionState.listening ||
-                    state == SessionState.idle,
-                onSend: _send)),
-      ]);
-}
-
-class ListPage extends StatelessWidget {
-  final Future<List<String>> Function() load;
-  const ListPage(this.load, {super.key});
-  @override
-  Widget build(BuildContext context) => FutureBuilder<List<String>>(
-      future: load(),
-      builder: (_, s) => ListView(children: [
-            for (final l in s.data ?? const <String>[]) ListTile(title: Text(l))
-          ]));
-}
-
-class MemoryPage extends StatefulWidget {
-  final AppServices services;
-  const MemoryPage(this.services, {super.key});
-
-  @override
-  State<MemoryPage> createState() => _MemoryPageState();
-}
-
-class _MemoryPageState extends State<MemoryPage> {
-  late Future<String> _context;
-
-  @override
-  void initState() {
-    super.initState();
-    _context = _loadContext();
-  }
-
-  Future<String> _loadContext() async {
-    final profile = await widget.services.profile.get() ?? const UserProfile();
-    final memories = await widget.services.memory.important();
-    return buildPersonalContext(
-        profile, memories.map((m) => m.content).toList());
-  }
-
-  void _reload() => setState(() => _context = _loadContext());
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            tooltip: 'Refresh memories',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ),
-        Expanded(
-          child: FutureBuilder<String>(
-            future: _context,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return const Center(child: Text('Could not load memories.'));
-              }
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                children: [
-                  Text('Your assistant’s context',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 10),
-                  Text(snapshot.data!.isEmpty
-                      ? 'I haven’t learned any personal details yet.'
-                      : snapshot.data!),
-                  const SizedBox(height: 14),
-                  Text(
-                      'Saved on this device • Mem0 is not connected in this version.',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
-              );
-            },
-          ),
-        ),
-      ]);
+    if (widget.closeOnEnd)
+      Row(children: [
+        Padding(padding: const EdgeInsets.all(12), child: Text(state.name)),
+        const Spacer(), IconButton(tooltip: 'Close chat', icon: const Icon(Icons.close), onPressed: _end),
+      ]),
+    if (_error != null)
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Row(children: [
+        Expanded(child: Text(_error!, style: TextStyle(color: AppColors.error))),
+        if (!_sending) TextButton(onPressed: _loadConversation, child: const Text('Retry')),
+      ])),
+    if (_fallback != null)
+      Padding(padding: const EdgeInsets.all(12), child: Text('Answered with built-in rules: $_fallback.',
+        style: Theme.of(context).textTheme.bodySmall)),
+    Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : ChatView(
+      name: widget.name, messages: log, input: input, scroll: _scroll,
+      busy: _sending, ready: state == SessionState.listening || state == SessionState.idle,
+      streamingText: _streaming, onStop: _stopping ? null : _stop, onSend: _send)),
+  ]);
 }
 
 /// Step-by-step model install guide, optionally presented as a compact status.
@@ -508,6 +599,11 @@ class _ModelSetupCardState extends State<ModelSetupCard>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    if (widget.compact) widget.services.releaseModel();
   }
 
   @override

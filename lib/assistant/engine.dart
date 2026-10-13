@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 
 import '../data/repos.dart';
@@ -5,44 +7,36 @@ import 'tools.dart';
 
 enum PromptKind { action, memory }
 
+/// Breaks ChatML control markers (`<|im_start|>`, `<|im_end|>`, ...) in untrusted text:
+/// the native tokenizer parses special tokens, so a literal marker would forge a turn.
+String neutralizeChatMl(String s) => s.replaceAll('<|', '<​|');
+
 class Prompt {
   final PromptKind kind;
   final String user;
   final List<String> memories; // retrieved, already relevant
   final String? tasks; // only when the router decided they are needed
+  final String? reminders; // likewise, upcoming enabled reminders
   final String personalContext;
   final List<Message> history;
   Prompt(this.kind, this.user,
       {this.memories = const [],
       this.tasks,
+      this.reminders,
       this.personalContext = '',
       this.history = const []});
 
+  /// Stable across turns, so the native KV cache can reuse it (no dates in here).
   static const actionSystem =
       '''You are a capable, thoughtful personal assistant who helps the user stay organized.
 Reply with ONE JSON object and nothing else. Never invent task IDs, dates or facts.
-Tools: create_task{title,notes?,due?,priority?} edit_task{id,...} complete_task{id} delete_task{id} list_tasks{from?,to?,include_done?}
-create_reminder{title,at} edit_reminder{id,title?,at?} cancel_reminder{id} search_memory{query}
+Tools: create_task{title,notes?,due?,priority?} edit_task{id|target_title,title?,notes?,due?,priority?} complete_task{id|title} delete_task{id|title} list_tasks{from?,to?,include_done?}
+create_reminder{title,at} edit_reminder{id|target_title,title?,at?} cancel_reminder{id|title} search_memory{query}
+Pick a task or reminder by its #id from the supplied list, or by its exact current title (target_title for edits; title is the new title). If the list is partial or the match is unclear, ask instead of guessing.
 Format: {"type":"tool","tool":"<name>","arguments":{...}} or {"type":"respond","text":"<reply>"}
-Datetimes are ISO-8601 local (YYYY-MM-DDTHH:MM:SS). priority is 0 low, 1 normal, 2 high.
+Datetimes are ISO-8601 local (YYYY-MM-DDTHH:MM:SS), relative to "Now" in the user turn. priority is 0 low, 1 normal, 2 high.
+Use a tool only for a clear request: "hello" -> {"type":"respond","text":"Hi! How can I help?"}; "add task buy milk" -> {"type":"tool","tool":"create_task","arguments":{"title":"buy milk"}}
 For task questions, inspect the supplied task list and answer from it; do not say there are no tasks if matching tasks are listed. If the list is empty, say so warmly. Follow any preferred tone in the personal context. Be natural and personable, not generic. Greetings and casual chat should sound like a thoughtful personal assistant.''';
-
-  /// Few-shot turns (dates relative to [now]) so a 0.6B model sees when NOT to call a tool.
-  static List<Message> examples(DateTime now) {
-    final t = DateTime(now.year, now.month, now.day + 1, 8)
-        .toIso8601String()
-        .substring(0, 19);
-    return [
-      Message('user', 'hello'),
-      Message('assistant', '{"type":"respond","text":"Hi! How can I help?"}'),
-      Message('user', 'add task buy milk'),
-      Message('assistant',
-          '{"type":"tool","tool":"create_task","arguments":{"title":"buy milk"}}'),
-      Message('user', 'remind me tomorrow at 8 to call mom'),
-      Message('assistant',
-          '{"type":"tool","tool":"create_reminder","arguments":{"title":"call mom","at":"$t"}}'),
-    ];
-  }
 
   static const memoryGrammar =
       r'root ::= "{\"remember\":false}" | "{\"remember\":true,\"memory\":" str '
@@ -53,34 +47,80 @@ For task questions, inspect the supplied task list and answer from it; do not sa
       '''Extract one durable personal fact or preference explicitly stated by the user, if any. Ignore greetings, casual acknowledgements, requests, chores, temporary plans, and facts about the assistant or a language model.
 Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"preference|fact|person"} or {"remember":false}.''';
 
-  /// Plain prompt text (ChatML for Qwen3). Thinking is off: /no_think plus a pre-filled
-  /// empty think block, so generation starts directly at the JSON object.
+  /// Plain prompt text (ChatML for Qwen3). Layout, most stable first for KV reuse:
+  /// system (fixed instructions + personal context), history, then the user turn carrying
+  /// the variable parts (Now, memories, tasks). Thinking is off: /no_think plus a
+  /// pre-filled empty think block, so generation starts directly at the JSON object.
   String render({DateTime? now}) {
+    final action = kind == PromptKind.action;
     final b = StringBuffer('<|im_start|>system\n')
-      ..writeln(kind == PromptKind.action ? actionSystem : memorySystem);
-    if (kind == PromptKind.action) {
-      b.writeln(
-          'Now: ${(now ?? DateTime.now()).toIso8601String().substring(0, 19)}');
-      if (memories.isNotEmpty)
-        b.writeln('Relevant memories:\n- ${memories.join('\n- ')}');
-      if (personalContext.isNotEmpty)
-        b.writeln('Personal context:\n$personalContext');
-      if (tasks != null) b.writeln('Tasks:\n$tasks');
+      ..write(action ? actionSystem : memorySystem);
+    if (action && personalContext.isNotEmpty) {
+      b.write('\nPersonal context:\n${neutralizeChatMl(personalContext)}');
     }
     b.write('<|im_end|>\n');
-    final shots = kind == PromptKind.action
-        ? examples(now ?? DateTime.now())
-        : const <Message>[];
-    for (final m in [...shots, ...history]) {
-      b.write('<|im_start|>${m.role}\n${m.content}<|im_end|>\n');
+    for (final m in history) {
+      // Assistant turns are stored as plain replies; show them in the reply format.
+      final c = m.role == 'assistant' && !m.content.trimLeft().startsWith('{')
+          ? jsonEncode({'type': 'respond', 'text': m.content})
+          : m.content;
+      b.write('<|im_start|>${m.role == 'assistant' ? 'assistant' : 'user'}\n'
+          '${neutralizeChatMl(c)}<|im_end|>\n');
     }
-    b.write('<|im_start|>user\n$user /no_think<|im_end|>\n'
+    b.write('<|im_start|>user\n');
+    if (action) {
+      b.writeln(
+          'Now: ${(now ?? DateTime.now()).toIso8601String().substring(0, 19)}');
+      if (memories.isNotEmpty) {
+        b.writeln(
+            'Relevant memories:\n- ${neutralizeChatMl(memories.join('\n- '))}');
+      }
+      if (tasks != null) b.writeln('Tasks:\n${neutralizeChatMl(tasks!)}');
+      if (reminders != null) {
+        b.writeln('Reminders:\n${neutralizeChatMl(reminders!)}');
+      }
+      b.write('Request: ');
+    }
+    b.write('${neutralizeChatMl(user)} /no_think<|im_end|>\n'
         '<|im_start|>assistant\n<think>\n\n</think>\n\n');
     return b.toString();
+  }
+
+  Prompt _with({List<Message>? history, bool dropOptional = false}) => Prompt(
+      kind, user,
+      memories: dropOptional ? const [] : memories,
+      tasks: tasks,
+      reminders: reminders,
+      personalContext: dropOptional ? '' : personalContext,
+      history: history ?? this.history);
+
+  /// Candidate renders from fullest to smallest: drop oldest history first, then
+  /// optional context (memories, personal context; tasks answer the request so stay).
+  /// The current user text is never cut; if even the last candidate is too long the
+  /// native side rejects with `prompt_too_long`.
+  List<String> candidates({DateTime? now}) {
+    final out = <String>[];
+    for (var i = 0; i <= history.length; i++) {
+      out.add(_with(history: history.sublist(i)).render(now: now));
+    }
+    if (memories.isNotEmpty || personalContext.isNotEmpty) {
+      out.add(_with(history: const [], dropOptional: true).render(now: now));
+    }
+    return out;
+  }
+
+  /// Candidates worth sending to the native tokenizer for an [nCtx] window: a prompt
+  /// never has more tokens than UTF-8 bytes (+1 for a possible BOS), so stop after the
+  /// first candidate that provably fits. Usually that is the first one: one tokenization.
+  List<String> budgeted(int nCtx, int maxTokens, {DateTime? now}) {
+    final all = candidates(now: now);
+    final i = all.indexWhere((c) => utf8.encode(c).length + 1 + maxTokens <= nCtx);
+    return i < 0 ? all : all.sublist(0, i + 1);
   }
 }
 
 /// Anything that turns a [Prompt] into raw text (ideally one JSON object).
+/// Implementations with no streaming/cancel should `extends` this to inherit the defaults.
 abstract class LlmEngine {
   String get name;
 
@@ -88,15 +128,80 @@ abstract class LlmEngine {
   Future<bool> load();
   Future<String> complete(Prompt p);
   Future<void> unload();
+
+  /// Like [complete], also reporting cumulative user-visible reply text as it grows.
+  Future<String> completeStreaming(Prompt p,
+          {void Function(String text)? onText}) =>
+      complete(p);
+
+  /// Cancels this engine's in-flight/queued requests; they throw instead of returning.
+  Future<void> cancel() async {}
+}
+
+/// Cumulative visible text of a (possibly partial) `{"type":"respond","text":"...` reply,
+/// or null while it is not (yet) a respond object; tool calls never surface. A trailing
+/// partial escape or lone high surrogate is withheld until complete.
+String? visibleRespondText(String raw) {
+  final m = RegExp(r'^\s*\{\s*"type"\s*:\s*"respond"\s*,\s*"text"\s*:\s*"')
+      .firstMatch(raw);
+  if (m == null) return null;
+  final b = StringBuffer();
+  var i = m.end;
+  while (i < raw.length) {
+    final c = raw[i];
+    if (c == '"') break;
+    if (c != r'\') {
+      b.write(c);
+      i++;
+      continue;
+    }
+    if (i + 1 >= raw.length) break;
+    final e = raw[i + 1];
+    if (e == 'u') {
+      if (i + 6 > raw.length) break;
+      final cu = int.tryParse(raw.substring(i + 2, i + 6), radix: 16);
+      if (cu == null) break;
+      if (cu >= 0xD800 && cu < 0xDC00) {
+        // high surrogate: emit only together with its low half; wait while it may still come
+        final rest = raw.substring(i + 6, i + 12 < raw.length ? i + 12 : null);
+        if (rest.length < 6 && r'\u'.startsWith(rest.length < 2 ? rest : rest.substring(0, 2))) break;
+        final lo = rest.startsWith(r'\u') ? int.tryParse(rest.substring(2), radix: 16) : null;
+        if (lo != null && lo >= 0xDC00 && lo < 0xE000) {
+          b.writeCharCode(0x10000 + ((cu - 0xD800) << 10) + (lo - 0xDC00));
+          i += 12;
+        } else {
+          b.writeCharCode(0xFFFD); // unpaired high surrogate
+          i += 6;
+        }
+      } else if (cu >= 0xDC00 && cu < 0xE000) {
+        b.writeCharCode(0xFFFD); // lone low surrogate
+        i += 6;
+      } else {
+        b.writeCharCode(cu);
+        i += 6;
+      }
+      continue;
+    }
+    b.write(const {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f'}[e] ?? e);
+    i += 2;
+  }
+  return b.toString();
 }
 
 /// Bridge to the native llama.cpp worker (android/.../LlamaBridge.kt + cpp/llama_jni.cpp):
-///   assistant/llm: load{path,contextSize}->bool, generate{prompt,maxTokens}->String,
-///   cancel, unload
-class LlamaChannelEngine implements LlmEngine {
+///   assistant/llm: load{path,contextSize}->bool,
+///   generate{id,prompts,maxTokens,grammar,stream}->String, cancel{id}, unload.
+///   Native -> Dart: text{id,text} with the cumulative raw output while streaming.
+/// Error codes: llama_cancelled, prompt_too_long, llama_error, llama_unavailable.
+class LlamaChannelEngine extends LlmEngine {
   static const _ch = MethodChannel('assistant/llm');
+  static final _listeners = <int, void Function(String raw)>{};
+  static var _nextId = 0;
+  static var _handlerSet = false;
+
   final String modelPath;
   final int contextSize;
+  final _active = <int>{};
   LlamaChannelEngine(this.modelPath, {this.contextSize = 2048});
 
   @override
@@ -116,14 +221,59 @@ class LlamaChannelEngine implements LlmEngine {
   }
 
   @override
-  Future<String> complete(Prompt p) async =>
-      await _ch.invokeMethod<String>('generate', {
-        'prompt': p.render(),
-        'maxTokens': p.kind == PromptKind.action ? 160 : 80,
-        'grammar':
-            p.kind == PromptKind.action ? toolGrammar : Prompt.memoryGrammar,
-      }) ??
-      '';
+  Future<String> complete(Prompt p) => completeStreaming(p);
+
+  @override
+  Future<String> completeStreaming(Prompt p,
+      {void Function(String text)? onText}) async {
+    final id = ++_nextId;
+    final maxTokens = p.kind == PromptKind.action ? 160 : 80;
+    if (onText != null) {
+      if (!_handlerSet) {
+        _handlerSet = true;
+        _ch.setMethodCallHandler((call) async {
+          if (call.method != 'text') return;
+          final a = call.arguments as Map;
+          _listeners[a['id'] as int]?.call(a['text'] as String);
+        });
+      }
+      var last = '';
+      _listeners[id] = (raw) {
+        final v = visibleRespondText(raw);
+        if (v != null && v != last) onText(last = v);
+      };
+    }
+    _active.add(id);
+    try {
+      return await _ch.invokeMethod<String>('generate', {
+            'id': id,
+            'prompts': p.budgeted(contextSize, maxTokens),
+            'maxTokens': maxTokens,
+            'grammar': p.kind == PromptKind.action
+                ? toolGrammar
+                : Prompt.memoryGrammar,
+            'stream': onText != null,
+          }) ??
+          '';
+    } finally {
+      _active.remove(id);
+      _listeners.remove(id);
+    }
+  }
+
+  @override
+  Future<void> cancel() async {
+    for (final id in _active.toList()) {
+      _listeners.remove(id); // no streamed text after stop
+      try {
+        await _ch.invokeMethod('cancel', {'id': id});
+      } on MissingPluginException {
+        // nothing running
+      } on PlatformException {
+        // best-effort
+      }
+    }
+  }
 
   @override
   Future<void> unload() async {

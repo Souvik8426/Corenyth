@@ -13,6 +13,8 @@ class ChatView extends StatelessWidget {
   final bool ready;
   final VoidCallback onSend;
   final Widget? status;
+  final VoidCallback? onStop;
+  final String? streamingText;
   const ChatView(
       {required this.name,
       required this.messages,
@@ -22,6 +24,8 @@ class ChatView extends StatelessWidget {
       required this.ready,
       required this.onSend,
       this.status,
+      this.onStop,
+      this.streamingText,
       super.key});
 
   @override
@@ -33,9 +37,11 @@ class ChatView extends StatelessWidget {
               : ListView.builder(
                   controller: scroll,
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) =>
-                      _MessageBubble(messages[index])),
+                  itemCount: messages.length + (streamingText == null ? 0 : 1),
+                  itemBuilder: (context, index) => _MessageBubble(
+                    index == messages.length
+                        ? Message('assistant', streamingText!)
+                        : messages[index])),
         ),
         if (busy)
           Padding(
@@ -46,8 +52,12 @@ class ChatView extends StatelessWidget {
                     height: 12,
                     child: CircularProgressIndicator(strokeWidth: 2)),
                 const SizedBox(width: 10),
-                Text('Corenyth is thinking…',
+                Expanded(child: Text(streamingText == null ? 'Corenyth is thinking…' : 'Corenyth is replying…',
                     style: Theme.of(context).textTheme.bodySmall),
+                ),
+                if (onStop != null)
+                  TextButton.icon(onPressed: onStop,
+                    icon: const Icon(Icons.stop_rounded), label: const Text('Stop')),
               ])),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),

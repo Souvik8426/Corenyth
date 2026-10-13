@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../data/repos.dart';
 import 'engine.dart';
@@ -47,9 +51,12 @@ const _allowed = <SessionState, Set<SessionState>>{
   SessionState.shuttingDown: {SessionState.idle},
 };
 
-/// One conversation = one session. Heavy resources (LLM; later ASR/TTS) live
-/// only between [start] and [close]. All inference/action flow goes through
-/// the explicit state machine above.
+/// Max tasks put into a prompt; more are marked as partial context.
+const _taskCap = 10;
+
+/// One conversation = one session. The LLM is shared and owned by AppServices
+/// (never unloaded here). All inference/action flow goes through the explicit
+/// state machine above.
 class AssistantSession {
   final LlmEngine engine;
   final RuleEngine _fallback;
@@ -60,16 +67,34 @@ class AssistantSession {
   final ConversationRepo conversations;
   final Duration idleTimeout;
   final void Function()? onIdleTimeout;
+  final DateTime Function() clock;
+
+  /// Loads the shared engine (single owner: AppServices). Defaults to [engine].load.
+  final Future<bool> Function()? loadEngine;
 
   /// TTS extension point: called in SPEAKING state; await playback completion.
   final Future<void> Function(String text)? speak;
 
-  final String id = DateTime.now().microsecondsSinceEpoch.toString();
+  /// Conversation id (`conversations.session_id` / `chats.id`).
+  final String id;
   final state = StreamController<SessionState>.broadcast();
   SessionState _s = SessionState.idle;
   SessionState get current => _s;
   Timer? _idle;
   String engineInUse = '';
+
+  /// Why the last turn used built-in rules instead of the loaded model, or null.
+  String? lastFallbackReason;
+
+  /// Milliseconds per phase of the last turn (route/context/execution/total).
+  /// Durations only, never message text.
+  Map<String, int> lastTiming = const {};
+
+  Future<void>? _starting;
+  Future<String>? _active;
+  Future<List<String>>? _closing;
+  bool _closeRequested = false, _cancelled = false;
+  final _saved = <String>[];
 
   AssistantSession({
     required this.engine,
@@ -78,11 +103,15 @@ class AssistantSession {
     required this.profile,
     required this.taskRepo,
     required this.conversations,
+    String? conversationId,
     DateTime Function()? clock,
     this.idleTimeout = const Duration(seconds: 60),
     this.onIdleTimeout,
     this.speak,
-  }) : _fallback = RuleEngine(clock: clock);
+    this.loadEngine,
+  })  : id = conversationId ?? ConversationRepo.newChatId(),
+        clock = clock ?? DateTime.now,
+        _fallback = RuleEngine(clock: clock);
 
   void _go(SessionState n) {
     if (!_allowed[_s]!.contains(n))
@@ -91,10 +120,25 @@ class AssistantSession {
     state.add(n);
   }
 
-  Future<void> start() async {
+  Future<void> start() {
+    if (_s != SessionState.idle) {
+      return Future.error(StateError('start() while $_s'));
+    }
+    _closing = null;
+    _closeRequested = false;
+    return _starting = _start();
+  }
+
+  Future<void> _start() async {
     _go(SessionState.initializing);
-    // ponytail: load is awaited here; start it concurrently with mic/ASR once those exist.
-    engineInUse = (await engine.load()) ? engine.name : _fallback.name;
+    bool ok;
+    try {
+      ok = await (loadEngine ?? engine.load)();
+    } catch (_) {
+      ok = false;
+    }
+    engineInUse = ok ? engine.name : _fallback.name;
+    if (_closeRequested) return; // close() finishes the transition
     _go(SessionState.listening);
     _armIdle();
   }
@@ -105,31 +149,88 @@ class AssistantSession {
   }
 
   /// Handles one finalized utterance (typed now, ASR transcript later).
-  Future<String> handle(String text) async {
+  /// [onText] gets the cumulative reply text (streamed from the model when it
+  /// answers in prose, then the final reply). Returns '' when [cancel]led
+  /// before any action ran.
+  Future<String> handle(String text, {void Function(String)? onText}) {
     text = text.trim();
-    if (text.isEmpty) return '';
+    if (text.isEmpty) return Future.value('');
+    if (_s != SessionState.listening || _closeRequested || _active != null) {
+      return Future.error(StateError('session is not listening ($_s)'));
+    }
     _idle?.cancel();
+    _cancelled = false;
+    lastFallbackReason = null;
+    lastTiming = const {};
+    final op = _turn(text, onText);
+    _active = op;
+    return op.whenComplete(() => _active = null);
+  }
+
+  Future<String> _turn(String text, void Function(String)? onText) async {
     _go(SessionState.processing);
-    String reply;
+    final total = Stopwatch()..start();
+    final timing = <String, int>{};
     try {
       await conversations.add(id, 'user', text);
-      final call = await _plan(text);
-      if (call.tool != 'respond') _go(SessionState.executing);
+      // Memory is written before any reply that says it was saved.
+      final explicit = RuleEngine.isExplicitRemember(text);
+      final saved = await _remember(text, explicit);
+      String reply;
       try {
-        reply = await tools.execute(call);
+        final ToolCall call;
+        final route = Stopwatch()..start();
+        if (explicit) {
+          call = ToolCall('respond', {
+            'text': saved != null
+                ? "Okay, I'll remember that."
+                : "That's too long for me to remember; try a shorter sentence."
+          });
+        } else {
+          final fast = _fallback.fastRoute(text);
+          timing['route'] = route.elapsedMilliseconds;
+          call = fast != null
+              ? parseToolCall(jsonEncode(fast))
+              : await _plan(text, onText, timing);
+        }
+        timing['route'] ??= route.elapsedMilliseconds;
+        if (_cancelled) return '';
+        if (call.tool != 'respond') _go(SessionState.executing);
+        final exec = Stopwatch()..start();
+        try {
+          reply = await tools.execute(call);
+        } finally {
+          timing['execution'] = exec.elapsedMilliseconds;
+        }
       } on ToolError catch (e) {
+        if (_cancelled) return '';
         reply = e.message;
       }
       await conversations.add(id, 'assistant', reply);
+      onText?.call(reply);
       _go(SessionState.speaking);
-      await speak?.call(reply);
+      if (!_cancelled) await speak?.call(reply);
+      return reply;
     } finally {
-      if (_s != SessionState.shuttingDown) {
-        _go(SessionState.listening);
-        _armIdle();
-      }
+      timing['total'] = total.elapsedMilliseconds;
+      lastTiming = Map.unmodifiable(timing);
+      debugPrint('turn timing ms: $lastTiming');
+      if (_s != SessionState.listening) _go(SessionState.listening);
+      if (!_closeRequested) _armIdle();
     }
-    return reply;
+  }
+
+  /// Deterministic, incremental memory: explicit "remember ..." requests and
+  /// clear personal facts are stored as they are said (no model, no close-time pass).
+  Future<String?> _remember(String text, bool explicit) async {
+    final j = _fallback.extractMemory(text);
+    final m = j['memory'];
+    if (j['remember'] != true || m is! String) return null;
+    if (m.trim().isEmpty || m.length > 300) return null;
+    if (!explicit && !isUsefulPersonalMemory(m)) return null;
+    await memory.add(m, category: j['category'] as String? ?? 'fact');
+    _saved.add(m);
+    return m;
   }
 
   /// Deterministic context router: only fetch what the request needs.
@@ -143,87 +244,134 @@ class AssistantSession {
     final important = (await memory.important()).map((m) => m.content).toList();
     final context = buildPersonalContext(userProfile, important);
     String? tasks;
-    if (RegExp(r'\b(task|tasks|todo|to-do|today|tomorrow|due|task #?\d+)\b')
-        .hasMatch(t)) {
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final asksToday = RegExp(r'\b(today|tonight|this day)\b').hasMatch(t);
-      final l = await taskRepo.list(
-        from: asksToday ? todayStart : null,
-        to: asksToday ? todayStart.add(const Duration(days: 1)) : null,
-      );
-      tasks = l.isEmpty ? '(none)' : l.take(10).join('\n');
+    final planning = RegExp(r'\b(plan|planning|schedule|agenda)\b').hasMatch(t);
+    if (planning ||
+        RegExp(r'\b(task|tasks|todo|to-do|today|tomorrow|due|task #?\d+)\b')
+            .hasMatch(t)) {
+      final now = clock();
+      final day = DateTime(now.year, now.month,
+          now.day + (RegExp(r'\btomorrow\b').hasMatch(t) ? 1 : 0));
+      final end = DateTime(day.year, day.month, day.day + 1);
+      final List<Task> l;
+      if (planning) {
+        // Day plan: overdue + that day's + undated pending tasks.
+        l = (await taskRepo.list())
+            .where((x) => x.dueAt == null || x.dueAt!.isBefore(end))
+            .toList();
+      } else if (RegExp(r'\b(today|tonight|this day|tomorrow)\b').hasMatch(t)) {
+        l = await taskRepo.list(from: day, to: end);
+      } else {
+        l = await taskRepo.list();
+      }
+      tasks = l.isEmpty
+          ? '(none)'
+          : [
+              for (final x in l.take(_taskCap))
+                '$x${x.priority == 2 ? ' [high priority]' : ''}',
+              if (l.length > _taskCap)
+                '(partial: showing $_taskCap of ${l.length} tasks)',
+            ].join('\n');
+    }
+    String? reminders;
+    if (RegExp(r'\b(remind|reminders?|alarm)\b').hasMatch(t)) {
+      final l = await tools.reminders.upcoming();
+      reminders = l.isEmpty
+          ? '(none)'
+          : [
+              for (final r in l.take(_taskCap)) '$r',
+              if (l.length > _taskCap)
+                '(partial: showing $_taskCap of ${l.length} reminders)',
+            ].join('\n');
     }
     // history excludes the current user turn (already persisted just before).
     final hist = (await conversations.recent(id, n: 9));
     if (hist.isNotEmpty && hist.last.role == 'user') hist.removeLast();
     return Prompt(PromptKind.action, text,
-        memories: mems, tasks: tasks, personalContext: context, history: hist);
+        memories: mems,
+        tasks: tasks,
+        reminders: reminders,
+        personalContext: context,
+        history: hist);
   }
 
-  Future<ToolCall> _plan(String text) async {
-    final p = await _prompt(text);
-    if (engineInUse == engine.name && engine != _fallback) {
-      // No retry: decoding is greedy + grammar-constrained, so a retry repeats the same output.
-      try {
-        return parseToolCall(await engine.complete(p));
-      } catch (_) {
-        // invalid output (never executed) or native failure -> rules
+  static const tooLongReply =
+      "That message is too long for me to handle on this device. Please try a shorter message.";
+
+  Future<ToolCall> _plan(String text, void Function(String)? onText,
+      Map<String, int> timing) async {
+    if (engineInUse == engine.name && engine is! RuleEngine) {
+      // Re-checks residency: the shared model may have been released since start.
+      var loaded = true;
+      if (loadEngine != null) {
+        try {
+          loaded = await loadEngine!();
+        } catch (_) {
+          loaded = false;
+        }
+      }
+      if (_cancelled) throw ToolError('cancelled');
+      if (loaded) {
+        final ctx = Stopwatch()..start();
+        final p = await _prompt(text);
+        timing['context'] = ctx.elapsedMilliseconds;
+        if (_cancelled) throw ToolError('cancelled');
+        // No retry: decoding is greedy + grammar-constrained, so a retry repeats the same output.
+        try {
+          return parseToolCall(await engine.completeStreaming(p, onText: onText));
+        } on PlatformException catch (e) {
+          if (e.code == 'llama_cancelled' || _cancelled) {
+            _cancelled = true;
+            throw ToolError('cancelled');
+          }
+          // Never silently answer a different, truncated question.
+          if (e.code == 'prompt_too_long') {
+            return ToolCall('respond', {'text': tooLongReply});
+          }
+          lastFallbackReason = 'the local model failed (${e.code})';
+        } on ToolError {
+          lastFallbackReason = 'the model reply was not a valid command';
+        } catch (_) {
+          lastFallbackReason = 'the local model failed';
+        }
+        if (_cancelled) throw ToolError('cancelled');
+      } else {
+        lastFallbackReason = 'the local model is not loaded';
       }
     }
-    return parseToolCall(await _fallback.complete(p));
+    return parseToolCall(jsonEncode(_fallback.plan(text)));
   }
 
-  /// Ends the session: extracts memories from the user's turns, then frees
-  /// the model. Safe to call from any state; idempotent.
-  Future<List<String>> close() async {
-    if (_s == SessionState.idle || _s == SessionState.shuttingDown) return [];
-    _idle?.cancel();
-    // A close during an in-flight handle() is rare in text mode; wait for listening.
-    _go(SessionState.shuttingDown);
-    final saved = <String>[];
+  /// Stops the in-flight turn and waits for it to settle. A turn cancelled
+  /// before its action runs executes nothing; an action already running finishes.
+  Future<void> cancel() async {
+    final op = _active;
+    if (op == null) return;
+    _cancelled = true;
     try {
-      final users = (await conversations.recent(id, n: 30))
-          .where((m) => m.role == 'user');
-      for (final m in users.take(10)) {
-        final mem = await _extract(m.content);
-        if (mem != null) saved.add(mem);
-      }
-    } finally {
-      await engine.unload();
+      await engine.cancel();
+    } catch (_) {}
+    try {
+      await op;
+    } catch (_) {}
+  }
+
+  /// Ends the session after any in-flight start/turn settles. The shared model
+  /// stays loaded. Safe from any state; idempotent. Returns the memories saved
+  /// during this session.
+  Future<List<String>> close() => _closing ??= _close();
+
+  Future<List<String>> _close() async {
+    _closeRequested = true;
+    _idle?.cancel();
+    try {
+      await _starting;
+    } catch (_) {}
+    await cancel();
+    _idle?.cancel();
+    if (_s != SessionState.idle) {
+      _go(SessionState.shuttingDown);
       _go(SessionState.idle);
     }
-    return saved;
-  }
-
-  Future<String?> _extract(String text) async {
-    final candidate = text.trim().toLowerCase();
-    final explicit =
-        RegExp(r'^(?:please\s+)?remember(?:\s+that)?\b').hasMatch(candidate);
-    final personalFact = RegExp(
-      r'^(?:i\s+(?:(?:usually|normally|always|never)\s+)?(?:am|\x27m|work|live|prefer|like|love|hate|dislike|study|use)\b|'
-      r'i\s+have\s+(?:a|an|one|two|three|four|five)\b|'
-      r'my\s+(?:name|job|role|goal|preference)\s+is\b)',
-    ).hasMatch(candidate);
-    if (!explicit && !personalFact) return null;
-    final p = Prompt(PromptKind.memory, text);
-    for (final e in [if (engineInUse == engine.name) engine, _fallback]) {
-      try {
-        final j = extractJsonObject(await e.complete(p));
-        if (j['remember'] != true) return null;
-        final m = j['memory'];
-        if (m is! String ||
-            m.trim().isEmpty ||
-            m.length > 300 ||
-            (!explicit && !isUsefulPersonalMemory(m))) return null;
-        final cat = j['category'];
-        await memory.add(m,
-            category: cat is String && cat.length < 20 ? cat : 'fact');
-        return m;
-      } catch (_) {
-        continue;
-      }
-    }
-    return null;
+    return List.of(_saved);
   }
 }

@@ -29,12 +29,16 @@ class Reminder {
   final String title;
   final DateTime triggerAt;
   final bool enabled;
+
+  /// Pending platform operation ('schedule' / 'cancel'), null once in sync.
+  final String? sync;
   Reminder(Map<String, Object?> r)
       : id = r['id'] as int,
         taskId = r['task_id'] as int?,
         title = r['title'] as String,
         triggerAt = _dt(r['trigger_at'])!,
-        enabled = r['enabled'] == 1;
+        enabled = r['enabled'] == 1,
+        sync = r['sync'] as String?;
   @override
   String toString() => '#$id $title at ${triggerAt.toIso8601String()}';
 }
@@ -88,17 +92,31 @@ class TaskRepo {
 
   Future<bool> delete(int id) async =>
       await db.delete('tasks', where: 'id = ?', whereArgs: [id]) > 0;
+
+  /// Pending tasks whose [normTitle] equals [title]'s (several = ambiguous).
+  Future<List<Task>> byTitle(String title) async {
+    final want = normTitle(title);
+    return (await list()).where((t) => normTitle(t.title) == want).toList();
+  } // ponytail: scans pending tasks in Dart; add a normalized column if lists get huge.
 }
+
+/// Case/punctuation/whitespace-insensitive title key for exact title matching.
+String normTitle(String s) => s
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+    .trim();
 
 class ReminderRepo {
   final Database db;
   ReminderRepo(this.db);
 
+  /// The row is saved with a pending 'schedule' intent; clear it with [synced].
   Future<Reminder> create(String title, DateTime at, {int? taskId}) async {
     final id = await db.insert('reminders', {
       'title': title,
       'trigger_at': at.millisecondsSinceEpoch,
       'task_id': taskId,
+      'sync': 'schedule',
     });
     return (await get(id))!;
   }
@@ -118,7 +136,28 @@ class ReminderRepo {
   Future<bool> update(int id, Map<String, Object?> v) async =>
       await db.update('reminders', v, where: 'id = ?', whereArgs: [id]) > 0;
 
-  Future<bool> cancel(int id) => update(id, {'enabled': 0});
+  /// Disables the reminder and records the pending platform cancel in one write,
+  /// so a crash or failed cancel is retried at startup, never re-armed.
+  Future<bool> cancel(int id) => update(id, {'enabled': 0, 'sync': 'cancel'});
+
+  /// Marks the platform operation done.
+  Future<bool> synced(int id) => update(id, {'sync': null});
+
+  /// Reminders whose last platform operation has not been confirmed.
+  Future<List<Reminder>> pending() async =>
+      (await db.query('reminders', where: 'sync IS NOT NULL'))
+          .map(Reminder.new)
+          .toList();
+
+  /// Hard delete; used to roll back a reminder that could not be scheduled.
+  Future<bool> delete(int id) async =>
+      await db.delete('reminders', where: 'id = ?', whereArgs: [id]) > 0;
+
+  /// Upcoming enabled reminders whose [normTitle] equals [title]'s.
+  Future<List<Reminder>> byTitle(String title) async {
+    final want = normTitle(title);
+    return (await upcoming()).where((r) => normTitle(r.title) == want).toList();
+  }
 }
 
 class Message {
@@ -126,16 +165,61 @@ class Message {
   Message(this.role, this.content);
 }
 
+class ChatSummary {
+  final String id, title;
+  final DateTime updatedAt;
+  ChatSummary(this.id, this.title, this.updatedAt);
+}
+
 class ConversationRepo {
   final Database db;
   ConversationRepo(this.db);
 
+  static String newChatId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+  /// Persists an empty chat row so it shows up in [listChats] before any message.
+  Future<String> createChat() async {
+    final id = newChatId(), t = _now();
+    await db.insert('chats', {'id': id, 'title': '', 'created_at': t, 'updated_at': t},
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+    return id;
+  }
+
+  /// Adds a message and creates/touches its chat row (title = first user message).
   Future<void> add(String session, String role, String content) =>
-      db.insert('conversations', {
-        'session_id': session,
-        'role': role,
-        'content': content,
-        'created_at': _now(),
+      db.transaction((tx) async {
+        final t = _now();
+        await tx.insert('conversations', {
+          'session_id': session,
+          'role': role,
+          'content': content,
+          'created_at': t,
+        });
+        await tx.insert('chats', {'id': session, 'title': '', 'created_at': t, 'updated_at': t},
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+        await tx.rawUpdate(
+            "UPDATE chats SET updated_at = ?, title = CASE WHEN title = '' AND ? = 'user' "
+            'THEN substr(?, 1, 60) ELSE title END WHERE id = ?',
+            [t, role, content, session]);
+      });
+
+  /// Newest first.
+  Future<List<ChatSummary>> listChats() async =>
+      (await db.query('chats', orderBy: 'updated_at DESC, id DESC'))
+          .map((r) => ChatSummary(r['id'] as String, r['title'] as String,
+              _dt(r['updated_at'])!))
+          .toList();
+
+  /// Every message of the chat, oldest first.
+  Future<List<Message>> messages(String session) async =>
+      (await db.query('conversations',
+              where: 'session_id = ?', whereArgs: [session], orderBy: 'id'))
+          .map((m) => Message(m['role'] as String, m['content'] as String))
+          .toList();
+
+  Future<void> deleteChat(String id) => db.transaction((tx) async {
+        await tx.delete('conversations', where: 'session_id = ?', whereArgs: [id]);
+        await tx.delete('chats', where: 'id = ?', whereArgs: [id]);
       });
 
   /// Last [n] messages of the session, oldest first.

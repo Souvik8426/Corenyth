@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 
 import '../data/repos.dart';
 import '../services/reminder_scheduler.dart';
@@ -20,13 +23,15 @@ class ToolCall {
 /// s=string i=int d=ISO-8601 datetime b=bool
 const toolSchemas = <String, Map<String, String>>{
   'create_task': {'title': 's!', 'notes': 's', 'due': 'd', 'priority': 'i'},
-  'edit_task': {'id': 'i!', 'title': 's', 'notes': 's', 'due': 'd', 'priority': 'i'},
-  'complete_task': {'id': 'i!'},
-  'delete_task': {'id': 'i!'},
+  // Exactly one selector: an id, or the exact current title (`target_title` for
+  // edits, so it never mixes with the replacement `title`). See [_selector].
+  'edit_task': {'id': 'i', 'target_title': 's', 'title': 's', 'notes': 's', 'due': 'd', 'priority': 'i'},
+  'complete_task': {'id': 'i', 'title': 's'},
+  'delete_task': {'id': 'i', 'title': 's'},
   'list_tasks': {'from': 'd', 'to': 'd', 'include_done': 'b'},
   'create_reminder': {'title': 's!', 'at': 'd!', 'task_id': 'i'},
-  'edit_reminder': {'id': 'i!', 'title': 's', 'at': 'd'},
-  'cancel_reminder': {'id': 'i!'},
+  'edit_reminder': {'id': 'i', 'target_title': 's', 'title': 's', 'at': 'd'},
+  'cancel_reminder': {'id': 'i', 'title': 's'},
   'search_memory': {'query': 's!'},
   'respond': {'text': 's!'},
 };
@@ -117,18 +122,56 @@ Map<String, Object?> extractJsonObject(String raw) {
 /// callers must NOT execute in that case.
 ToolCall parseToolCall(String raw) {
   final j = extractJsonObject(raw);
-  final tool = j['type'] == 'respond' ? 'respond' : j['tool'];
-  if (tool is! String || !toolSchemas.containsKey(tool)) {
-    throw ToolError('unknown tool: $tool');
+  switch (j['type']) {
+    case 'respond':
+      return ToolCall('respond', _validate('respond', {'text': j['text']}));
+    case 'tool':
+      final tool = j['tool'], a = j['arguments'];
+      if (tool is! String || tool == 'respond' || !toolSchemas.containsKey(tool)) {
+        throw ToolError('unknown tool: $tool');
+      }
+      if (a is! Map) throw ToolError('$tool: "arguments" must be an object');
+      return ToolCall(tool, _validate(tool, Map<String, Object?>.from(a)));
   }
-  final a = (tool == 'respond' && j['arguments'] == null) ? j : j['arguments'];
-  return ToolCall(tool, _validate(tool, a is Map ? Map<String, Object?>.from(a) : {}));
+  throw ToolError('"type" must be "tool" or "respond"');
 }
 
+/// Tool -> its title selector key; the call needs exactly one of `id` or it.
+const _selector = {
+  'complete_task': 'title',
+  'delete_task': 'title',
+  'cancel_reminder': 'title',
+  'edit_task': 'target_title',
+  'edit_reminder': 'target_title',
+};
 const _priorityWords = {'low': 0, 'normal': 1, 'medium': 1, 'high': 2};
+
+final _isoRe = RegExp(
+    r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?$');
+
+/// Local `YYYY-MM-DDTHH:MM[:SS[.fff]]` that names a real calendar instant.
+/// DateTime() silently normalizes (Feb 30 -> Mar 2, 25:00 -> next day), so the
+/// fields are rebuilt and compared. Zone suffixes are rejected (times are local).
+DateTime? parseLocalDateTime(String s) {
+  final m = _isoRe.firstMatch(s.trim());
+  if (m == null) return null;
+  final f = [for (var i = 1; i <= 6; i++) int.parse(m.group(i) ?? '0')];
+  final d = DateTime(f[0], f[1], f[2], f[3], f[4], f[5]);
+  if (d.year != f[0] || d.month != f[1] || d.day != f[2] ||
+      d.hour != f[3] || d.minute != f[4] || d.second != f[5]) {
+    return null; // also catches DST-gap hours that don't exist locally
+  }
+  return d;
+}
 
 Map<String, Object?> _validate(String tool, Map<String, Object?> args) {
   final schema = toolSchemas[tool]!;
+  final extra = args.keys.where((k) => !schema.containsKey(k));
+  if (extra.isNotEmpty) throw ToolError('$tool: unknown argument "${extra.first}"');
+  final sel = _selector[tool];
+  if (sel != null && (args['id'] == null) == (args[sel] == null)) {
+    throw ToolError('$tool: needs exactly one of "id" or "$sel"');
+  }
   final out = <String, Object?>{};
   for (final e in schema.entries) {
     final required = e.value.endsWith('!');
@@ -153,10 +196,15 @@ Map<String, Object?> _validate(String tool, Map<String, Object?> args) {
         if (e.key == 'priority' && (n < 0 || n > 2)) {
           throw ToolError('$tool: priority must be 0..2');
         }
+        if (e.key != 'priority' && n <= 0) {
+          throw ToolError('$tool: "${e.key}" must be a positive id');
+        }
         out[e.key] = n;
       case 'd':
-        final d = v is String ? DateTime.tryParse(v) : null;
-        if (d == null) throw ToolError('$tool: "${e.key}" must be ISO-8601');
+        final d = v is String ? parseLocalDateTime(v) : null;
+        if (d == null) {
+          throw ToolError('$tool: "${e.key}" must be a real local date-time');
+        }
         out[e.key] = d;
       case 'b':
         if (v is! bool) throw ToolError('$tool: "${e.key}" must be bool');
@@ -173,7 +221,9 @@ class ToolExecutor {
   final ReminderRepo reminders;
   final MemoryRepo memory;
   final ReminderScheduler scheduler;
-  final void Function()? onTasksChanged; // e.g. refresh the home-screen widget
+  /// Best effort after a committed write (e.g. refresh the home-screen widget);
+  /// its failure never fails the tool call.
+  final FutureOr<void> Function()? onTasksChanged;
   final DateTime Function() clock;
 
   ToolExecutor(this.tasks, this.reminders, this.memory, this.scheduler,
@@ -193,7 +243,7 @@ class ToolExecutor {
         _changed();
         return 'Added task ${t.title}${t.dueAt == null ? "" : " due ${_fmt(t.dueAt!)}"}.';
       case 'edit_task':
-        final id = a['id'] as int;
+        final id = await _taskId(a, 'target_title');
         final v = <String, Object?>{
           if (a['title'] != null) 'title': a['title'],
           if (a['notes'] != null) 'notes': a['notes'],
@@ -205,12 +255,12 @@ class ToolExecutor {
         _changed();
         return 'Updated task #$id.';
       case 'complete_task':
-        final id = a['id'] as int;
+        final id = await _taskId(a);
         if (!await tasks.complete(id)) throw ToolError('No task #$id.');
         _changed();
         return 'Marked task #$id done.';
       case 'delete_task':
-        final id = a['id'] as int;
+        final id = await _taskId(a);
         if (!await tasks.delete(id)) throw ToolError('No task #$id.');
         _changed();
         return 'Deleted task #$id.';
@@ -227,27 +277,65 @@ class ToolExecutor {
         if (tid != null && await tasks.get(tid) == null) {
           throw ToolError('No task #$tid.');
         }
+        // Saved with a pending 'schedule' intent first, so an interrupted
+        // schedule is retried at startup instead of silently lost.
         final r = await reminders.create(a['title'] as String, at, taskId: tid);
-        await scheduler.schedule(r);
+        try {
+          await scheduler.schedule(r);
+        } catch (_) {
+          await reminders.delete(r.id); // never keep an enabled row with no alarm
+          throw ToolError(
+              "I couldn't schedule that reminder, so it was not saved. Check notification and alarm permissions.");
+        }
+        await reminders.synced(r.id);
         return 'Okay, I will remind you ${_fmt(at)}: ${r.title}.';
       case 'edit_reminder':
-        final id = a['id'] as int;
+        final id = await _reminderId(a, 'target_title');
         final old = await reminders.get(id);
         if (old == null || !old.enabled) throw ToolError('No reminder #$id.');
         final at = a['at'] as DateTime?;
         if (at != null && !at.isAfter(clock())) {
           throw ToolError('Reminder time is in the past.');
         }
-        await reminders.update(id, {
+        final v = <String, Object?>{
           if (a['title'] != null) 'title': a['title'],
           if (at != null) 'trigger_at': at.millisecondsSinceEpoch,
-        });
-        await scheduler.schedule((await reminders.get(id))!);
+        };
+        if (v.isEmpty) throw ToolError('edit_reminder: nothing to change');
+        await reminders.update(id, {...v, 'sync': 'schedule'});
+        try {
+          await scheduler.schedule((await reminders.get(id))!);
+        } catch (_) {
+          await reminders.update(id, {
+            'title': old.title,
+            'trigger_at': old.triggerAt.millisecondsSinceEpoch,
+          });
+          try {
+            await scheduler.schedule(old); // keep the old alarm
+            await reminders.synced(id);
+          } catch (_) {
+            throw ToolError(
+                "I couldn't reschedule reminder #$id. It was left unchanged, but its alarm may not be set; I'll retry when the app next starts.");
+          }
+          throw ToolError(
+              "I couldn't reschedule reminder #$id, so it was left unchanged.");
+        }
+        await reminders.synced(id);
         return 'Updated reminder #$id.';
       case 'cancel_reminder':
-        final id = a['id'] as int;
-        if (!await reminders.cancel(id)) throw ToolError('No reminder #$id.');
-        await scheduler.cancel(id);
+        final id = await _reminderId(a);
+        final r = await reminders.get(id);
+        if (r == null || !r.enabled) throw ToolError('No reminder #$id.');
+        // Intent first: once disabled it is never re-armed, even if the
+        // platform cancel below fails or the app dies (startup retries it).
+        await reminders.cancel(id);
+        try {
+          await scheduler.cancel(id);
+        } catch (_) {
+          throw ToolError(
+              "I cancelled reminder #$id, but couldn't remove its alarm yet, so it may still go off. I'll retry when the app next starts.");
+        }
+        await reminders.synced(id);
         return 'Cancelled reminder #$id.';
       case 'search_memory':
         final m = await memory.search(a['query'] as String);
@@ -256,7 +344,38 @@ class ToolExecutor {
     throw ToolError('unknown tool ${c.tool}');
   }
 
-  void _changed() => onTasksChanged?.call();
+  void _changed() {
+    final f = onTasksChanged;
+    if (f == null) return;
+    unawaited(Future.sync(f)
+        .catchError((Object e) => debugPrint('widget refresh failed: $e')));
+  }
+
+  /// id as given, or the single pending task with that exact (normalized) title.
+  Future<int> _taskId(Map<String, Object?> a, [String key = 'title']) async {
+    if (a['id'] != null) return a['id'] as int;
+    final title = a[key] as String;
+    return _one(await tasks.byTitle(title), (t) => t.id, (t) => t.toString(),
+        'task', title);
+  }
+
+  Future<int> _reminderId(Map<String, Object?> a, [String key = 'title']) async {
+    if (a['id'] != null) return a['id'] as int;
+    final title = a[key] as String;
+    return _one(await reminders.byTitle(title), (r) => r.id,
+        (r) => r.toString(), 'reminder', title);
+  }
+
+  /// Exactly one match or a [ToolError]; duplicates ask which id instead of guessing.
+  static int _one<T>(List<T> l, int Function(T) id, String Function(T) show,
+      String kind, String title) {
+    if (l.isEmpty) throw ToolError('No $kind titled "$title".');
+    if (l.length > 1) {
+      throw ToolError('Several ${kind}s are titled "$title":\n'
+          '${l.map(show).join('\n')}\nWhich one? Say the number, e.g. #${id(l.first)}.');
+    }
+    return id(l.first);
+  }
 
   static String _fmt(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');

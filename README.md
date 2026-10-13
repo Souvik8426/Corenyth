@@ -15,7 +15,8 @@ via [llama.cpp](https://github.com/ggml-org/llama.cpp)). The app declares **no I
 - **Rule-engine fallback**: a deterministic planner handles requests when no model is installed or the model output
   is unusable.
 - **Tasks and reminders**: SQLite storage. Reminders are scheduled with AlarmManager and fire even when the app is closed.
-- **Memory**: facts and preferences extracted from conversations, searched with SQLite FTS4.
+- **Chat history**: saved chats in a sidebar (drawer on phones), streamed replies with Stop.
+- **Memory**: explicit "remember ..." and clear personal facts are saved per turn, searched with SQLite FTS4.
 - **Home-screen widget**: shows pending tasks and opens a translucent assistant window.
 
 ## Requirements
@@ -58,11 +59,12 @@ The app checks the exact size (382,156,160 bytes). The expected SHA-256 is
 ## Project layout
 | Path | Purpose |
 |---|---|
-| `lib/assistant/engine.dart` | `LlmEngine` interface, Qwen ChatML prompt with few-shot examples, `LlamaChannelEngine` |
+| `lib/assistant/engine.dart` | `LlmEngine` interface, Qwen ChatML prompt (KV-cache friendly layout), `LlamaChannelEngine` |
 | `lib/assistant/tools.dart` | Tool schemas, the generated GBNF grammar, JSON extraction and validation, `ToolExecutor` (the only code that mutates state) |
-| `lib/assistant/session.dart` | Session state machine, context router, idle timeout, memory extraction on close |
+| `lib/assistant/session.dart` | Session state machine, fast route, context router, cancel, fallback reason, timing |
 | `lib/assistant/rule_engine.dart` | Deterministic fallback planner (emits the same JSON as the LLM) |
-| `lib/data/` | SQLite schema (tasks, reminders, conversations, memories + FTS4) and repositories |
+| `lib/data/` | SQLite schema v3 (tasks, reminders with pending-sync intent, chats, conversations, profile, memories + FTS4) and repositories |
+| `lib/ui/` | App shell, chat view, chat history sidebar, Tasks and Memories pages, model status |
 | `lib/services/` | Composition root, model status and install checks, reminder scheduler, native bridge |
 | `android/app/src/main/cpp/` | CMake build of llama.cpp and the JNI bridge (`llama_jni.cpp`) |
 | `android/.../LlamaBridge.kt` | `assistant/llm` channel: `load`, `generate`, `cancel`, `unload` on a worker thread |
@@ -91,17 +93,17 @@ none.
 ```sh
 adb logcat -s LlamaBridge llama.cpp   # model load time, prompt/generation timing, llama.cpp warnings
 ```
-Measured on a Snapdragon 7+ Gen 2 phone: model load under 1 s, ~200-token prompt in about 2.8 s, generation at about
-26 tokens/s.
+An earlier build was measured once on a Snapdragon 7+ Gen 2 phone (model load under 1 s, ~200-token prompt in about
+2.8 s, about 26 tokens/s). The current build (KV prefix reuse, streaming) has not been re-measured; see
+[docs/performance-validation.md](docs/performance-validation.md).
 
 ## Roadmap
 - Speech: sherpa-onnx VAD + streaming ASR into `AssistantSession.handle`, TTS through the `speak` callback,
   runtime microphone permission
-- Token streaming (EventChannel) and wiring `cancel` to barge-in
+- Wiring `cancel` to voice barge-in (typed chat already streams and has Stop)
 - Faster CPU kernels (`GGML_CPU_ARM_ARCH=armv8.2-a+dotprod` or `GGML_CPU_ALL_VARIANTS`); the default build targets
   baseline armv8-a so it runs on every arm64 phone
-- Keep the model resident between sessions (today it is freed after about 60 s idle and reloaded silently)
-- Edit tasks by title (tools currently take numeric IDs)
+- On-device validation of streaming, cancel, KV reuse and memory-pressure release
 - In-app SHA-256 verification of the model file
 
 ## Design notes

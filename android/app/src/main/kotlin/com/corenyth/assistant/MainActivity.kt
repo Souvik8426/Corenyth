@@ -62,7 +62,7 @@ open class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "assistant/llm")
-            .setMethodCallHandler(LlamaBridge::handle)
+        val llm = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "assistant/llm")
+        llm.setMethodCallHandler { call, result -> LlamaBridge.handle(llm, call, result) }
     }
 }

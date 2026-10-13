@@ -49,12 +49,14 @@ Right now the raw model output is logged too (`output: …`). See [known-gaps.md
 
 ## Tests
 
-`test/assistant_test.dart` has 5 tests:
-- Tool-call parsing accepts valid output and rejects malformed output.
-- Rule-engine output always passes the validator.
-- The model-file check (`checkModel`).
-- The load popup states.
-- The grammar, examples and prompt.
+`flutter test` runs 76 tests (2026-10-13), no device needed:
+- `assistant_test.dart`: tool-call parsing, rules -> validator, `checkModel`, load popup, grammar/prompt, questionnaire.
+- `backend_test.dart`: session flow with in-memory fakes: fast route (casing, greetings, negation/compound),
+  title resolution and ambiguity, cancel, close, memory, `prompt_too_long` / `llama_cancelled` / fallback reason,
+  reminder schedule/cancel failure and startup recovery.
+- `assistant_home_test.dart`: real `AssistantHome` + `ChatPage` on a migrated FFI SQLite DB (initial chat, send, new chat, reopen history, delete with confirmation, last-chat replacement, same chat from Tasks tab).
+- `backend_sqlite_test.dart`: real SQLite (`sqflite_common_ffi`) v2 -> v3 migration, chats, reminder `sync` state.
+- UI: `app_shell`, `chat_view`, `chat_sidebar`, `tasks_page`, `memories_page`, `model_status_view`, `theme`.
 
 Tests run without a device and do not load the native library. `checkModel` is tested with a temp file.
 

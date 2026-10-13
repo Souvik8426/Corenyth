@@ -18,63 +18,72 @@ The model is Qwen3-0.6B (Q4_0 GGUF), run on the phone's CPU by llama.cpp. The Da
 
 | Method | Args | Returns | Notes |
 |---|---|---|---|
-| `load` | `path`, `contextSize` (default 2048) | `bool` | Same path twice is a no-op. Runs on the worker thread. |
-| `generate` | `prompt` (UTF-8 bytes), `maxTokens`, `grammar` | `String` | Action prompts use 160 tokens, memory prompts 80. |
-| `cancel` | none | none | Runs inline on the main thread, so it can interrupt a running `generate`. |
+| `load` | `path`, `contextSize` (default 2048) | `bool` | Idempotent: same `path:contextSize` already resident returns `true` at once. Worker thread. |
+| `generate` | `id`, `prompts` (candidate renders, fullest first), `maxTokens`, `grammar`, `stream` | `String` | Uses the first candidate that fits `n_ctx` with `maxTokens`. Action 160 tokens, memory 80. |
+| `cancel` | `id` | none | Cancels only that request (queued or running). Runs inline, not on the worker. |
 | `unload` | none | none | Frees model and context. |
+| `text` (native -> Dart) | `id`, `text` | | While `stream` is true: cumulative raw output, posted to the requesting isolate's channel. |
 
-Errors: `llama_unavailable` when the native library is missing. `llama_error` for failures inside the worker.
-Dart treats `MissingPluginException`, `PlatformException` and `false` from `load` as "use rules".
+Error codes: `llama_cancelled`, `prompt_too_long` (no candidate fits), `llama_error` (anything else in the worker),
+`llama_unavailable` (no native library). Dart: `load` failures mean "use rules"; in a turn, `prompt_too_long` asks
+for a shorter message, `llama_cancelled` ends the turn silently, other errors fall back to rules with
+`lastFallbackReason` set.
+
+## Ownership (Dart)
+
+- `AppServices.ensureModel` is the single load owner. It always calls native `load` (cheap when resident), because
+  residency is process-wide and another activity or memory pressure may have freed it. The status only shows
+  "loading" when it was not believed loaded. It is called at session start and before each inference.
+- Each session gets its own `LlamaChannelEngine`, so `cancel` stops only that session's requests.
+- `releaseModel` (memory pressure) is serialized with loads and sets the status to idle before unloading.
 
 ## Threading
 
-- `LlamaBridge` (`LlamaBridge.kt`) runs `load`, `generate` and `unload` on a single-thread executor. Results are
-  posted back to the main looper.
+- `LlamaBridge` (`LlamaBridge.kt`) runs `load`, `generate` and `unload` on a single-thread executor and posts results
+  to the main looper. Request keys are `channel identity : id`, so ids from different isolates do not collide.
 - The model is process-wide, so `MainActivity` and `VoiceSessionActivity` share one instance.
-- `cancel` sets an atomic flag. llama.cpp's abort callback checks it, so prompt processing can stop too.
+- Cancel sets an atomic id; llama.cpp's abort callback compares it with the running request, so prompt processing
+  stops too.
 
 ## Native generation (`llama_jni.cpp`)
 
-1. `nativeLoad`: loads the model file. Context size is `n_ctx = n_batch = contextSize`. Threads are
-   `clamp(hardware_concurrency, 1, 4)`.
+1. `nativeLoad`: loads the model. `n_ctx = n_batch = contextSize`; threads `clamp(hardware_concurrency, 1, 4)`.
 2. `nativeGenerate`:
-   - Builds a sampler chain. If a grammar is given, it runs first, then greedy selection.
-   - Tokenizes the prompt with `parse_special`, so ChatML tags are real tokens. Rejects prompts where
-     `prompt + maxTokens > n_ctx`.
-   - Clears the KV cache. Each prompt is self-contained.
-   - Decodes the prompt, then samples one token at a time until end-of-generation, `maxTokens`, or cancel.
-   - Returns the output as raw UTF-8 bytes. Java's modified UTF-8 would mangle emoji.
+   - Tokenizes candidates (with `parse_special`) until one fits; none -> `prompt_too_long`.
+   - Sampler chain: optional grammar, then greedy.
+   - KV cache reuse: keeps the longest common token prefix with the previous request (`llama_memory_seq_rm` on the
+     rest) and decodes only the new tokens. A cancelled or failed request clears the cache.
+   - Streams cumulative complete-UTF-8 output via `onNativeText` when asked.
+   - Returns raw UTF-8 bytes (Java's modified UTF-8 would mangle emoji).
 3. `nativeUnload` frees the context and model.
 
-Logs go to logcat under `LlamaBridge` (load time, token counts, timings) and `llama.cpp` (warnings and errors).
+Logs (`adb logcat -s LlamaBridge llama.cpp`): load time, prompt tokens (and how many were reused), time to first
+token, generated tokens and timings. Model output text is not logged.
 
 ## Prompt (`engine.dart`, `Prompt.render`)
 
-- Qwen ChatML: `<|im_start|>system … <|im_end|>`, then few-shot turns, then history, then the user turn.
-- The user turn ends with `/no_think`. The assistant turn starts with an empty `<think></think>` block, so the model
-  writes JSON directly.
-- System prompt: a short description of the tools and the reply format. It also says when not to use a tool.
-- Three few-shot examples ("hello", "add task buy milk", "remind me tomorrow at 8 to call mom") show respond vs tool use.
-  Their dates are built relative to `now`.
-- Memory extraction uses its own short system prompt, with the memory grammar.
+- Qwen ChatML, most stable first for KV reuse: system (fixed instructions + personal context), chat history, then the
+  user turn with the variable parts (`Now`, relevant memories, tasks / reminders when the router included them,
+  marked `(partial: ...)` when capped at 10).
+- `/no_think` plus a pre-filled empty `<think></think>`, so the model writes JSON directly.
+- The system prompt lists the tools, including selection by `#id` or exact title (`target_title` for edits), and
+  says to ask when unclear. Two inline examples show respond vs tool use.
+- ChatML markers in user-provided text are neutralized (`neutralizeChatMl`).
+- `candidates()` drops oldest history first, then memories/personal context; the user text is never cut.
 
 ## Grammar
 
-- `toolGrammar` (`tools.dart`) is generated from `toolSchemas`. It allows one JSON object: either
-  `{"type":"respond","text":...}` or `{"type":"tool","tool":...,"arguments":{...}}`, with each tool's required
-  arguments, correct types, and priority limited to 0..2.
+- `toolGrammar` (`tools.dart`) is generated from `toolSchemas`: one JSON object, `respond` or a known tool with typed
+  arguments (priority 0..2). The validator still runs afterwards and also enforces exactly one selector
+  (`id` or title) for complete/delete/cancel/edit.
 - `Prompt.memoryGrammar` allows only `{"remember":false}` or `{"remember":true,"memory":...,"category":...}`.
-- Grammar constrains the output so it parses. The validator still runs afterwards (see
-  [tools-and-validation.md](tools-and-validation.md)).
 
 ## Fallback
 
-`AssistantSession._plan` tries the LLM first and falls back to `RuleEngine` on any error. There is no retry: decoding is
-greedy, so a retry would repeat the same output.
+`RuleEngine` is used when no model is installed or loaded, or when the model fails / returns an invalid call. No
+retry: decoding is greedy. Only the strict `fastRoute` emits mutations; the rest of `plan()` is read-only or explains.
 
-## Known limits
+## Not measured
 
-- `cancel` is not called from Dart yet (it waits for barge-in with speech).
-- No token streaming. `generate` returns the full string.
-- Every build logs the raw model output at info level (`LOGI("output: ...")` in `llama_jni.cpp`). Remove it once
-  on-phone testing passes.
+Thread count, context size and baseline `armv8-a` kernels are defaults, not tuned. No load-time, tokens/s or RAM
+numbers have been recorded yet; see [performance-validation.md](performance-validation.md).

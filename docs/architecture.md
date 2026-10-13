@@ -36,9 +36,9 @@ and executes it. Invalid output is never executed. See [tools-and-validation.md]
 
 | Component | Location | Role |
 |---|---|---|
-| Composition root | `lib/services/app_services.dart` | Opens the DB, repos, scheduler. Picks the engine (model or rules). Owns model load state. |
-| UI | `lib/main.dart` | Chat, Tasks, Memories tabs. Model setup card and load popup. Voice route `/voice`. |
-| Session | `lib/assistant/session.dart` | One conversation. States, context routing, idle timeout, memory extraction on close. |
+| Composition root | `lib/services/app_services.dart` | Opens the DB, repos, scheduler; startup reminder reconciliation. A per-session engine (model or rules). Single owner of native model load/release. |
+| UI | `lib/main.dart`, `lib/ui/` | Chat with history sidebar (`chat_sidebar.dart`), Tasks, Memories tabs, profile, model settings and load popup. Voice route `/voice`. |
+| Session | `lib/assistant/session.dart` | One chat. States, fast route, context routing, cancel, fallback reason, turn timing. Memory is saved per turn. |
 | Engine interface | `lib/assistant/engine.dart` | `LlmEngine`, `Prompt` (ChatML), `LlamaChannelEngine` |
 | Rule engine | `lib/assistant/rule_engine.dart` | Regex planner that returns the same JSON shape |
 | Tools | `lib/assistant/tools.dart` | Schemas, GBNF grammar, JSON extraction, validation, `ToolExecutor` |

@@ -1,6 +1,6 @@
 // JNI side of LlamaBridge.kt. One process-wide model/context.
 // load/generate/unload are serialized by LlamaBridge's single worker thread;
-// only cancel() comes from another thread, so it touches nothing but an atomic.
+// only cancel() comes from another thread, so it touches nothing but atomics.
 #include <android/log.h>
 #include <jni.h>
 
@@ -21,17 +21,44 @@ static long long ms_since(std::chrono::steady_clock::time_point t) {
 
 static llama_model *g_model = nullptr;
 static llama_context *g_ctx = nullptr;
-static std::atomic<bool> g_cancel{false};
+// Cancel targets one request: abort only while the running request's id was cancelled.
+// Kotlin calls nativeCancel only for the started job (under its lock), so this is never
+// overwritten by a queued request's cancel, and a cancel written just before start still matches.
+static std::atomic<long long> g_active_id{0};
+static std::atomic<long long> g_cancel_id{-1};
+// Tokens actually decoded into seq 0 of the KV cache (worker thread only).
+static std::vector<llama_token> g_cached;
+
+static bool cancelled() { return g_cancel_id.load() == g_active_id.load(); }
+
+static void reset_cache() {
+    if (g_ctx) llama_memory_clear(llama_get_memory(g_ctx), true);
+    g_cached.clear();
+}
 
 static void free_all() {
     if (g_ctx) llama_free(g_ctx);
     if (g_model) llama_model_free(g_model);
     g_ctx = nullptr;
     g_model = nullptr;
+    g_cached.clear();
 }
 
+// Kotlin maps these exact messages to channel error codes.
 static void throw_state(JNIEnv *env, const char *msg) {
     env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), msg);
+}
+
+// Length of the longest prefix that does not end inside a UTF-8 sequence.
+static size_t utf8_complete_len(const std::string &s) {
+    size_t n = s.size();
+    for (size_t back = 1; back <= 4 && back <= n; back++) {
+        auto c = (unsigned char) s[n - back];
+        if ((c & 0xC0) == 0x80) continue;  // continuation byte
+        size_t need = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 1;
+        return need > back ? n - back : n;
+    }
+    return n;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -69,22 +96,52 @@ Java_com_corenyth_assistant_LlamaBridge_nativeLoad(JNIEnv *env, jobject, jstring
         free_all();
         return JNI_FALSE;
     }
-    llama_set_abort_callback(g_ctx, [](void *) { return g_cancel.load(); }, nullptr);
+    llama_set_abort_callback(g_ctx, [](void *) { return cancelled(); }, nullptr);
     LOGI("loaded in %lld ms, n_ctx=%d, threads=%d", ms_since(t_load), n_ctx, threads);
     return JNI_TRUE;
 }
 
-// Prompt and result are raw UTF-8 bytes: JNI's modified UTF-8 mangles emoji and
-// NewStringUTF aborts on the invalid UTF-8 a truncated generation can end with.
+static std::vector<llama_token> tokenize(const llama_vocab *vocab, const std::string &s) {
+    // parse_special: the Dart side renders the full ChatML prompt and neutralizes
+    // markers inside untrusted text, so only its own <|im_start|> etc. become control tokens.
+    int n = -llama_tokenize(vocab, s.data(), (int32_t) s.size(), nullptr, 0, true, true);
+    std::vector<llama_token> t(std::max(n, 0));
+    if (n > 0) llama_tokenize(vocab, s.data(), (int32_t) s.size(), t.data(), n, true, true);
+    return t;
+}
+
+// prompts: UTF-8 candidates, fullest first; the first that fits with max_tokens is used.
+// Returns raw UTF-8 bytes (JNI's modified UTF-8 mangles emoji). While generating, calls
+// thiz.onNativeText(byte[]) with the cumulative complete-UTF-8 output when streaming.
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject, jbyteArray jprompt, jint max_tokens,
-                                                       jstring jgrammar) {
+Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject thiz, jlong id, jobjectArray jprompts,
+                                                       jint max_tokens, jstring jgrammar, jboolean stream) {
     if (!g_ctx) {
         throw_state(env, "model not loaded");
         return nullptr;
     }
-    g_cancel = false;
+    g_active_id = id;
+    if (cancelled()) {
+        throw_state(env, "llama_cancelled");
+        return nullptr;
+    }
     const llama_vocab *vocab = llama_model_get_vocab(g_model);
+    const int n_ctx = (int) llama_n_ctx(g_ctx);
+
+    std::vector<llama_token> tokens;
+    for (jsize i = 0, c = env->GetArrayLength(jprompts); i < c && tokens.empty(); i++) {
+        auto jp = (jbyteArray) env->GetObjectArrayElement(jprompts, i);
+        std::string s(env->GetArrayLength(jp), '\0');
+        env->GetByteArrayRegion(jp, 0, (jsize) s.size(), reinterpret_cast<jbyte *>(s.data()));
+        env->DeleteLocalRef(jp);
+        auto t = tokenize(vocab, s);
+        if (!t.empty() && (int) t.size() + max_tokens <= n_ctx) tokens = std::move(t);
+    }
+    if (tokens.empty()) {
+        throw_state(env, "prompt_too_long");
+        return nullptr;
+    }
+    const int n = (int) tokens.size();
 
     // Optional GBNF grammar (ASCII, from Dart) constrains every sampled token; then greedy.
     llama_sampler *smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -101,56 +158,74 @@ Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject, jby
     }
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
-    std::string prompt(env->GetArrayLength(jprompt), '\0');
-    env->GetByteArrayRegion(jprompt, 0, (jsize) prompt.size(), reinterpret_cast<jbyte *>(prompt.data()));
-
-    // parse_special: the Dart side renders the full ChatML prompt (<|im_start|> etc.).
-    int n = -llama_tokenize(vocab, prompt.data(), (int32_t) prompt.size(), nullptr, 0, true, true);
-    if (n <= 0 || n + max_tokens > (int) llama_n_ctx(g_ctx)) {
-        llama_sampler_free(smpl);
-        throw_state(env, "prompt too long for context");
-        return nullptr;
+    // KV reuse: keep the longest common token prefix with what is decoded, drop the rest.
+    // At least one prompt token is always decoded so the last position has fresh logits.
+    llama_memory_t mem = llama_get_memory(g_ctx);
+    int reuse = 0;
+    while (reuse < (int) g_cached.size() && reuse < n - 1 && g_cached[reuse] == tokens[reuse]) reuse++;
+    if (reuse < (int) g_cached.size()) {
+        if (llama_memory_seq_rm(mem, 0, reuse, -1)) g_cached.resize(reuse);
+        else { reset_cache(); reuse = 0; }
     }
-    std::vector<llama_token> tokens(n);
-    llama_tokenize(vocab, prompt.data(), (int32_t) prompt.size(), tokens.data(), n, true, true);
 
-    // Every prompt is self-contained, so start from an empty KV cache.
-    llama_memory_clear(llama_get_memory(g_ctx), true);
-
+    jmethodID on_text = stream ? env->GetMethodID(env->GetObjectClass(thiz), "onNativeText", "([B)V") : nullptr;
+    const char *err = nullptr;
     std::string out;
+    size_t sent = 0;
     int generated = 0;
-    auto t_prompt = std::chrono::steady_clock::now();
-    long long prompt_ms = 0;
-    bool prompt_ok = llama_decode(g_ctx, llama_batch_get_one(tokens.data(), n)) == 0;
-    if (prompt_ok) {
-        prompt_ms = ms_since(t_prompt);
+    long long prompt_ms = 0, first_ms = -1;
+    auto t0 = std::chrono::steady_clock::now();
+
+    // llama_batch_get_one leaves positions to the memory: they continue after seq_pos_max.
+    if (llama_decode(g_ctx, llama_batch_get_one(tokens.data() + reuse, n - reuse)) != 0) {
+        err = cancelled() ? "llama_cancelled" : "llama_decode failed on prompt";
+    } else {
+        g_cached = tokens;
+        prompt_ms = ms_since(t0);
         char buf[256];
-        for (int i = 0; i < max_tokens && !g_cancel; i++) {
+        for (int i = 0; i < max_tokens; i++) {
+            if (cancelled()) { err = "llama_cancelled"; break; }
             llama_token tok = llama_sampler_sample(smpl, g_ctx, -1);
+            if (first_ms < 0) first_ms = ms_since(t0);
             if (llama_vocab_is_eog(vocab, tok)) break;
             int len = llama_token_to_piece(vocab, tok, buf, sizeof buf, 0, false);
             if (len > 0) out.append(buf, len);
             generated++;
-            if (llama_decode(g_ctx, llama_batch_get_one(&tok, 1)) != 0) break;
+            size_t ok = utf8_complete_len(out);
+            if (on_text && ok > sent) {
+                sent = ok;
+                jbyteArray chunk = env->NewByteArray((jsize) ok);
+                env->SetByteArrayRegion(chunk, 0, (jsize) ok, reinterpret_cast<const jbyte *>(out.data()));
+                env->CallVoidMethod(thiz, on_text, chunk);
+                env->DeleteLocalRef(chunk);
+                if (env->ExceptionCheck()) env->ExceptionClear();  // a UI hiccup must not kill decode
+            }
+            if (i + 1 == max_tokens) break;  // no need to decode a token nobody samples after
+            if (llama_decode(g_ctx, llama_batch_get_one(&tok, 1)) != 0) {
+                err = cancelled() ? "llama_cancelled" : "llama_decode failed";
+                break;
+            }
+            g_cached.push_back(tok);
         }
     }
     llama_sampler_free(smpl);
-    if (!prompt_ok && !g_cancel) {
-        throw_state(env, "llama_decode failed on prompt");
+
+    // Numeric timings only; never the prompt or output text.
+    LOGI("prompt %d tok (%d reused) in %lld ms; first token %lld ms; generated %d tok in %lld ms%s", n, reuse,
+         prompt_ms, first_ms, generated, ms_since(t0) - prompt_ms, err ? " (failed)" : "");
+    if (err) {
+        reset_cache();  // partially decoded state is not trustworthy for reuse
+        throw_state(env, err);
         return nullptr;
     }
-
-    LOGI("prompt %d tok in %lld ms; generated %d tok in %lld ms%s", n, prompt_ms, generated,
-         ms_since(t_prompt) - prompt_ms, g_cancel ? " (cancelled)" : "");
-    LOGI("output: %.600s", out.c_str());
     jbyteArray res = env->NewByteArray((jsize) out.size());
     env->SetByteArrayRegion(res, 0, (jsize) out.size(), reinterpret_cast<const jbyte *>(out.data()));
     return res;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_corenyth_assistant_LlamaBridge_nativeCancel(JNIEnv *, jobject) {
-    g_cancel = true;
+Java_com_corenyth_assistant_LlamaBridge_nativeCancel(JNIEnv *, jobject, jlong id) {
+    g_cancel_id = id;
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -289,6 +289,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('widget refresh failure after a saved create offers no retry',
+      (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('assistant/native'),
+            (call) async => throw PlatformException(code: 'widget_error'));
+    final repo = _TaskRepo();
+    await _show(tester, repo);
+    await tester.tap(find.text('Add task'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('task-title')), 'Only once');
+    await _tapVisible(tester, find.text('Save task'));
+    expect(repo.rows.length, 1);
+    expect(find.byKey(const ValueKey('task-title')), findsNothing,
+        reason: 'sheet closed: the write is committed, nothing to retry');
+    expect(find.text('Only once'), findsOneWidget);
+    await _tapVisible(tester, find.byTooltip('Complete task'));
+    expect(find.text('Couldn’t update task. Try again.'), findsNothing);
+    expect(repo.rows[1]!['status'], 'done');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('optional due date and time are picked without scheduling reminders',
       (tester) async {
     final repo = _TaskRepo();

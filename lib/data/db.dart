@@ -7,7 +7,7 @@ const dbFileName = 'assistant.db';
 
 Future<Database> openAppDb({String? path}) async {
   path ??= p.join(await getDatabasesPath(), dbFileName);
-  return openDatabase(path, version: 2, onConfigure: (db) async {
+  return openDatabase(path, version: 3, onConfigure: (db) async {
     await db.execute('PRAGMA foreign_keys = ON');
   }, onCreate: (db, _) async {
     await db.execute('''CREATE TABLE tasks(
@@ -21,7 +21,7 @@ Future<Database> openAppDb({String? path}) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
       title TEXT NOT NULL, trigger_at INTEGER NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1)''');
+      enabled INTEGER NOT NULL DEFAULT 1, sync TEXT)''');
     await db.execute('''CREATE TABLE conversations(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL,
@@ -46,9 +46,33 @@ Future<Database> openAppDb({String? path}) async {
     await db.execute('''CREATE TRIGGER mem_ad AFTER DELETE ON memories BEGIN
       DELETE FROM memories_fts WHERE docid = old.id; END''');
     await _createProfileTable(db);
+    await createChatsTable(db);
   }, onUpgrade: (db, oldVersion, newVersion) async {
     if (oldVersion < 2) await _createProfileTable(db);
+    if (oldVersion < 3) {
+      await createChatsTable(db);
+      await db.execute('ALTER TABLE reminders ADD COLUMN sync TEXT');
+    }
   });
+}
+
+/// v3 also adds `reminders.sync`: a platform alarm operation ('schedule' or
+/// 'cancel') persisted before it runs and cleared once it succeeded; startup
+/// reconciliation retries whatever is still pending (see ReminderScheduler).
+///
+/// v3: one row per conversation (`conversations.session_id`), backfilled from
+/// existing messages. Title = first user message (60 chars); empty chats allowed.
+Future<void> createChatsTable(DatabaseExecutor db) async {
+  await db.execute('''CREATE TABLE chats(
+    id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)''');
+  await db.execute('''INSERT INTO chats(id, title, created_at, updated_at)
+    SELECT c.session_id,
+      COALESCE((SELECT substr(u.content, 1, 60) FROM conversations u
+        WHERE u.session_id = c.session_id AND u.role = 'user'
+        ORDER BY u.id LIMIT 1), ''),
+      MIN(c.created_at), MAX(c.created_at)
+    FROM conversations c GROUP BY c.session_id''');
 }
 
 Future<void> _createProfileTable(DatabaseExecutor db) => db.execute('''
