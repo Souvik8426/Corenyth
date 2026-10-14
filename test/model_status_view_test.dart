@@ -20,4 +20,23 @@ void main() {
     expect(taps, 1);
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('shows selected vs active and unmeasured disclaimer', (t) async {
+    await t.pumpWidget(MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+            body: ModelStatusView(
+                modelState: ModelState.ready,
+                load: ModelLoad.loaded,
+                selectedLabel: model17b.label,
+                activeLabel: model06b.label,
+                fellBack: true,
+                onTap: () {}))));
+    expect(find.text('Using ${model06b.label}'), findsOneWidget);
+    expect(
+        find.text(
+            'Fell back from selected model. RAM/latency not measured on this device.'),
+        findsOneWidget);
+    expect(find.text('Details'), findsOneWidget);
+  });
 }

@@ -9,13 +9,14 @@ void main() {
   test('v2 migration preserves messages and backfills chat metadata', () async {
     final migrated = await openMigratedV2(seed: (db) async {
       await db.insert('reminders', {'title': 'old', 'trigger_at': 9000});
+      await db.insert('tasks', {'title': 'legacy', 'created_at': 1, 'due_at': 9000});
       await db.insert('conversations', {'id': 1, 'session_id': 'old-chat',
         'role': 'user', 'content': 'Help me plan my day', 'created_at': 1000});
       await db.insert('conversations', {'id': 2, 'session_id': 'old-chat',
         'role': 'assistant', 'content': 'Here are your tasks', 'created_at': 2000});
     });
     {
-      expect(await migrated.getVersion(), 3);
+      expect(await migrated.getVersion(), 5);
       final repo = ConversationRepo(migrated);
       final chats = await repo.listChats();
       expect(chats.single.id, 'old-chat');
@@ -32,6 +33,10 @@ void main() {
       await repo.deleteChat('old-chat');
       expect(await repo.messages('old-chat'), isEmpty);
       expect((await repo.listChats()).single.id, empty);
+
+      // v4 tasks.alert_plan: legacy tasks kept, with no stored plan.
+      final legacy = await migrated.query('tasks', where: "title = 'legacy'");
+      expect((legacy.single['due_at'], legacy.single['alert_plan']), (9000, null));
 
       // v3 reminder intent column: existing rows are in sync.
       final reminders = ReminderRepo(migrated);

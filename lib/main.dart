@@ -7,6 +7,10 @@ import 'data/repos.dart';
 import 'assistant/engine.dart';
 import 'assistant/session.dart';
 import 'services/app_services.dart';
+import 'services/reminder_scheduler.dart';
+import 'ui/reminder_settings.dart';
+import 'package:path/path.dart' as p;
+
 import 'services/model_status.dart';
 import 'services/native_bridge.dart';
 import 'theme/app_colors.dart';
@@ -131,6 +135,21 @@ class _AssistantHomeState extends State<AssistantHome> {
   void initState() {
     super.initState();
     _load();
+    notificationTaps.addListener(_openTasks);
+    _openTasks();
+  }
+
+  @override
+  void dispose() {
+    notificationTaps.removeListener(_openTasks);
+    super.dispose();
+  }
+
+  /// A tapped reminder notification opens Tasks (its done/postpone controls).
+  void _openTasks() {
+    if (notificationTaps.value == null) return;
+    notificationTaps.value = null;
+    if (mounted) setState(() { _destination = 1; _refresh++; });
   }
 
   Future<void>? _loadOp;
@@ -243,7 +262,12 @@ class _AssistantHomeState extends State<AssistantHome> {
   void _settings() => showModalBottomSheet<void>(
     context: context, isScrollControlled: true, showDragHandle: true,
     builder: (_) => SafeArea(child: SingleChildScrollView(
-      padding: const EdgeInsets.all(16), child: ModelSetupCard(widget.services))),
+      padding: const EdgeInsets.all(16), child: Column(children: [
+        ModelSetupCard(widget.services),
+        const SizedBox(height: 24),
+        ReminderSettings(widget.services.preferences,
+            onTest: widget.services.testNotification),
+      ]))),
   );
 
   @override
@@ -265,20 +289,23 @@ class _AssistantHomeState extends State<AssistantHome> {
     pages: [
       Column(children: [
         ModelSetupCard(widget.services, compact: true),
-        if (widget.services.schedulingIssue != null)
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(widget.services.schedulingIssue!,
-              style: TextStyle(color: AppColors.error))),
+        ValueListenableBuilder<String?>(
+          valueListenable: widget.services.reminderIssue,
+          builder: (_, issue, __) => issue == null
+            ? const SizedBox.shrink()
+            : Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Text(issue, style: TextStyle(color: AppColors.error)))),
         Expanded(child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _selected == null
             ? Center(child: TextButton(onPressed: _load, child: const Text('Retry loading chats')))
             : ChatPage(widget.services, key: _chat, conversationId: _selected,
                 name: _name, draft: _drafts[_selected] ?? '',
-                onBusyChanged: (busy) { if (mounted) setState(() => _chatBusy = busy); },
+                onBusyChanged: (busy) { widget.services.chatBusy.value = busy; if (mounted) setState(() => _chatBusy = busy); },
                 onChanged: () { if (mounted) { setState(() => _refresh++); _load(); } })),
       ]),
-      TasksPage(widget.services.tasks, refreshToken: _refresh),
+      TasksPage(widget.services.tasks, refreshToken: _refresh,
+          reminders: widget.services.reminders),
       MemoriesPage(memory: widget.services.memory, profile: widget.services.profile, refreshToken: _refresh),
     ],
   );
@@ -608,7 +635,11 @@ class _ModelSetupCardState extends State<ModelSetupCard>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.resumed) _check();
+    if (s == AppLifecycleState.resumed) {
+      _check();
+      // Retry unconfirmed alarm intents and re-read permissions (compact card = home screen, once).
+      if (widget.compact) widget.services.checkReminders();
+    }
   }
 
   Future<void> _check() async {
@@ -651,6 +682,69 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     sv.loadModel();
   }
 
+  bool _switching = false;
+
+  /// Catalog picker. Disabled while a load/switch runs; a not-installed
+  /// choice is saved and its download offered.
+  Widget _picker(bool loading) => ValueListenableBuilder<bool>(
+      valueListenable: widget.services.chatBusy,
+      builder: (context, replying, _) => _pickerBody(loading || replying, replying));
+
+  Widget _pickerBody(bool busy, bool replying) {
+    final sv = widget.services;
+    final dir = p.dirname(sv.modelPath);
+    final selected = sv.selectedModel;
+    bool installed(ModelSpec m) =>
+        checkModelSpec(dir, m, granted: true) == ModelState.ready;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Model', style: Theme.of(context).textTheme.titleSmall),
+      for (final m in modelCatalog)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(m.id == selected.id
+              ? Icons.radio_button_checked
+              : Icons.radio_button_unchecked),
+          selected: m.id == selected.id,
+          enabled: !busy && !_switching,
+          // The selected row stays tappable until it is the loaded model (e.g. a
+          // choice saved before its file was installed).
+          onTap: m.id == sv.activeModel?.id && sv.modelLoad.value == ModelLoad.loaded
+              ? null
+              : () => _select(m),
+          title: Text(m.label),
+          subtitle: Text('${m.fileName} · about ${m.approxMiB} MB · '
+              '${installed(m) ? 'installed' : 'not installed'}'),
+        ),
+      if (!installed(selected))
+        OutlinedButton(
+            onPressed: () => NativeBridge.openUrl(selected.url),
+            child: Text('Download ${selected.fileName}')),
+      if (replying) const Text('Wait for the current reply to finish to switch models.'),
+      const Text('The larger model needs more memory and answers more slowly. '
+          'Memory use and speed have not been measured on this phone. '
+          'If it fails to load, the app returns to the default model.'),
+    ]);
+  }
+
+  Future<void> _select(ModelSpec m) async {
+    setState(() => _switching = true);
+    try {
+      final ok = await widget.services.selectModel(m);
+      if (!mounted) return;
+      final installed = checkModelSpec(
+              p.dirname(widget.services.modelPath), m, granted: true) ==
+          ModelState.ready;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+          content: Text(ok
+              ? 'Now using ${m.label}.'
+              : !installed
+                  ? '${m.label} selected. Put ${m.fileName} in $_folder to use it.'
+                  : 'Could not load ${m.label}.')));
+    } finally {
+      if (mounted) setState(() => _switching = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = _state;
@@ -662,15 +756,25 @@ class _ModelSetupCardState extends State<ModelSetupCard>
             TextButton(onPressed: _check, child: const Text('Retry'))
           ]));
     if (widget.compact)
-      return ValueListenableBuilder<ModelLoad>(
-          valueListenable: widget.services.modelLoad,
-          builder: (context, load, child) =>
-              ModelStatusView(modelState: s, load: load, onTap: _showDetails));
+      return ListenableBuilder(
+          listenable: Listenable.merge(
+              [widget.services.modelLoad, widget.services.modelNote]),
+          builder: (context, _) => ModelStatusView(
+              modelState: s,
+              load: widget.services.modelLoad.value,
+              onTap: _showDetails,
+              selectedLabel: widget.services.selectedModel.label,
+              activeLabel: widget.services.activeModel?.label,
+              fellBack: widget.services.modelNote.value != null));
     if (s == null) return const SizedBox.shrink();
+    final sv = widget.services;
+    final want = sv.selectedModel;
     if (s == ModelState.ready)
-      return ValueListenableBuilder<ModelLoad>(
-          valueListenable: widget.services.modelLoad,
-          builder: (context, load, _) => Card(
+      return ListenableBuilder(
+          listenable: Listenable.merge([sv.modelLoad, sv.modelNote]),
+          builder: (context, _) {
+            final load = sv.modelLoad.value;
+            return Card(
               child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
@@ -679,7 +783,11 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                         Text('Your local model',
                             style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 12),
-                        const Text(modelFileName),
+                        Text('Selected: ${want.label}'),
+                        Text('Active: ${load == ModelLoad.loaded ? sv.activeModel?.label ?? 'local model' : 'built-in rules'}'),
+                        if (sv.modelNote.value != null)
+                          Text(sv.modelNote.value!,
+                              style: const TextStyle(color: AppColors.gold)),
                         const SizedBox(height: 8),
                         Text(switch (load) {
                           ModelLoad.loaded =>
@@ -697,7 +805,10 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                                   child: Text(load == ModelLoad.failed
                                       ? 'Retry loading'
                                       : 'Load model'))),
-                      ]))));
+                        const SizedBox(height: 16),
+                        _picker(load == ModelLoad.loading),
+                      ])));
+          });
     Widget step(int n, String text, [Widget? action]) => Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -723,7 +834,7 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(s == ModelState.incomplete
-                  ? 'A file named $modelFileName is in $_folder, but it is not $modelBytes bytes '
+                  ? 'A file named ${want.fileName} is in $_folder, but it is not ${want.expectedBytes} bytes '
                       '(unfinished copy, or a different file). Replace it with the file from step 2.'
                   : 'Until it is installed the assistant uses simple built-in rules.'),
               step(
@@ -737,9 +848,9 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                           style: TextStyle(color: AppColors.success))),
               step(
                   2,
-                  'Download $modelFileName (about 365 MB, use Wi-Fi). Keep the file name exactly.',
+                  'Download ${want.fileName} (about ${want.approxMiB} MB, use Wi-Fi). Keep the file name exactly.',
                   OutlinedButton(
-                      onPressed: () => NativeBridge.openUrl(modelUrl),
+                      onPressed: () => NativeBridge.openUrl(want.url),
                       child: const Text('Open download page'))),
               step(
                   3,
@@ -750,6 +861,11 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                   'Come back here. The app re-checks by itself and loads the model right away.',
                   TextButton(
                       onPressed: _check, child: const Text('Check again'))),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<ModelLoad>(
+                  valueListenable: sv.modelLoad,
+                  builder: (context, load, _) =>
+                      _picker(load == ModelLoad.loading)),
             ])));
   }
 }
@@ -769,7 +885,8 @@ class ModelLoadDialog extends StatelessWidget {
             canPop: !busy,
             child: AlertDialog(
               icon: busy
-                  ? const CircularProgressIndicator()
+                  ? const SizedBox(width: 40, height: 40,
+                      child: CircularProgressIndicator(strokeWidth: 3))
                   : v == ModelLoad.loaded
                       ? const Icon(Icons.check_circle,
                           color: AppColors.success, size: 40)
@@ -785,7 +902,7 @@ class ModelLoadDialog extends StatelessWidget {
                   : v == ModelLoad.loaded
                       ? 'The assistant is now using the local model.'
                       : 'The assistant keeps using its built-in rules. '
-                          'Check that $modelFileName in Documents/localmodels is the complete file.'),
+                          'Check that the model file in Documents/localmodels is the complete file.'),
               actions: busy
                   ? null
                   : [

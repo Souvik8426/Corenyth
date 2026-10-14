@@ -10,8 +10,8 @@ chat closes the current session first and gives the new chat a fresh `ChatPage` 
 messages. Unsent drafts are kept per chat while the app runs.
 
 `AppServices.newSession()` picks the engine:
-- a new `LlamaChannelEngine` per session if `Documents/localmodels/Qwen3-0.6B-Q4_0.gguf` passes `checkModel`, else
-  `RuleEngine`. Request ids, and so Stop/cancel, belong to that session only; the native model is shared.
+- a new `LlamaChannelEngine` per session if the active model file (selected or fallback, see model-install.md)
+  passes the size check, else `RuleEngine`. Request ids, and so Stop/cancel, belong to that session only; the native model is shared.
 - `loadEngine` is `AppServices.ensureModel`, the single load owner (concurrent loads share one native load).
 
 `AssistantSession.start()`: `idle -> initializing`, `ensureModel()`, `engineInUse` = `llama.cpp` or `rules`,
@@ -21,19 +21,35 @@ messages. Unsent drafts are kept per chat while the app runs.
 
 1. Trim; empty is ignored. `lastFallbackReason` and `lastTiming` are reset.
 2. `-> processing`. Persist the user turn. Explicit "remember ..." and clear personal facts are saved to memory.
-3. **Fast route** (`RuleEngine.fastRoute`): greetings, task lists, and anchored add/complete/delete/remind/cancel
-   commands run without the model. Titles keep their casing. Negations, `or`, `;`/`?` and chained commands are not
-   fast-routed.
-4. **Plan** (`_plan`), when the model is in use:
-   - `ensureModel()` again (the model may have been released on memory pressure; it reloads here).
-   - Context router (`_prompt`): memories, tasks only when the text needs them, last turns of this chat.
-   - `completeStreaming`; visible `respond` text streams to the UI.
-   - `PlatformException` `prompt_too_long` -> a reply asking for a shorter message (no fallback).
-     `llama_cancelled` -> the turn ends with `''`, no action, no reply.
-     Any other failure or invalid output -> rules, with `lastFallbackReason` set (shown under the chat).
-5. If cancelled before the action, nothing runs and `handle` returns `''` (the UI drops the streamed draft).
-6. `ToolExecutor.execute(call)`; a `ToolError` becomes the reply. Persist the reply, `-> speaking -> listening`.
-7. `lastTiming` holds `route`, `context`, `execution`, `total` milliseconds (no text) and is printed with `debugPrint`.
+3. **App-only first** (`_early`): a bare id answering this session's "Which one?", arithmetic (`calculator.dart`),
+   or a reply that only gives the time (or "cancel") for this chat's open clarification.
+4. **Model-first semantic plan** (`_semantic`), whenever the model is installed and loaded:
+   - `ensureModel()` again (the model may have been released on memory pressure).
+   - One compact `PromptKind.plan` prompt: fixed system text, `Now`, the open clarification (`Pending:`), the
+     current pending tasks fresh from SQLite as `#id title` (max 10), and the message. **No chat history**: old
+     assistant replies (e.g. task lists from earlier builds) can never be copied back as facts.
+   - Output is constrained by `semanticGrammar` to `{"intent", title?, ref?, when?, range?, multiple?, follow_up?,
+     negated?, reply?}` (`semantic.dart`). The model extracts meaning only: no dates, ids or database facts.
+   - The app validates (`_act`): titles/refs must come from the message (half of the stemmed words), `when` must be
+     words the user said and is resolved by the app's own parser (`RuleEngine.resolveWhen`, incl. "tomo"); an
+     unreadable `when` asks and stores a draft; numbers must be typed by the user; ids resolve against pending tasks
+     (exact title, or every ref word in a title; several = "Which one?"); negations/questions never write;
+     `list` runs `list_tasks` for `today|tomorrow|overdue|all` (`rangeArgs`; tomorrow excludes undated); `chat`
+     prose is dropped if it mentions tasks, ids, dates or claims an action. A plan of the wrong kind for a clear
+     command (list/chat for "remind me…") falls to the rules.
+   - `prompt_too_long` -> a reply asking for a shorter message. `llama_cancelled` -> the turn ends with `''`.
+     Other failures, an invalid plan, or a plan the app rejects -> rules, with `lastFallbackReason` set.
+5. **Rules fallback** (`_rules`, also the whole path with no model): open clarification, "postpone X by 2h",
+   "done with X", missing/unsupported dates, then `RuleEngine.fastRoute`/`plan`.
+6. If cancelled before the action, nothing runs and `handle` returns `''` (the UI drops the streamed draft).
+7. `ToolExecutor.execute(call)` against SQLite; a `ToolError` becomes the reply. Persist the reply, `-> speaking -> listening`.
+8. `lastTiming` (`route`, `context`, `execution`, `total` ms) and `lastDiagnostics` (`model`:
+   called/invalid/failed/unavailable, `intent`, `tool`, `db`: ok/error/none) hold no message text and are printed
+   with `debugPrint` for local debugging only.
+
+Open clarifications are one JSON row per chat in `pending_clarifications` (v5), not re-read from assistant text. They
+stay open through unrelated requests and restarts, and close only when answered, cancelled, or replaced by another
+item that also needs a time (disclosed).
 
 ## 3. Ending a session: `close()`
 
@@ -57,12 +73,11 @@ succeeded intents. Failures appear as `schedulingIssue` above the chat.
 user text
   → handle()
      → save user turn
-     → router: memories, [tasks], history
-     → fastRoute? ── yes ──> execute
-     → llm.complete(prompt + grammar) ──fail──┐
-     → parseToolCall (validate)     ──fail──┤
-                                              ▼
-                                  rules.complete → parseToolCall
+     → pick / arithmetic / pending time answer ── yes ──> execute
+     → llm.complete(plan prompt + semanticGrammar) ──fail──┐
+     → parseSemantic → app validation (_act)   ──reject──┤
+                                                          ▼
+                                  rules (_rules / fastRoute / plan)
      → ToolExecutor.execute  (DB / alarms / widget)
      → save reply → speak (TBD) → listening
 ```

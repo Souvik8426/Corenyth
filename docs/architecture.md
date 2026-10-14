@@ -8,19 +8,19 @@ Corenyth is an Android-first Flutter app. Everything runs on the phone. The app 
  Flutter UI (lib/main.dart)
         │  text (speech later)
         ▼
- AssistantSession (lib/assistant/session.dart)   ← state machine, context router
+ AssistantSession (lib/assistant/session.dart)   ← state machine, semantic planner
         │                    │
         ▼                    ▼
  LlmEngine                 RuleEngine (fallback)   lib/assistant/rule_engine.dart
- (lib/assistant/engine.dart)  same JSON out
+ (lib/assistant/engine.dart)  semantic plan / deterministic rules
         │
         ▼ MethodChannel "assistant/llm"
  LlamaBridge.kt → JNI → llama_jni.cpp → llama.cpp (libllama_jni.so)
 
- parseToolCall / _validate (lib/assistant/tools.dart)   ← the only gate
+ parseSemantic / session validation   ← intent and user-word checks
         │
         ▼
- ToolExecutor (lib/assistant/tools.dart)   ← the only code that mutates state
+ ToolExecutor (lib/assistant/tools.dart)   ← validated actions mutate state
         │
         ▼
  Repos (lib/data/repos.dart) → SQLite (lib/data/db.dart, file "assistant.db")
@@ -29,8 +29,9 @@ Corenyth is an Android-first Flutter app. Everything runs on the phone. The app 
 
 ## Key rule: the model interprets, code acts
 
-The model (or the rule engine) only proposes a JSON tool call. Application code validates it against a strict schema
-and executes it. Invalid output is never executed. See [tools-and-validation.md](tools-and-validation.md).
+The model proposes intent and extracts words from the request. Application code validates the plan, resolves dates
+and database references, then builds and executes a tool call. Invalid output is never executed. See
+[tools-and-validation.md](tools-and-validation.md) and [llm-engine.md](llm-engine.md).
 
 ## Components
 
@@ -38,14 +39,15 @@ and executes it. Invalid output is never executed. See [tools-and-validation.md]
 |---|---|---|
 | Composition root | `lib/services/app_services.dart` | Opens the DB, repos, scheduler; startup reminder reconciliation. A per-session engine (model or rules). Single owner of native model load/release. |
 | UI | `lib/main.dart`, `lib/ui/` | Chat with history sidebar (`chat_sidebar.dart`), Tasks, Memories tabs, profile, model settings and load popup. Voice route `/voice`. |
-| Session | `lib/assistant/session.dart` | One chat. States, fast route, context routing, cancel, fallback reason, turn timing. Memory is saved per turn. |
+| Session | `lib/assistant/session.dart` | One chat. Semantic planning, validation, rules fallback, cancel, clarification persistence, diagnostics. Memory is saved per turn. |
 | Engine interface | `lib/assistant/engine.dart` | `LlmEngine`, `Prompt` (ChatML), `LlamaChannelEngine` |
 | Rule engine | `lib/assistant/rule_engine.dart` | Regex planner that returns the same JSON shape |
 | Tools | `lib/assistant/tools.dart` | Schemas, GBNF grammar, JSON extraction, validation, `ToolExecutor` |
 | Data | `lib/data/db.dart`, `repos.dart` | SQLite schema, repositories |
-| Model status | `lib/services/model_status.dart` | Download URL, expected size, `checkModel` |
+| Model status / selection | `lib/services/model_status.dart`, `model_selection.dart` | Allowlisted catalog, size check, SHA-256 verify (cached), persisted id, load fallback |
 | Native bridge | `lib/services/native_bridge.dart` | Dart side of `assistant/native` (folder, storage, browser, widget refresh) |
-| Reminders | `lib/services/reminder_scheduler.dart` | Schedules and cancels exact alarms |
+| Reminders | `lib/services/reminder_scheduler.dart` | Schedules and cancels exact alarms; checks runtime notification/exact-alarm state |
+| Reminder plans | `lib/data/repos.dart` (`reminderPlan`, `AlertIntent`, `TaskRepo.update`) | Stored per-task plan request, regenerated on due change; durable schedule/cancel intents |
 | Android | `android/app/src/main/kotlin/.../` | `MainActivity`, `LlamaBridge`, `WidgetProvider`, `VoiceSessionActivity` |
 | Native LLM | `android/app/src/main/cpp/` | CMake build of llama.cpp and `llama_jni.cpp` |
 

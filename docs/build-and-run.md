@@ -44,18 +44,16 @@ Install the model before testing replies. See [model-install.md](model-install.m
 adb logcat -s LlamaBridge llama.cpp
 ```
 
-`LlamaBridge` shows the load time, prompt and generation token counts, and timings. `llama.cpp` shows warnings and errors.
-Right now the raw model output is logged too (`output: …`). See [known-gaps.md](known-gaps.md).
+`LlamaBridge` shows load time, token counts, and timings. Session diagnostics show route, intent, tool and database
+status without message text. `llama.cpp` shows native warnings and errors.
 
 ## Tests
 
-`flutter test` runs 76 tests (2026-10-13), no device needed:
-- `assistant_test.dart`: tool-call parsing, rules -> validator, `checkModel`, load popup, grammar/prompt, questionnaire.
-- `backend_test.dart`: session flow with in-memory fakes: fast route (casing, greetings, negation/compound),
-  title resolution and ambiguity, cancel, close, memory, `prompt_too_long` / `llama_cancelled` / fallback reason,
-  reminder schedule/cancel failure and startup recovery.
+`flutter test` runs the Dart and Flutter unit/widget suite, no device needed. It covers semantic routing and rejection,
+clarification persistence, reminder plans and scheduling recovery, model selection and integrity checks, SQLite migration,
+and UI rendering.
 - `assistant_home_test.dart`: real `AssistantHome` + `ChatPage` on a migrated FFI SQLite DB (initial chat, send, new chat, reopen history, delete with confirmation, last-chat replacement, same chat from Tasks tab).
-- `backend_sqlite_test.dart`: real SQLite (`sqflite_common_ffi`) v2 -> v3 migration, chats, reminder `sync` state.
+- `backend_sqlite_test.dart`: real SQLite (`sqflite_common_ffi`) v2 -> v5 migration, chats, reminder `sync` state.
 - UI: `app_shell`, `chat_view`, `chat_sidebar`, `tasks_page`, `memories_page`, `model_status_view`, `theme`.
 
 Tests run without a device and do not load the native library. `checkModel` is tested with a temp file.

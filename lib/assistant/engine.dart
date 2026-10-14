@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import '../data/repos.dart';
+import 'semantic.dart';
 import 'tools.dart';
 
-enum PromptKind { action, memory }
+/// action: legacy tool-call prompt (kept for the rules engine contract);
+/// plan: the model-first semantic plan (see semantic.dart); memory: fact extraction.
+enum PromptKind { action, plan, memory }
 
 /// Breaks ChatML control markers (`<|im_start|>`, `<|im_end|>`, ...) in untrusted text:
 /// the native tokenizer parses special tokens, so a literal marker would forge a turn.
@@ -19,24 +22,47 @@ class Prompt {
   final String? reminders; // likewise, upcoming enabled reminders
   final String personalContext;
   final List<Message> history;
+
+  /// plan only: the open clarification question, if any.
+  final String? pending;
+
+  /// plan only: labelled facts from SQLite and the user's own earlier
+  /// messages (never assistant replies).
+  final String? context;
+
+  /// The app's clock for `Now:` (tests inject it); null = the device clock.
+  final DateTime? now;
   Prompt(this.kind, this.user,
       {this.memories = const [],
       this.tasks,
       this.reminders,
       this.personalContext = '',
-      this.history = const []});
+      this.history = const [],
+      this.pending,
+      this.context,
+      this.now});
+
+  /// Stable (KV-cache friendly). Untrusted text only ever appears in the user turn.
+  static const planSystem =
+      '''Turn the user's message into ONE JSON plan for an offline task assistant. The app reads and writes the database; you never state facts about the user's tasks.
+intent: create_task (something to do) | create_reminder (asks to be reminded/notified) | complete (says something is done) | delete | postpone (move a task later) | list (asks what is planned/pending) | recall (asks what they told you) | answer_pending (only gives the time the Pending question asked for) | cancel_pending | chat (small talk or a general question).
+title: the action itself, short, as the user said it, without filler like "too", "also", "pls", "I have to". For recall: what to look up.
+ref: for complete/delete/postpone, the #id from Current tasks or the task's words.
+when: copy the user's own time words exactly (e.g. "tomo", "morning 8:10", "in 20 min", "by 2h"); never turn them into a date. Omit if none.
+range (list only): today | tomorrow | overdue | all.
+multiple / follow_up: only if the user asks for extra alerts or a follow-up (true) or refuses them (false).
+negated: true if the user says not to, or is only asking or supposing.
+reply (chat only): one short friendly sentence; never mention tasks, times or reminders.''';
 
   /// Stable across turns, so the native KV cache can reuse it (no dates in here).
   static const actionSystem =
-      '''You are a capable, thoughtful personal assistant who helps the user stay organized.
-Reply with ONE JSON object and nothing else. Never invent task IDs, dates or facts.
+      '''You are a capable personal assistant for tasks and reminders. Reply with ONE JSON object only. Never invent task IDs, dates, or facts.
 Tools: create_task{title,notes?,due?,priority?} edit_task{id|target_title,title?,notes?,due?,priority?} complete_task{id|title} delete_task{id|title} list_tasks{from?,to?,include_done?}
-create_reminder{title,at} edit_reminder{id|target_title,title?,at?} cancel_reminder{id|title} search_memory{query}
-Pick a task or reminder by its #id from the supplied list, or by its exact current title (target_title for edits; title is the new title). If the list is partial or the match is unclear, ask instead of guessing.
+create_reminder{title,at,multiple?,follow_up?} edit_reminder{id|target_title,title?,at?} cancel_reminder{id|title} list_reminders{} search_memory{query}
+Pick by #id from the supplied list or exact title (target_title for edits). If unclear or the list is partial, ask — never guess.
 Format: {"type":"tool","tool":"<name>","arguments":{...}} or {"type":"respond","text":"<reply>"}
-Datetimes are ISO-8601 local (YYYY-MM-DDTHH:MM:SS), relative to "Now" in the user turn. priority is 0 low, 1 normal, 2 high.
-Use a tool only for a clear request: "hello" -> {"type":"respond","text":"Hi! How can I help?"}; "add task buy milk" -> {"type":"tool","tool":"create_task","arguments":{"title":"buy milk"}}
-For task questions, inspect the supplied task list and answer from it; do not say there are no tasks if matching tasks are listed. If the list is empty, say so warmly. Follow any preferred tone in the personal context. Be natural and personable, not generic. Greetings and casual chat should sound like a thoughtful personal assistant.''';
+Datetimes are ISO-8601 local relative to "Now". priority: 0 low, 1 normal, 2 high.
+Use a tool only with clear evidence in the request. "remind me what…" / catch-up → list_tasks, never create_reminder. Missing time → ask when (today/tomorrow/tonight, morning=9/afternoon=15/evening=19, "in 20 minutes", 5pm). Arithmetic and casual chat → respond. Do not search memories for general knowledge. multiple/follow_up only when the user asks. Be natural; if you cannot help, say so honestly.''';
 
   static const memoryGrammar =
       r'root ::= "{\"remember\":false}" | "{\"remember\":true,\"memory\":" str '
@@ -44,7 +70,7 @@ For task questions, inspect the supplied task list and answer from it; do not sa
       '\n$jsonStrRule';
 
   static const memorySystem =
-      '''Extract one durable personal fact or preference explicitly stated by the user, if any. Ignore greetings, casual acknowledgements, requests, chores, temporary plans, and facts about the assistant or a language model.
+      '''Extract one durable personal fact or preference explicitly stated by the user, if any. Ignore greetings, casual chat, requests, chores, meetings, reminders, temporary plans, and facts about the assistant or a language model.
 Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"preference|fact|person"} or {"remember":false}.''';
 
   /// Plain prompt text (ChatML for Qwen3). Layout, most stable first for KV reuse:
@@ -52,6 +78,7 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
   /// the variable parts (Now, memories, tasks). Thinking is off: /no_think plus a
   /// pre-filled empty think block, so generation starts directly at the JSON object.
   String render({DateTime? now}) {
+    if (kind == PromptKind.plan) return _renderPlan(now ?? this.now ?? DateTime.now());
     final action = kind == PromptKind.action;
     final b = StringBuffer('<|im_start|>system\n')
       ..write(action ? actionSystem : memorySystem);
@@ -86,13 +113,34 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
     return b.toString();
   }
 
+  /// No chat history: old assistant replies (e.g. earlier task lists) must never
+  /// reach the model as current facts. Current tasks come fresh from SQLite.
+  String _renderPlan(DateTime now) {
+    final b = StringBuffer('<|im_start|>system\n$planSystem');
+    if (personalContext.isNotEmpty) {
+      b.write('\nAbout the user:\n${neutralizeChatMl(personalContext)}');
+    }
+    b.write('<|im_end|>\n<|im_start|>user\n');
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    b.writeln('Now: ${days[now.weekday - 1]} ${now.toIso8601String().substring(0, 16)}');
+    if (pending != null) b.writeln('Pending: ${neutralizeChatMl(pending!)}');
+    if (tasks != null) b.writeln('Current tasks:\n${neutralizeChatMl(tasks!)}');
+    if (context != null && context!.isNotEmpty) b.writeln(neutralizeChatMl(context!));
+    b.write('Message: ${neutralizeChatMl(user)} /no_think<|im_end|>\n'
+        '<|im_start|>assistant\n<think>\n\n</think>\n\n');
+    return b.toString();
+  }
+
   Prompt _with({List<Message>? history, bool dropOptional = false}) => Prompt(
       kind, user,
       memories: dropOptional ? const [] : memories,
       tasks: tasks,
       reminders: reminders,
       personalContext: dropOptional ? '' : personalContext,
-      history: history ?? this.history);
+      history: history ?? this.history,
+      pending: pending,
+      context: context,
+      now: now);
 
   /// Candidate renders from fullest to smallest: drop oldest history first, then
   /// optional context (memories, personal context; tasks answer the request so stay).
@@ -227,7 +275,11 @@ class LlamaChannelEngine extends LlmEngine {
   Future<String> completeStreaming(Prompt p,
       {void Function(String text)? onText}) async {
     final id = ++_nextId;
-    final maxTokens = p.kind == PromptKind.action ? 160 : 80;
+    final maxTokens = switch (p.kind) {
+      PromptKind.action => 160,
+      PromptKind.plan => 120,
+      PromptKind.memory => 80,
+    };
     if (onText != null) {
       if (!_handlerSet) {
         _handlerSet = true;
@@ -249,9 +301,11 @@ class LlamaChannelEngine extends LlmEngine {
             'id': id,
             'prompts': p.budgeted(contextSize, maxTokens),
             'maxTokens': maxTokens,
-            'grammar': p.kind == PromptKind.action
-                ? toolGrammar
-                : Prompt.memoryGrammar,
+            'grammar': switch (p.kind) {
+              PromptKind.action => toolGrammar,
+              PromptKind.plan => semanticGrammar,
+              PromptKind.memory => Prompt.memoryGrammar,
+            },
             'stream': onText != null,
           }) ??
           '';

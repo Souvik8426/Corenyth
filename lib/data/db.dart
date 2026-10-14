@@ -7,7 +7,7 @@ const dbFileName = 'assistant.db';
 
 Future<Database> openAppDb({String? path}) async {
   path ??= p.join(await getDatabasesPath(), dbFileName);
-  return openDatabase(path, version: 3, onConfigure: (db) async {
+  return openDatabase(path, version: 5, onConfigure: (db) async {
     await db.execute('PRAGMA foreign_keys = ON');
   }, onCreate: (db, _) async {
     await db.execute('''CREATE TABLE tasks(
@@ -47,13 +47,41 @@ Future<Database> openAppDb({String? path}) async {
       DELETE FROM memories_fts WHERE docid = old.id; END''');
     await _createProfileTable(db);
     await createChatsTable(db);
+    await _createAssistantPreferences(db);
+    await _createPending(db);
   }, onUpgrade: (db, oldVersion, newVersion) async {
     if (oldVersion < 2) await _createProfileTable(db);
     if (oldVersion < 3) {
       await createChatsTable(db);
       await db.execute('ALTER TABLE reminders ADD COLUMN sync TEXT');
     }
+    if (oldVersion < 4) await _createAssistantPreferences(db);
+    if (oldVersion < 5) await _createPending(db);
   });
+}
+
+/// v5: one open clarification per chat (structured JSON, see ClarifyDraft), so
+/// it survives restarts without being re-read from assistant prose.
+Future<void> _createPending(DatabaseExecutor db) => db.execute(
+    'CREATE TABLE pending_clarifications(chat_id TEXT PRIMARY KEY, '
+    'draft TEXT NOT NULL, updated_at INTEGER NOT NULL)');
+
+/// v4: `reminders.kind` ('reminder' = event time, 'pre' = early alert,
+/// 'follow_up') groups one task's notification plan; existing rows stay
+/// 'reminder'. One preferences row; both extras are off by default.
+/// Quiet hours are minutes after midnight (null = off).
+/// `tasks.alert_plan`: the requested plan (JSON lead minutes + follow-up
+/// delay, see AlertIntent), kept after its alerts fire or were skipped, so a
+/// due change regenerates it. Null = no plan (or cancelled; never re-armed).
+Future<void> _createAssistantPreferences(DatabaseExecutor db) async {
+  await db.execute("ALTER TABLE reminders ADD COLUMN kind TEXT NOT NULL DEFAULT 'reminder'");
+  await db.execute('ALTER TABLE tasks ADD COLUMN alert_plan TEXT');
+  await db.execute('CREATE TABLE assistant_preferences('
+      'id INTEGER PRIMARY KEY CHECK(id = 1), '
+      'multiple INTEGER NOT NULL DEFAULT 0, follow_up INTEGER NOT NULL DEFAULT 0, '
+      "lead_minutes TEXT NOT NULL DEFAULT '30,10', "
+      'follow_up_minutes INTEGER NOT NULL DEFAULT 60, '
+      'quiet_start INTEGER, quiet_end INTEGER)');
 }
 
 /// v3 also adds `reminders.sync`: a platform alarm operation ('schedule' or

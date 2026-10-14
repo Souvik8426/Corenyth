@@ -206,8 +206,9 @@ void main() {
     log.clear();
   });
 
-  test('fast route handles anchored commands without the model', () async {
-    final e = SpyEngine();
+  test('commands work through the rules when the model reply is not a plan',
+      () async {
+    final e = SpyEngine(); // legacy output: never valid for the plan grammar
     final s = session(e, id: 'chat-1');
     expect(s.id, 'chat-1');
     await s.start();
@@ -215,10 +216,12 @@ void main() {
     expect(tasks.rows.length, 1);
     expect(await s.handle('what are my tasks?'), contains('buy milk'));
     expect(await s.handle('complete task 1'), contains('#1'));
-    expect(e.calls, 0);
-    // casual / unknown input falls back to the model
-    expect(await s.handle('hey, how is it going'), 'model reply');
-    expect(e.calls, 1);
+    expect(e.calls, 3, reason: 'model-first: consulted every conversational turn');
+    expect(s.lastFallbackReason, contains('not a valid plan'));
+    // a grounded chat plan is shown as the model said it
+    e.output = '{"intent":"chat","reply":"Doing great, thanks for asking!"}';
+    expect(await s.handle('hey, how is it going'), 'Doing great, thanks for asking!');
+    expect(e.calls, 4);
     await s.close();
     expect(e.unloads, 0, reason: 'sessions never unload the shared model');
   });
@@ -371,7 +374,9 @@ void main() {
     await s.start();
     await s.handle('how are you doing');
     expect(s.lastFallbackReason, contains('llama_error'));
-    await s.handle('add task Call Bob');
+    expect(await s.handle('add task Call Bob'), contains('Call Bob'), reason: 'rules fallback');
+    expect(s.lastFallbackReason, contains('llama_error'));
+    await s.handle('2+2'); // app-side calculator: no model, reason reset
     expect(s.lastFallbackReason, isNull);
   });
 

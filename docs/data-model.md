@@ -1,9 +1,12 @@
 # Data model
 
 One SQLite file, `assistant.db`, in the app's databases directory (`getDatabasesPath()`). The Android widget reads the
-same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 3
+same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 5
 (`lib/data/db.dart`). v2 added `assistant_profile`; v3 added `chats` (backfilled from existing messages) and
-`reminders.sync`. `test/backend_sqlite_test.dart` runs the real v2 -> v3 migration with `sqflite_common_ffi`.
+`reminders.sync`; v4 added `reminders.kind`, `tasks.alert_plan` and `assistant_preferences`; v5 added
+`pending_clarifications`. Existing rows are kept
+(old reminders become `kind = 'reminder'`, old tasks get no stored plan). `test/backend_sqlite_test.dart` runs the
+real v2 -> v5 migration with `sqflite_common_ffi`; a fresh `onCreate` can't run on the host (no FTS4).
 
 ## Tables
 
@@ -14,13 +17,22 @@ same file directly, so the `tasks` columns are a contract with `WidgetProvider.k
 - `created_at`, `due_at`, `completed_at` INTEGER (epoch ms)
 - `priority` INTEGER 0..2, default 1
 - `recurrence` TEXT (reserved, unused)
+- `alert_plan` TEXT (v4): JSON of the requested notification plan, `{"lead":[30,10],"follow":60}` (`lead` empty =
+  single alert, no `follow` = no follow-up). Kept after its alerts fire or were skipped. Null = no plan, or the plan
+  was cancelled/completed (never regenerated).
 
 **reminders**
 - `id` PK, `task_id` FK → tasks(id) ON DELETE SET NULL
 - `title` TEXT not null, `trigger_at` INTEGER (epoch ms), `enabled` INTEGER 1/0
+- `kind` TEXT (v4): `reminder` (event time), `pre` (early alert) or `follow_up` (fixed "How did X go?" text)
 - `sync` TEXT: pending platform alarm operation, `schedule` or `cancel`; null once the platform call succeeded.
   The intent is written before the platform call; startup reconciliation (`ReminderScheduler.rescheduleAll`) re-arms
   enabled upcoming rows, retries pending cancels, and clears intents that succeed. A disabled row is never re-armed.
+
+**assistant_preferences** (v4)
+- single row `id = 1`: `multiple`, `follow_up` (0/1, both off by default), `lead_minutes` TEXT (`'30,10'`, 1–3 values
+  of 1–1440), `follow_up_minutes` (default 60, 5–1440), `quiet_start` / `quiet_end` (minutes after midnight, null =
+  off, may wrap midnight)
 
 **chats**
 - `id` TEXT PK (= `conversations.session_id`), `title` TEXT (first user message, 60 chars; empty = "New chat"),
@@ -42,12 +54,33 @@ same file directly, so the `tasks` columns are a contract with `WidgetProvider.k
 
 `PRAGMA foreign_keys = ON` is set on open.
 
+**pending_clarifications** (v5): `chat_id` TEXT PK, `draft` TEXT (JSON `{"tool","title","multiple"?,
+"follow_up"?,"time"?}`), `updated_at`. One open "When should I…?" per chat; deleted with the chat.
+
 ## Repositories (`lib/data/repos.dart`)
 
 - **TaskRepo**: `create`, `get`, `list(from, to, includeDone)` ordered by due date (nulls last), priority, id;
   `update`, `complete`, `delete`.
 - **ReminderRepo**: `create` (with `sync = 'schedule'`), `get`, `upcoming()` (enabled and in the future), `update`,
-  `cancel` (`enabled = 0`, `sync = 'cancel'` in one write), `synced`, `pending`, `delete`, `byTitle`.
+  `cancel` (`enabled = 0`, `sync = 'cancel'` in one write), `synced`, `pending`, `delete`, `byTitle` (one match per
+  plan, its event alert), `createPlan`, `forTask`, `cancelGroup`, `followUpTasks`, `planOf`, `restorePlan`.
+- **ReminderPreferencesRepo**: `get`, `save` (validates; turning follow-ups off cancels queued follow-ups and strips
+  them from stored plans, in one transaction).
+
+## Notification plans
+
+- `reminderPlan(at, prefs, multiple, followUp, now)` (pure) gives the alerts: early alerts at the lead offsets,
+  the event alert, and a follow-up `follow_up_minutes` after the start. Early alerts and the follow-up are skipped
+  when past or in quiet hours; the event alert is always kept.
+- `createPlan` saves the task (or, with `task_id`, replaces that task's plan: old alerts get a cancel intent and the
+  due time moves), the alerts and `tasks.alert_plan` in one transaction. `restorePlan` undoes a failed replacement.
+- `TaskRepo.update` is shared by chat and the Tasks page. Done or due cleared: every linked alert is cancelled and
+  `alert_plan` cleared. New due time with a stored plan: the plan is regenerated from it with the current quiet
+  hours, so offsets skipped before come back when the new time allows. Rows are reused per kind and offset (same
+  notification id), missing ones are inserted with new ids, leftovers are cancelled. Tasks without a stored plan
+  (pre-v4) shift their alerts and drop ones now past or in quiet hours. A rename renames the alerts.
+- Every change is a pending intent (`sync`), applied by `ReminderScheduler.syncPending` after the write and retried
+  at startup; a cancelled row is never re-armed.
 - **ConversationRepo**: `createChat`, `add`, `listChats` (newest first), `messages`, `deleteChat`, `recent(session, n)`.
 - **MemoryRepo**: `add`, `search`, `delete`, `all`.
 

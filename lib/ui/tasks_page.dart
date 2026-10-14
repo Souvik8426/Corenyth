@@ -5,9 +5,12 @@ import '../services/native_bridge.dart';
 import '../theme/app_colors.dart';
 
 class TasksPage extends StatefulWidget {
-  const TasksPage(this.tasks, {super.key, this.refreshToken = 0});
+  const TasksPage(this.tasks, {super.key, this.refreshToken = 0, this.reminders});
 
   final TaskRepo tasks;
+
+  /// Optional: shows each task's scheduled alerts.
+  final ReminderRepo? reminders;
   final int refreshToken;
 
   @override
@@ -16,6 +19,8 @@ class TasksPage extends StatefulWidget {
 
 class _TasksPageState extends State<TasksPage> {
   List<Task> _tasks = [];
+  Map<int, List<Reminder>> _alerts = {};
+  Set<int> _followUps = {};
   bool _completed = false;
   bool _loading = true;
   bool _hasLoaded = false;
@@ -49,8 +54,16 @@ class _TasksPageState extends State<TasksPage> {
     setState(() { _loading = true; _loadError = null; });
     try {
       final tasks = await widget.tasks.list(includeDone: true);
+      final alerts = <int, List<Reminder>>{};
+      var followUps = <int>{};
+      try {
+        followUps = await widget.reminders?.followUpTasks() ?? {};
+        for (final r in await widget.reminders?.upcoming() ?? <Reminder>[]) {
+          if (r.taskId != null) (alerts[r.taskId!] ??= []).add(r);
+        }
+      } catch (_) {} // alerts are extra detail; tasks still show
       if (!mounted || generation != _loadGeneration) return;
-      setState(() { _tasks = tasks; _hasLoaded = true; });
+      setState(() { _tasks = tasks; _alerts = alerts; _followUps = followUps; _hasLoaded = true; });
     } catch (_) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() => _loadError = 'Couldn’t load tasks.');
@@ -61,9 +74,24 @@ class _TasksPageState extends State<TasksPage> {
     }
   }
 
-  Future<void> _toggle(Task task) => _mutate(() => task.done
-      ? widget.tasks.update(task.id, {'status': 'pending', 'completed_at': null})
-      : widget.tasks.complete(task.id));
+  /// Restoring never re-arms the reminders cancelled when it was completed.
+  Future<void> _toggle(Task task) async {
+    if (!task.done) return _mutate(() => widget.tasks.complete(task.id));
+    await _mutate(() => widget.tasks.update(task.id, {'status': 'pending', 'completed_at': null}));
+    if (mounted && _mutationError == null && task.dueAt != null && widget.reminders != null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text(
+          'Task restored. Reminders cancelled when it was done stay off; ask in chat to set a new one.')));
+    }
+  }
+
+  /// Moves the task (and its whole alert plan) one hour past the later of
+  /// its due time and now.
+  Future<void> _postpone(Task task) {
+    final now = DateTime.now();
+    final from = task.dueAt!.isAfter(now) ? task.dueAt! : now;
+    return _mutate(() => widget.tasks.update(task.id,
+        {'due_at': from.add(const Duration(hours: 1)).millisecondsSinceEpoch}));
+  }
 
   Future<void> _mutate(Future<bool> Function() write) async {
     if (_mutating) return;
@@ -274,7 +302,28 @@ class _TasksPageState extends State<TasksPage> {
             color: task.priority == 2 ? AppColors.gold : AppColors.muted)),
           Text(task.dueAt == null ? 'No due date' : _dueLabel(context, task.dueAt!),
               style: text.bodySmall),
+          if (!task.done && _alerts[task.id] != null)
+            Text('Alerts: ${_alerts[task.id]!.map((r) => _alertLabel(context, r)).join(', ')}',
+                style: text.bodySmall?.copyWith(color: AppColors.muted)),
         ]),
+        if (!task.done && task.dueAt != null && task.dueAt!.isBefore(DateTime.now())) ...[
+          const SizedBox(height: 12),
+          // The check-in question only when the user asked for a follow-up.
+          Text(_followUps.contains(task.id) ? 'How did it go?' : 'Overdue', style: text.bodyMedium),
+          const SizedBox(height: 4),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            FilledButton.tonal(
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: _mutating ? null : () => _toggle(task),
+              child: const Text('Mark done'),
+            ),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: _mutating ? null : () => _postpone(task),
+              child: const Text('Postpone 1 hour'),
+            ),
+          ]),
+        ],
         const SizedBox(height: 16),
         Align(alignment: Alignment.centerRight, child: Wrap(spacing: 8, children: [
           IconButton(
@@ -488,6 +537,13 @@ class _TaskEditorState extends State<_TaskEditor> {
 String _priority(int value) => switch (value) {
   0 => 'Low', 1 => 'Normal', 2 => 'High', _ => 'Priority $value',
 };
+
+String _alertLabel(BuildContext context, Reminder r) {
+  final time = MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(r.triggerAt.toLocal()),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context));
+  return r.kind == 'follow_up' ? '$time (follow-up)' : time;
+}
 
 String _dueLabel(BuildContext context, DateTime date) {
   final local = date.toLocal();

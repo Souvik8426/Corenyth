@@ -23,7 +23,9 @@
 - `AlarmReminderScheduler` (Dart) schedules exact alarms (`exactAllowWhileIdle`) on the channel `reminders`.
 - Alarms are cancelled with the reminder id.
 - `rescheduleAll` runs on every app start, because alarms are lost on reinstall or force-stop.
-- Permissions requested at start: notifications and exact alarms.
+- Permissions requested at start: notifications and exact alarms. The runtime state (`areNotificationsEnabled`,
+  `canScheduleExactNotifications`) is checked at startup and when a reminder is created; if either is off the reply
+  and the Chat banner say so instead of promising the reminder will ring.
 
 ## Permissions
 

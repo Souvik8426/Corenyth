@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/repos.dart';
 import '../theme/app_colors.dart';
+import 'assistant_message.dart';
 
 /// Presentation only: messages and submission stay owned by the real session.
 class ChatView extends StatelessWidget {
@@ -219,8 +220,10 @@ class _MessageBubble extends StatelessWidget {
                               .withValues(alpha: user ? 0.08 : 0.12))),
                   child: Padding(
                       padding: const EdgeInsets.all(20),
-                      child: SelectableText(message.content,
-                          style: Theme.of(context).textTheme.bodyLarge)),
+                      child: user
+                          ? SelectableText(message.content,
+                              style: Theme.of(context).textTheme.bodyLarge)
+                          : AssistantMessage(message.content)),
                 )),
           ]),
     );

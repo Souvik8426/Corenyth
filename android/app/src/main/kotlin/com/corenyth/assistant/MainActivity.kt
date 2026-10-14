@@ -59,6 +59,21 @@ open class MainActivity : FlutterActivity() {
                             result.error("no_browser", "no browser installed", null)
                         }
                     }
+                    "openExternalLink" -> {
+                        // Chat links: any https URL with a host. Strict java.net.URI parse
+                        // rejects malformed input; javascript/file/intent/content/custom fail the scheme check.
+                        val url = call.arguments as? String
+                        val uri = try { java.net.URI(url ?: "") } catch (e: Exception) { null }
+                        if (uri == null || !"https".equals(uri.scheme, true) || uri.host.isNullOrBlank()) {
+                            result.error("bad_url", "only https links are opened", null)
+                        } else try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri.toString()))
+                                .addCategory(Intent.CATEGORY_BROWSABLE))
+                            result.success(null)
+                        } catch (e: ActivityNotFoundException) {
+                            result.error("no_browser", "no browser installed", null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

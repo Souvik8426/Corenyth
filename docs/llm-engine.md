@@ -1,7 +1,8 @@
 # LLM engine
 
-The model is Qwen3-0.6B (Q4_0 GGUF), run on the phone's CPU by llama.cpp. The Dart side only knows
-`LlmEngine.complete(Prompt)`. Everything native sits behind a MethodChannel.
+The default model is Qwen3-0.6B (Q4_0 GGUF); an optional allowlisted Qwen3-1.7B Q4_0 may be selected.
+Both use Dart-owned ChatML (`Prompt.render`). Models run on the phone's CPU via llama.cpp. The Dart side
+only knows `LlmEngine.complete(Prompt)`. Everything native sits behind a MethodChannel.
 
 ## Build
 
@@ -34,6 +35,9 @@ for a shorter message, `llama_cancelled` ends the turn silently, other errors fa
 - `AppServices.ensureModel` is the single load owner. It always calls native `load` (cheap when resident), because
   residency is process-wide and another activity or memory pressure may have freed it. The status only shows
   "loading" when it was not believed loaded. It is called at session start and before each inference.
+- Selected model comes from `ModelSelection` (private `.selected_model`). Each load first checks the pinned SHA-256
+  (cached), then loads with a fresh `LlamaChannelEngine` for the current path. On failure it falls back to the
+  default 0.6B file if installed (and re-selects it), else rules. See [model-install.md](model-install.md).
 - Each session gets its own `LlamaChannelEngine`, so `cancel` stops only that session's requests.
 - `releaseModel` (memory pressure) is serialized with loads and sets the status to idle before unloading.
 
@@ -62,6 +66,11 @@ token, generated tokens and timings. Model output text is not logged.
 
 ## Prompt (`engine.dart`, `Prompt.render`)
 
+The assistant uses `PromptKind.plan` (see request-flow.md): system text, `Now`, `Pending:`, fresh `#id title` task
+lines and the message, with no history replay (under 3000 bytes in the test, so well inside the 2048-token
+context; real token counts are not measured), `maxTokens` 120. The older `action` kind below is
+kept for the grammar contract and tests.
+
 - Qwen ChatML, most stable first for KV reuse: system (fixed instructions + personal context), chat history, then the
   user turn with the variable parts (`Now`, relevant memories, tasks / reminders when the router included them,
   marked `(partial: ...)` when capped at 10).
@@ -73,6 +82,9 @@ token, generated tokens and timings. Model output text is not logged.
 
 ## Grammar
 
+- `semanticGrammar` (`semantic.dart`): one object with a known `intent` and `range`, optional typed fields in a fixed
+  order. It is the grammar sent for `plan` prompts (`LlamaChannelEngine.completeStreaming`).
+
 - `toolGrammar` (`tools.dart`) is generated from `toolSchemas`: one JSON object, `respond` or a known tool with typed
   arguments (priority 0..2). The validator still runs afterwards and also enforces exactly one selector
   (`id` or title) for complete/delete/cancel/edit.
@@ -80,8 +92,9 @@ token, generated tokens and timings. Model output text is not logged.
 
 ## Fallback
 
-`RuleEngine` is used when no model is installed or loaded, or when the model fails / returns an invalid call. No
-retry: decoding is greedy. Only the strict `fastRoute` emits mutations; the rest of `plan()` is read-only or explains.
+`RuleEngine` is used when no model is installed or loaded, or when the model fails, returns an invalid plan, or the
+app rejects the plan. No retry: decoding is greedy. Arithmetic and pure time answers to a pending question never
+need the model. Tests use stand-in engines; see device-evaluation.md for checking real Qwen output.
 
 ## Not measured
 

@@ -31,6 +31,11 @@ class NativeBridge {
   /// Hands an https URL to the user's browser (the app itself has no INTERNET permission).
   static Future<void> openUrl(String url) => _ch.invokeMethod('openUrl', url);
 
+  /// Opens a chat link (https with a host only; re-validated natively). Throws
+  /// PlatformException when rejected or no browser is installed.
+  static Future<void> openExternalLink(String url) =>
+      _ch.invokeMethod('openExternalLink', url);
+
   /// Close the translucent voice activity without killing the app process.
   static Future<void> closeActivity() => SystemNavigator.pop();
 }
