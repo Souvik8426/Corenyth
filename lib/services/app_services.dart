@@ -13,7 +13,24 @@ import '../data/repos.dart';
 import 'model_selection.dart';
 import 'model_status.dart';
 import 'native_bridge.dart';
+import 'proactive.dart';
 import 'reminder_scheduler.dart';
+
+/// Reports each save to [saved] (AppServices: nudge cancel, review alarm).
+/// The save itself has committed by then, so a failure there never fails it.
+class _Preferences extends ReminderPreferencesRepo {
+  Future<void> Function(ReminderPreferences before)? saved;
+  _Preferences(super.db);
+
+  @override
+  Future<void> save(ReminderPreferences value) async {
+    final before = await get();
+    await super.save(value);
+    try {
+      await saved?.call(before);
+    } catch (_) {} // pending intents are retried at the next sync/startup
+  }
+}
 
 /// Composition root: one DB, repos, scheduler. Sessions are created per conversation.
 class AppServices {
@@ -25,7 +42,12 @@ class AppServices {
   final ConversationRepo conversations;
   final ReminderPreferencesRepo preferences;
   final PendingRepo pending;
+  final ReviewRepo review;
   final ReminderScheduler scheduler;
+
+  /// Bumped after each proactive job (alarm, notification action, boot) so
+  /// the open chat and lists reload what was written meanwhile.
+  final proactiveChanged = ValueNotifier(0);
 
   /// Model file loads use; [selectModel]/fallback change it only between loads.
   String get modelPath => _path;
@@ -49,11 +71,50 @@ class AppServices {
         memory = MemoryRepo(db),
         profile = ProfileRepo(db),
         conversations = ConversationRepo(db),
-        preferences = ReminderPreferencesRepo(db),
-        pending = PendingRepo(db) {
+        preferences = _Preferences(db),
+        pending = PendingRepo(db),
+        review = ReviewRepo(db) {
     // Every task/preference write (chat, Tasks page) syncs linked alarms.
     tasks.onRemindersChanged =
         preferences.onRemindersChanged = () => syncReminders();
+    (preferences as _Preferences).saved = _preferencesSaved;
+  }
+
+  /// Nudges turned off: pending early alerts go, as follow-ups do when those
+  /// are turned off (ReminderPreferencesRepo.save). Either switch re-arms or
+  /// cancels the evening review, which follows the follow-up switch.
+  Future<void> _preferencesSaved(ReminderPreferences before) async {
+    final after = await preferences.get();
+    if (before.multiple && !after.multiple) {
+      final cancelled = await db.transaction((tx) async {
+        for (final t in await tx.query('tasks',
+            columns: ['id', 'alert_plan'], where: 'alert_plan IS NOT NULL')) {
+          final i = AlertIntentJson.decode(t['alert_plan']);
+          if (i == null || i.lead.isEmpty) continue;
+          await tx.update('tasks',
+              {'alert_plan': (lead: const <int>[], follow: i.follow).encode()},
+              where: 'id = ?', whereArgs: [t['id']]);
+        }
+        return tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
+            where: "kind = 'pre' AND enabled = 1");
+      });
+      if (cancelled > 0) await syncReminders();
+    }
+    if (before.quietStart != after.quietStart ||
+        before.quietEnd != after.quietEnd) {
+      await tasks.refreshPlans();
+    }
+    await armReview();
+  }
+
+  /// App back in the foreground: file what alarms missed, retry intents.
+  Future<void> resumed() async {
+    try {
+      await catchUp();
+    } catch (_) {}
+    await checkReminders();
+    await armReview();
+    proactiveChanged.value++;
   }
 
   /// Applies pending alarm intents; ids still out of sync are retried later
@@ -112,6 +173,7 @@ class AppServices {
 
   static Future<AppServices> open() async {
     final db = await openAppDb();
+
     final sched = AlarmReminderScheduler();
     String? issue;
     try {
@@ -119,8 +181,10 @@ class AppServices {
     } catch (_) {
       issue = 'Notifications could not be set up; reminders may not fire.';
     }
+
     final models = await NativeBridge
         .modelsDir(); // creates Documents/localmodels on every boot
+
     final sel = await ModelSelection.open();
     final crashed = await sel.crashedAttempt();
     String? note;
@@ -138,6 +202,14 @@ class AppServices {
       ..selection = sel;
     s.modelNote.value = note;
     try {
+      await s.conversations.ensureMainChat();
+
+      await s
+          .catchUp(); // before re-arming: missed occurrences are filed once, never replayed
+    } catch (_) {}
+
+    await s.armReview();
+    try {
       final failed = await sched.rescheduleAll(s.reminders);
       if (failed.isNotEmpty) {
         issue ??= 'Could not schedule reminder${failed.length > 1 ? 's' : ''} '
@@ -153,6 +225,7 @@ class AppServices {
       } catch (_) {}
     }
     s.reminderIssue.value = issue;
+
     return s;
   }
 
@@ -189,13 +262,15 @@ class AppServices {
         ok = await _loadPath();
         final sel = selection;
         final fallback = p.join(p.dirname(_path), model06b.fileName);
-        if (!ok && sel != null && _path != fallback &&
+        if (!ok &&
+            sel != null &&
+            _path != fallback &&
             checkModelPath(fallback) == ModelState.ready) {
           final failed = modelByFileName(p.basename(_path));
           _path = fallback;
           await sel.writeId(defaultModelId);
           modelNote.value = '${modelNote.value ?? '${failed?.label ?? 'The '
-              'selected model'} could not be loaded.'} The default model is '
+                  'selected model'} could not be loaded.'} The default model is '
               'selected again.';
           ok = await _loadPath();
         }
@@ -253,7 +328,8 @@ class AppServices {
       }
       modelNote.value = null;
       _path = path;
-      modelLoad.value = ModelLoad.loading; // busy UI while the old model is replaced
+      modelLoad.value =
+          ModelLoad.loading; // busy UI while the old model is replaced
       return await ensureModel() && _path == path;
     } finally {
       _switching = null;
@@ -289,21 +365,23 @@ class AppServices {
     final d = await NativeBridge.modelsDir();
     final sel = selection;
     // Pick up a newly installed file while nothing is loaded or switching.
-    if (sel != null && _switching == null && _loading == null &&
+    if (sel != null &&
+        _switching == null &&
+        _loading == null &&
         modelLoad.value != ModelLoad.loaded) {
       final use = sel.resolveLoadable(d.path);
       if (use != null) _path = sel.pathIn(d.path, use);
     }
-    return checkModelPath(p.join(d.path, p.basename(_path)), granted: d.granted);
+    return checkModelPath(p.join(d.path, p.basename(_path)),
+        granted: d.granted);
   }
 
   /// Uses llama.cpp only if the complete model file is installed; otherwise rules.
   /// A fresh engine per session: request ids (and so cancel) are per instance,
   /// while the native model itself stays shared and loaded via [ensureModel].
-  LlmEngine _engine() =>
-      checkModelPath(modelPath) == ModelState.ready
-          ? LlamaChannelEngine(modelPath)
-          : RuleEngine();
+  LlmEngine _engine() => checkModelPath(modelPath) == ModelState.ready
+      ? LlamaChannelEngine(modelPath)
+      : RuleEngine();
 
   ToolExecutor executor() => ToolExecutor(tasks, reminders, memory, scheduler,
       onTasksChanged: NativeBridge.refreshWidget, preferences: preferences);
@@ -324,6 +402,7 @@ class AppServices {
       onIdleTimeout: onIdleTimeout,
       loadEngine: engine is LlamaChannelEngine ? ensureModel : null,
       pending: pending,
+      review: review,
     );
   }
 }

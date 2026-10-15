@@ -32,13 +32,15 @@ class _TaskRepo extends TaskRepo {
   Map<String, Object?>? lastUpdate;
 
   @override
-  Future<List<Task>> list({DateTime? from, DateTime? to,
-      bool includeDone = false}) async {
+  Future<List<Task>> list(
+      {DateTime? from, DateTime? to, bool includeDone = false}) async {
     reads++;
     await readGate?.future;
     if (failRead) throw StateError('Database unavailable');
-    return rows.values.map(Task.new)
-        .where((t) => includeDone || !t.done).toList();
+    return rows.values
+        .map(Task.new)
+        .where((t) => includeDone || !t.done)
+        .toList();
   }
 
   Future<void> _beforeWrite() async {
@@ -48,8 +50,8 @@ class _TaskRepo extends TaskRepo {
   }
 
   @override
-  Future<Task> create(String title, {String? notes, DateTime? due,
-      int priority = 1}) async {
+  Future<Task> create(String title,
+      {String? notes, DateTime? due, int priority = 1}) async {
     await _beforeWrite();
     final id = rows.isEmpty ? 1 : rows.keys.reduce((a, b) => a > b ? a : b) + 1;
     final row = _row(id, title, notes: notes, due: due, priority: priority);
@@ -74,13 +76,17 @@ class _TaskRepo extends TaskRepo {
   }
 }
 
-Map<String, Object?> _row(int id, String title, {bool done = false,
-    String? notes, DateTime? due, int priority = 1}) => {
-  'id': id, 'title': title, 'notes': notes,
-  'status': done ? 'done' : 'pending',
-  'due_at': due?.millisecondsSinceEpoch, 'priority': priority,
-  'completed_at': done ? 123 : null,
-};
+Map<String, Object?> _row(int id, String title,
+        {bool done = false, String? notes, DateTime? due, int priority = 1}) =>
+    {
+      'id': id,
+      'title': title,
+      'notes': notes,
+      'status': done ? 'done' : 'pending',
+      'due_at': due?.millisecondsSinceEpoch,
+      'priority': priority,
+      'completed_at': done ? 123 : null,
+    };
 
 Future<void> _show(WidgetTester tester, TaskRepo repo,
     {double textScale = 1}) async {
@@ -88,8 +94,8 @@ Future<void> _show(WidgetTester tester, TaskRepo repo,
     theme: AppTheme.dark,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(
-        alwaysUse24HourFormat: true,
-        textScaler: TextScaler.linear(textScale)),
+          alwaysUse24HourFormat: true,
+          textScaler: TextScaler.linear(textScale)),
       child: child!,
     ),
     home: Scaffold(body: TasksPage(repo)),
@@ -111,18 +117,41 @@ void main() {
     nativeCalls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('assistant/native'),
-          (call) async { nativeCalls.add(call.method); return null; });
+            (call) async {
+      nativeCalls.add(call.method);
+      return null;
+    });
   });
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('assistant/native'), null);
+        .setMockMethodCallHandler(
+            const MethodChannel('assistant/native'), null);
+  });
+
+  testWidgets('notification focus shows the linked completed task first',
+      (tester) async {
+    final repo = _TaskRepo([
+      _row(1, 'Another task'),
+      _row(2, 'The linked meeting', done: true),
+    ]);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+      body: TasksPage(repo, focusTaskId: 2),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('The linked meeting'), findsOneWidget);
+    expect(find.text('From reminder'), findsOneWidget);
+    expect(find.text('Another task'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('loads real task data with counted Active and Completed filters',
       (tester) async {
     final repo = _TaskRepo([
-      _row(1, 'Review the research notes', notes: 'Check the sources',
-          due: DateTime(2026, 10, 12, 15, 30), priority: 2),
+      _row(1, 'Review the research notes',
+          notes: 'Check the sources',
+          due: DateTime(2026, 10, 12, 15, 30),
+          priority: 2),
       _row(2, 'Archive the draft', done: true),
     ]);
     await _show(tester, repo);
@@ -146,10 +175,11 @@ void main() {
 
   testWidgets('loading failures are recoverable and refresh reloads empty data',
       (tester) async {
-    final repo = _TaskRepo()..failRead = true
-        ..readGate = Completer<void>();
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.dark,
-        home: Scaffold(body: TasksPage(repo))));
+    final repo = _TaskRepo()
+      ..failRead = true
+      ..readGate = Completer<void>();
+    await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.dark, home: Scaffold(body: TasksPage(repo))));
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Loading tasks…'), findsOneWidget);
@@ -175,10 +205,12 @@ void main() {
       (tester) async {
     final repo = _TaskRepo([_row(1, 'Finished', done: true)]);
     Future<void> render(int token, TaskRepo tasks) async {
-      await tester.pumpWidget(MaterialApp(theme: AppTheme.dark,
-        home: Scaffold(body: TasksPage(tasks, refreshToken: token))));
+      await tester.pumpWidget(MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(body: TasksPage(tasks, refreshToken: token))));
       await tester.pumpAndSettle();
     }
+
     await render(0, repo);
     await tester.tap(find.text('Completed (1)'));
     await tester.pumpAndSettle();
@@ -266,8 +298,10 @@ void main() {
     await _tapVisible(tester, find.text('Save task'));
     expect(find.text('Give your task a title.'), findsOneWidget);
     expect(repo.writes, 0);
-    await tester.enterText(find.byKey(const ValueKey('task-title')), '  Read the paper  ');
-    await tester.enterText(find.byKey(const ValueKey('task-notes')), '  Compare the results  ');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-title')), '  Read the paper  ');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-notes')), '  Compare the results  ');
     await _tapVisible(tester, find.text('High'));
     repo.writeGate = Completer<void>();
     await tester.ensureVisible(find.text('Save task'));
@@ -298,7 +332,8 @@ void main() {
     await _show(tester, repo);
     await tester.tap(find.text('Add task'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('task-title')), 'Only once');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-title')), 'Only once');
     await _tapVisible(tester, find.text('Save task'));
     expect(repo.rows.length, 1);
     expect(find.byKey(const ValueKey('task-title')), findsNothing,
@@ -310,32 +345,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('optional due date and time are picked without scheduling reminders',
+  testWidgets(
+      'optional due date and time are picked without scheduling reminders',
       (tester) async {
     final repo = _TaskRepo();
     await _show(tester, repo);
     await tester.tap(find.text('Add task'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('task-title')), 'Review on time');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-title')), 'Review on time');
     await _tapVisible(tester, find.text('Set due date'));
     expect(find.byType(DatePickerDialog), findsOneWidget);
     await tester.tap(find.byTooltip('Switch to input'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.descendant(of: find.byType(DatePickerDialog),
-        matching: find.byType(TextField)), '10/14/2026');
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(DatePickerDialog),
+            matching: find.byType(TextField)),
+        '10/14/2026');
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     await _tapVisible(tester, find.text('Set due time'));
     expect(find.byType(TimePickerDialog), findsOneWidget);
-    final fields = find.descendant(of: find.byType(TimePickerDialog),
-        matching: find.byType(TextField));
+    final fields = find.descendant(
+        of: find.byType(TimePickerDialog), matching: find.byType(TextField));
     await tester.enterText(fields.at(0), '17');
     await tester.enterText(fields.at(1), '45');
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Oct 14, 2026'), findsOneWidget);
     await _tapVisible(tester, find.text('Save task'));
-    expect(repo.rows[1]!['due_at'], DateTime(2026, 10, 14, 17, 45).millisecondsSinceEpoch);
+    expect(repo.rows[1]!['due_at'],
+        DateTime(2026, 10, 14, 17, 45).millisecondsSinceEpoch);
     expect(find.textContaining('17:45'), findsOneWidget);
     expect(nativeCalls, ['refreshWidget']);
     expect(tester.takeException(), isNull);
@@ -344,30 +385,49 @@ void main() {
   testWidgets('edit sheet preserves data until save and clears optional values',
       (tester) async {
     final due = DateTime(2026, 10, 16, 11, 20);
-    final repo = _TaskRepo([_row(1, 'Original title', notes: 'Original notes',
-        due: due, priority: 2, done: true)]);
+    final repo = _TaskRepo([
+      _row(1, 'Original title',
+          notes: 'Original notes', due: due, priority: 2, done: true)
+    ]);
     await _show(tester, repo);
     await tester.tap(find.text('Completed (1)'));
     await tester.pumpAndSettle();
     await _tapVisible(tester, find.byTooltip('Edit task'));
     expect(find.text('Edit task'), findsOneWidget);
-    expect(tester.widget<TextFormField>(find.byKey(const ValueKey('task-title')))
-        .controller!.text, 'Original title');
-    expect(tester.widget<TextFormField>(find.byKey(const ValueKey('task-notes')))
-        .controller!.text, 'Original notes');
-    expect(find.descendant(of: find.byType(Form),
-        matching: find.textContaining('Oct 16, 2026')), findsOneWidget);
-    await tester.enterText(find.byKey(const ValueKey('task-title')), 'Discard this change');
+    expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('task-title')))
+            .controller!
+            .text,
+        'Original title');
+    expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('task-notes')))
+            .controller!
+            .text,
+        'Original notes');
+    expect(
+        find.descendant(
+            of: find.byType(Form),
+            matching: find.textContaining('Oct 16, 2026')),
+        findsOneWidget);
+    await tester.enterText(
+        find.byKey(const ValueKey('task-title')), 'Discard this change');
     await _tapVisible(tester, find.text('Cancel'));
     expect(repo.writes, 0);
     await _tapVisible(tester, find.byTooltip('Edit task'));
-    await tester.enterText(find.byKey(const ValueKey('task-title')), '  Revised title  ');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-title')), '  Revised title  ');
     await tester.enterText(find.byKey(const ValueKey('task-notes')), '  ');
     await _tapVisible(tester, find.text('Remove due date'));
     await _tapVisible(tester, find.text('Low'));
     await _tapVisible(tester, find.text('Save task'));
-    expect(repo.lastUpdate, {'title': 'Revised title', 'notes': null,
-        'due_at': null, 'priority': 0});
+    expect(repo.lastUpdate, {
+      'title': 'Revised title',
+      'notes': null,
+      'due_at': null,
+      'priority': 0
+    });
     expect(repo.rows[1]!['status'], 'done');
     expect(find.text('Revised title'), findsOneWidget);
     expect(find.text('Low priority'), findsOneWidget);
@@ -382,13 +442,19 @@ void main() {
     await _show(tester, repo);
     await tester.tap(find.text('Add task'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('task-title')), 'Keep my draft');
-    await tester.enterText(find.byKey(const ValueKey('task-notes')), 'Still here');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-title')), 'Keep my draft');
+    await tester.enterText(
+        find.byKey(const ValueKey('task-notes')), 'Still here');
     await _tapVisible(tester, find.text('High'));
     await _tapVisible(tester, find.text('Save task'));
     expect(find.text('Couldn’t save task. Try again.'), findsOneWidget);
-    expect(tester.widget<TextFormField>(find.byKey(const ValueKey('task-title')))
-        .controller!.text, 'Keep my draft');
+    expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('task-title')))
+            .controller!
+            .text,
+        'Keep my draft');
     expect(repo.rows, isEmpty);
     expect(nativeCalls, isEmpty);
     repo.failWrite = false;

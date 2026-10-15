@@ -8,7 +8,8 @@
 | `VoiceSessionActivity` | `VoiceSessionActivity.kt` | Translucent window (`VoiceTheme`, `singleTask`, excluded from recents). Starts Dart on route `/voice`. |
 | `WidgetProvider` | `WidgetProvider.kt` | Home-screen widget. Reads pending tasks from `assistant.db` directly. No Flutter engine, no model. |
 | `LlamaBridge` | `LlamaBridge.kt` | The `assistant/llm` handler. See [llm-engine.md](llm-engine.md). |
-| Notifications | `flutter_local_notifications` (manifest receivers) | Fires reminders from AlarmManager and re-arms them after boot. |
+| `ProactiveReceiver` | `Proactive.kt` | AlarmManager delivery, Done/Snooze actions, boot/time reconciliation; starts a headless Flutter engine when needed. |
+| Notification permissions | `flutter_local_notifications` | Permission checks and test notification; old plugin schedules are cancelled during initialization. |
 
 ## Widget
 
@@ -20,12 +21,17 @@
 
 ## Reminders
 
-- `AlarmReminderScheduler` (Dart) schedules exact alarms (`exactAllowWhileIdle`) on the channel `reminders`.
+- `AlarmReminderScheduler` (Dart) arms native AlarmManager alarms through `assistant/alarms`, using exact delivery when permitted.
 - Alarms are cancelled with the reminder id.
-- `rescheduleAll` runs on every app start, because alarms are lost on reinstall or force-stop.
+- Startup/resume reconciles missed alerts and future schedules; boot, clock, timezone and app-update broadcasts also reconcile. Android force-stop blocks delivery until the user opens the app again.
 - Permissions requested at start: notifications and exact alarms. The runtime state (`areNotificationsEnabled`,
   `canScheduleExactNotifications`) is checked at startup and when a reminder is created; if either is off the reply
   and the Chat banner say so instead of promising the reminder will ring.
+- Delivery re-reads task state and saves a unique occurrence in the main chat before notifying. Done cancels pending task reminders; Snooze adds a ten-minute alert without moving the deadline. Taps open the relevant task or main chat.
+- Evening review runs thirty minutes before DND when follow-ups are enabled. No saved DND defaults to 22:00–07:00. Optional messages respect quiet hours; explicit event alarms retain their existing behavior.
+- A closed-app job starts the `proactiveMain` Dart entrypoint with a nine-second native deadline. Background text uses factual templates; Qwen continues the conversation when opened. On timeout, a still-current event alarm can show its saved title, and a review re-arms the next day. Cold-start speed and manufacturer battery restrictions require phone testing.
+- Delivery runs in the dedicated `:proactive` Android process with its own SQLite worker pool. WAL permits foreground reads while delivery writes. This avoids a same-worker deadlock between two database connections during startup. One headless engine is retained per delivery process; Android reclaims the idle process and its database connections together. A private receiver refreshes an open UI after delivery.
+- The Flutter startup screen paints before opening services. Initialization failures show a Retry button rather than leaving the native splash visible.
 
 ## Permissions
 

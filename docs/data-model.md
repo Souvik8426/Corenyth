@@ -1,12 +1,13 @@
 # Data model
 
 One SQLite file, `assistant.db`, in the app's databases directory (`getDatabasesPath()`). The Android widget reads the
-same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 5
+same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 6
 (`lib/data/db.dart`). v2 added `assistant_profile`; v3 added `chats` (backfilled from existing messages) and
 `reminders.sync`; v4 added `reminders.kind`, `tasks.alert_plan` and `assistant_preferences`; v5 added
-`pending_clarifications`. Existing rows are kept
+`pending_clarifications`; v6 adds event details, daily schedules, global task questions, message metadata,
+proactive occurrence keys and evening review participation. Existing rows and saved preference choices are kept
 (old reminders become `kind = 'reminder'`, old tasks get no stored plan). `test/backend_sqlite_test.dart` runs the
-real v2 -> v5 migration with `sqflite_common_ffi`; a fresh `onCreate` can't run on the host (no FTS4).
+real v2 -> v6 migration with `sqflite_common_ffi`; a fresh `onCreate` can't run on the host (no FTS4).
 
 ## Tables
 
@@ -16,7 +17,11 @@ real v2 -> v5 migration with `sqflite_common_ffi`; a fresh `onCreate` can't run 
 - `status` TEXT: `pending` (default) or `done`
 - `created_at`, `due_at`, `completed_at` INTEGER (epoch ms)
 - `priority` INTEGER 0..2, default 1
-- `recurrence` TEXT (reserved, unused)
+- `recurrence` TEXT (`daily` for a daily reminder; otherwise null)
+- `ends_at`, `deadline_at`, `awaiting_at` INTEGER nullable (epoch ms); event end, confirmed recurrence deadline,
+  and when the optional task question was opened
+- `subject`, `outcome`, `awaiting` TEXT nullable; `awaiting` is `details` or `outcome`, shared across chats
+- `daily_minute` INTEGER nullable (minutes after midnight); `due_at` holds the next occurrence separately from its deadline
 - `alert_plan` TEXT (v4): JSON of the requested notification plan, `{"lead":[30,10],"follow":60}` (`lead` empty =
   single alert, no `follow` = no follow-up). Kept after its alerts fire or were skipped. Null = no plan, or the plan
   was cancelled/completed (never regenerated).
@@ -43,6 +48,7 @@ real v2 -> v5 migration with `sqflite_common_ffi`; a fresh `onCreate` can't run 
 
 **conversations**
 - `id` PK, `session_id` TEXT, `role` TEXT, `content` TEXT, `created_at` INTEGER
+- `task_id` nullable FK to tasks with ON DELETE SET NULL, `kind` nullable TEXT; used for proactive message context
 - Index `conv_session(session_id, id)`
 
 **memories**
@@ -54,8 +60,26 @@ real v2 -> v5 migration with `sqflite_common_ffi`; a fresh `onCreate` can't run 
 
 `PRAGMA foreign_keys = ON` is set on open.
 
+**proactive_events** (v6): `key` TEXT PK, `task_id` nullable FK to tasks ON DELETE SET NULL, `created_at` INTEGER.
+An alert occurrence uses `alert:<reminder id>:<trigger ms>`; a daily review uses `review:yyyy-mm-dd`.
+`ConversationRepo.addProactive` records the key and main-chat message atomically. Deleting display history preserves
+keys so reopening cannot replay previously delivered occurrences. The reserved main chat id is `main`.
+
+**review_items** (v6): `day` TEXT, `task_id` FK to tasks ON DELETE CASCADE, `answered` INTEGER default 0;
+composite primary key `(day, task_id)`. Ignored tasks remain review candidates without changing their deadlines.
+
+When there is no preferences row, quiet hours default to 22:00–07:00. Saved times and explicit off are preserved.
+The evening review minute is 30 minutes before quiet start, or 21:30 when quiet hours are explicitly off.
+Every committed preference save notifies the scheduler, including enabling follow-ups and changing quiet hours.
+
+`ConversationRepo.relevant` retrieves matching user messages across display chats, excluding assistant assertions.
+`TaskRepo.setEventDetails` preserves the supplied end and regenerates its follow-up plan, including quiet-hour skips.
+`setDaily` and `advanceDaily` keep the deadline separate, skip missed occurrences, and preserve a future snooze.
+
 **pending_clarifications** (v5): `chat_id` TEXT PK, `draft` TEXT (JSON `{"tool","title","multiple"?,
-"follow_up"?,"time"?}`), `updated_at`. One open "When should I…?" per chat; deleted with the chat.
+"follow_up"?,"time"?}`), `updated_at`. New missing-time questions use the reserved `main` key so any display chat
+can answer them. Legacy per-chat rows remain readable in their original chat. Task-specific meeting details/outcome
+questions use the task's `awaiting` field instead.
 
 ## Repositories (`lib/data/repos.dart`)
 

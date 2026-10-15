@@ -5,6 +5,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('proactive messages retain their time and task context',
+      (t) async {
+    final input = TextEditingController();
+    final scroll = ScrollController();
+    addTearDown(input.dispose);
+    addTearDown(scroll.dispose);
+    await t.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+          body: ChatView(
+        name: 'Ari',
+        messages: [
+          Message(
+            'assistant',
+            'How did your meeting go?',
+            createdAt: DateTime(2026, 10, 15, 12),
+            taskId: 7,
+            kind: 'follow_up',
+          )
+        ],
+        input: input,
+        scroll: scroll,
+        busy: false,
+        ready: true,
+        onSend: () {},
+      )),
+    ));
+    expect(find.text('Follow-up · Task #7'), findsOneWidget);
+    expect(find.textContaining('Oct 15'), findsOneWidget);
+    expect(find.textContaining('12:00'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('chat composer sends typed text and preserves readable messages',
       (t) async {
     final input = TextEditingController();

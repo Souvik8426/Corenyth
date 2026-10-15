@@ -7,8 +7,10 @@ import 'semantic.dart';
 import 'tools.dart';
 
 /// action: legacy tool-call prompt (kept for the rules engine contract);
-/// plan: the model-first semantic plan (see semantic.dart); memory: fact extraction.
-enum PromptKind { action, plan, memory }
+/// plan: the model-first semantic plan (see semantic.dart); memory: fact extraction;
+/// reply: a short grounded conversational reply (never a command; see
+/// [Prompt.replySystem]).
+enum PromptKind { action, plan, memory, reply }
 
 /// Breaks ChatML control markers (`<|im_start|>`, `<|im_end|>`, ...) in untrusted text:
 /// the native tokenizer parses special tokens, so a literal marker would forge a turn.
@@ -64,6 +66,16 @@ Format: {"type":"tool","tool":"<name>","arguments":{...}} or {"type":"respond","
 Datetimes are ISO-8601 local relative to "Now". priority: 0 low, 1 normal, 2 high.
 Use a tool only with clear evidence in the request. "remind me what…" / catch-up → list_tasks, never create_reminder. Missing time → ask when (today/tomorrow/tonight, morning=9/afternoon=15/evening=19, "in 20 minutes", 5pm). Arithmetic and casual chat → respond. Do not search memories for general knowledge. multiple/follow_up only when the user asks. Be natural; if you cannot help, say so honestly.''';
 
+  /// Prose only: the app has already done (or refused) every write, so the
+  /// model can only talk about the facts it is given.
+  static const replySystem =
+      '''You are a warm, concise offline personal assistant. Reply to the user's message in one or two short sentences, in their preferred tone, as {"type":"respond","text":"..."}.
+Use only the Facts given; never invent people, dates, times, results or tasks. You cannot act: never say you set, saved, scheduled, changed, moved, sent or contacted anything. When it helps, end by offering one or two next options as a question.''';
+
+  /// [replySystem]'s output: a respond object only, never a tool call.
+  static const replyGrammar =
+      'root ::= "{\\"type\\":\\"respond\\",\\"text\\":" str "}"\n$jsonStrRule';
+
   static const memoryGrammar =
       r'root ::= "{\"remember\":false}" | "{\"remember\":true,\"memory\":" str '
       r'",\"category\":" ("\"preference\"" | "\"fact\"" | "\"person\"") "}"'
@@ -78,7 +90,10 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
   /// the variable parts (Now, memories, tasks). Thinking is off: /no_think plus a
   /// pre-filled empty think block, so generation starts directly at the JSON object.
   String render({DateTime? now}) {
-    if (kind == PromptKind.plan) return _renderPlan(now ?? this.now ?? DateTime.now());
+    if (kind == PromptKind.plan)
+      return _renderPlan(now ?? this.now ?? DateTime.now());
+    if (kind == PromptKind.reply)
+      return _renderReply(now ?? this.now ?? DateTime.now());
     final action = kind == PromptKind.action;
     final b = StringBuffer('<|im_start|>system\n')
       ..write(action ? actionSystem : memorySystem);
@@ -122,25 +137,43 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
     }
     b.write('<|im_end|>\n<|im_start|>user\n');
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    b.writeln('Now: ${days[now.weekday - 1]} ${now.toIso8601String().substring(0, 16)}');
+    b.writeln(
+        'Now: ${days[now.weekday - 1]} ${now.toIso8601String().substring(0, 16)}');
     if (pending != null) b.writeln('Pending: ${neutralizeChatMl(pending!)}');
     if (tasks != null) b.writeln('Current tasks:\n${neutralizeChatMl(tasks!)}');
-    if (context != null && context!.isNotEmpty) b.writeln(neutralizeChatMl(context!));
+    if (context != null && context!.isNotEmpty)
+      b.writeln(neutralizeChatMl(context!));
     b.write('Message: ${neutralizeChatMl(user)} /no_think<|im_end|>\n'
         '<|im_start|>assistant\n<think>\n\n</think>\n\n');
     return b.toString();
   }
 
-  Prompt _with({List<Message>? history, bool dropOptional = false}) => Prompt(
-      kind, user,
-      memories: dropOptional ? const [] : memories,
-      tasks: tasks,
-      reminders: reminders,
-      personalContext: dropOptional ? '' : personalContext,
-      history: history ?? this.history,
-      pending: pending,
-      context: context,
-      now: now);
+  /// No history either: [context] carries the facts the app read from SQLite.
+  String _renderReply(DateTime now) {
+    final b = StringBuffer('<|im_start|>system\n$replySystem');
+    if (personalContext.isNotEmpty) {
+      b.write('\nAbout the user:\n${neutralizeChatMl(personalContext)}');
+    }
+    b.write('<|im_end|>\n<|im_start|>user\n');
+    b.writeln('Now: ${now.toIso8601String().substring(0, 16)}');
+    if (context != null && context!.isNotEmpty) {
+      b.writeln('Facts:\n${neutralizeChatMl(context!)}');
+    }
+    b.write('Message: ${neutralizeChatMl(user)} /no_think<|im_end|>\n'
+        '<|im_start|>assistant\n<think>\n\n</think>\n\n');
+    return b.toString();
+  }
+
+  Prompt _with({List<Message>? history, bool dropOptional = false}) =>
+      Prompt(kind, user,
+          memories: dropOptional ? const [] : memories,
+          tasks: tasks,
+          reminders: reminders,
+          personalContext: dropOptional ? '' : personalContext,
+          history: history ?? this.history,
+          pending: pending,
+          context: context,
+          now: now);
 
   /// Candidate renders from fullest to smallest: drop oldest history first, then
   /// optional context (memories, personal context; tasks answer the request so stay).
@@ -162,7 +195,8 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
   /// first candidate that provably fits. Usually that is the first one: one tokenization.
   List<String> budgeted(int nCtx, int maxTokens, {DateTime? now}) {
     final all = candidates(now: now);
-    final i = all.indexWhere((c) => utf8.encode(c).length + 1 + maxTokens <= nCtx);
+    final i =
+        all.indexWhere((c) => utf8.encode(c).length + 1 + maxTokens <= nCtx);
     return i < 0 ? all : all.sublist(0, i + 1);
   }
 }
@@ -212,8 +246,12 @@ String? visibleRespondText(String raw) {
       if (cu >= 0xD800 && cu < 0xDC00) {
         // high surrogate: emit only together with its low half; wait while it may still come
         final rest = raw.substring(i + 6, i + 12 < raw.length ? i + 12 : null);
-        if (rest.length < 6 && r'\u'.startsWith(rest.length < 2 ? rest : rest.substring(0, 2))) break;
-        final lo = rest.startsWith(r'\u') ? int.tryParse(rest.substring(2), radix: 16) : null;
+        if (rest.length < 6 &&
+            r'\u'.startsWith(rest.length < 2 ? rest : rest.substring(0, 2)))
+          break;
+        final lo = rest.startsWith(r'\u')
+            ? int.tryParse(rest.substring(2), radix: 16)
+            : null;
         if (lo != null && lo >= 0xDC00 && lo < 0xE000) {
           b.writeCharCode(0x10000 + ((cu - 0xD800) << 10) + (lo - 0xDC00));
           i += 12;
@@ -230,7 +268,8 @@ String? visibleRespondText(String raw) {
       }
       continue;
     }
-    b.write(const {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f'}[e] ?? e);
+    b.write(
+        const {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f'}[e] ?? e);
     i += 2;
   }
   return b.toString();
@@ -279,6 +318,7 @@ class LlamaChannelEngine extends LlmEngine {
       PromptKind.action => 160,
       PromptKind.plan => 120,
       PromptKind.memory => 80,
+      PromptKind.reply => 120,
     };
     if (onText != null) {
       if (!_handlerSet) {
@@ -305,6 +345,7 @@ class LlamaChannelEngine extends LlmEngine {
               PromptKind.action => toolGrammar,
               PromptKind.plan => semanticGrammar,
               PromptKind.memory => Prompt.memoryGrammar,
+              PromptKind.reply => Prompt.replyGrammar,
             },
             'stream': onText != null,
           }) ??

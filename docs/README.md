@@ -15,5 +15,9 @@ How the offline assistant works, one topic per file.
 | [device-evaluation.md](device-evaluation.md) | Check real model behavior and notification delivery on a phone |
 | [performance-validation.md](performance-validation.md) | Measure inference, memory, thermal behavior, and alarms |
 | [known-gaps.md](known-gaps.md) | What is not built yet, and known rough edges |
+| [expectation-gap-report.md](expectation-gap-report.md) | Product gaps against the Grokbot reference and confirmed follow-through decisions |
+| [follow-through-implementation.md](follow-through-implementation.md) | Delivered behavior, completed steps, verification and remaining device checks |
+| [../corenyth-follow-through-plan.md](../corenyth-follow-through-plan.md) | Implementation steps, dependencies, worker ownership, and progress |
+| [follow-through-device-checklist.md](follow-through-device-checklist.md) | Phone scenarios for contextual replies, proactive delivery, and recovery |
 
 Start with [architecture.md](architecture.md) if you are new to the project.

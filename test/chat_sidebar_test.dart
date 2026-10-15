@@ -4,6 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('main chat explains where proactive messages arrive',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: ChatSidebar(
+        chats: [ChatSummary(ConversationRepo.mainChatId, '', DateTime(2026))],
+        onNewChat: () {},
+        onSelect: (_) {},
+        onDelete: (_) {},
+      )),
+    ));
+    expect(find.text('Main chat'), findsOneWidget);
+    expect(find.text('Daily reviews and check-ins'), findsOneWidget);
+    expect(find.textContaining('Chats share context'), findsOneWidget);
+  });
+
   testWidgets('lists chats, untitled as New chat, and routes actions',
       (tester) async {
     final selected = <String>[], deleted = <String>[];

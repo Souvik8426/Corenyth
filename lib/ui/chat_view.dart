@@ -40,9 +40,9 @@ class ChatView extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
                   itemCount: messages.length + (streamingText == null ? 0 : 1),
                   itemBuilder: (context, index) => _MessageBubble(
-                    index == messages.length
-                        ? Message('assistant', streamingText!)
-                        : messages[index])),
+                      index == messages.length
+                          ? Message('assistant', streamingText!)
+                          : messages[index])),
         ),
         if (busy)
           Padding(
@@ -53,12 +53,18 @@ class ChatView extends StatelessWidget {
                     height: 12,
                     child: CircularProgressIndicator(strokeWidth: 2)),
                 const SizedBox(width: 10),
-                Expanded(child: Text(streamingText == null ? 'Corenyth is thinking…' : 'Corenyth is replying…',
-                    style: Theme.of(context).textTheme.bodySmall),
+                Expanded(
+                  child: Text(
+                      streamingText == null
+                          ? 'Corenyth is thinking…'
+                          : 'Corenyth is replying…',
+                      style: Theme.of(context).textTheme.bodySmall),
                 ),
                 if (onStop != null)
-                  TextButton.icon(onPressed: onStop,
-                    icon: const Icon(Icons.stop_rounded), label: const Text('Stop')),
+                  TextButton.icon(
+                      onPressed: onStop,
+                      icon: const Icon(Icons.stop_rounded),
+                      label: const Text('Stop')),
               ])),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -189,6 +195,16 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = message.role == 'user';
+    final sentAt = message.createdAt?.toLocal();
+    final locale = MaterialLocalizations.of(context);
+    final label = switch (message.kind) {
+      'pre' || 'nudge' => 'Preparation nudge',
+      'follow_up' => 'Follow-up',
+      'evening_review' || 'review' => 'Your day',
+      'daily' => 'Daily reminder',
+      'reminder' => 'Reminder',
+      _ => null,
+    };
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
@@ -208,6 +224,14 @@ class _MessageBubble extends StatelessWidget {
                             .labelSmall!
                             .copyWith(color: AppColors.muted)),
                   ])),
+            if (label != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
+                child: Text(
+                  '$label${message.taskId == null ? '' : ' · Task #${message.taskId}'}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
             FractionallySizedBox(
                 widthFactor: user ? 0.88 : 1,
                 alignment: user ? Alignment.centerRight : Alignment.centerLeft,
@@ -225,6 +249,17 @@ class _MessageBubble extends StatelessWidget {
                               style: Theme.of(context).textTheme.bodyLarge)
                           : AssistantMessage(message.content)),
                 )),
+            if (sentAt != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 4, top: 8),
+                child: Text(
+                  '${locale.formatMediumDate(sentAt)} · '
+                  '${locale.formatTimeOfDay(TimeOfDay.fromDateTime(sentAt), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.muted,
+                      ),
+                ),
+              ),
           ]),
     );
   }

@@ -45,7 +45,17 @@ class ChatSidebar extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'Chats share context. Check-ins arrive in your main chat.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: FilledButton.icon(
                 onPressed: busy ? null : onNewChat,
                 icon: const Icon(Icons.add),
@@ -57,7 +67,8 @@ class ChatSidebar extends StatelessWidget {
             ),
             if (error != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -105,10 +116,17 @@ class ChatSidebar extends StatelessWidget {
                         return ListTile(
                           selected: isSelected,
                           title: Text(
-                            chat.title.trim().isEmpty ? 'New chat' : chat.title,
+                            chat.id == ConversationRepo.mainChatId
+                                ? 'Main chat'
+                                : chat.title.trim().isEmpty
+                                    ? 'New chat'
+                                    : chat.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          subtitle: chat.id == ConversationRepo.mainChatId
+                              ? const Text('Daily reviews and check-ins')
+                              : null,
                           onTap: busy ? null : () => onSelect(chat.id),
                           trailing: IconButton(
                             key: ValueKey('delete-${chat.id}'),

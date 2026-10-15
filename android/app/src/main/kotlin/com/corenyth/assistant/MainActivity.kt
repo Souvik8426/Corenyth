@@ -79,5 +79,28 @@ open class MainActivity : FlutterActivity() {
             }
         val llm = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "assistant/llm")
         llm.setMethodCallHandler { call, result -> LlamaBridge.handle(llm, call, result) }
+        // Alarms/notifications: jobs run in this engine while it lives (see Proactive).
+        intent?.getStringExtra(Proactive.EXTRA_TARGET)?.let {
+            Proactive.launchTarget = it
+            intent.removeExtra(Proactive.EXTRA_TARGET)
+        }
+        proactive = Proactive.channel(this, flutterEngine.dartExecutor.binaryMessenger)
+            .also { Proactive.appChannels.add(it) }
+    }
+
+    private var proactive: MethodChannel? = null
+
+    /** A notification tapped while the app is open: Dart navigates to its task or chat. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val target = intent.getStringExtra(Proactive.EXTRA_TARGET) ?: return
+        intent.removeExtra(Proactive.EXTRA_TARGET)
+        proactive?.invokeMethod("open", target)
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        proactive?.let { Proactive.appChannels.remove(it) }
+        proactive = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 }

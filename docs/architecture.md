@@ -33,6 +33,15 @@ The model proposes intent and extracts words from the request. Application code 
 and database references, then builds and executes a tool call. Invalid output is never executed. See
 [tools-and-validation.md](tools-and-validation.md) and [llm-engine.md](llm-engine.md).
 
+Follow-through adds validated app-side interpretation in `follow_through.dart`: meeting detail/outcome replies,
+progress updates, daily schedules and briefings. The session persists optional details and outcomes through the
+repositories; ordinary task actions still use `ToolExecutor`. A separate `PromptKind.reply` asks Qwen for short
+prose about retrieved facts in the selected tone. It cannot return an executable action. Invalid/action-claiming
+prose uses a deterministic fallback. Actual model accuracy requires the phone checklist.
+
+Display chats share relevant user context and one new missing-time question. Task-bound event questions survive
+chat switches and restart. Old assistant task lists are not treated as current database facts.
+
 ## Components
 
 | Component | Location | Role |

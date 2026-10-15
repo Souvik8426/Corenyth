@@ -5,9 +5,12 @@ import 'package:sqflite/sqflite.dart';
 /// (see WidgetProvider.kt), so keep the file name and the tasks columns stable.
 const dbFileName = 'assistant.db';
 
-Future<Database> openAppDb({String? path}) async {
+Future<Database> openAppDb({String? path, bool singleInstance = false}) async {
   path ??= p.join(await getDatabasesPath(), dbFileName);
-  return openDatabase(path, version: 5, onConfigure: (db) async {
+  // Each Flutter engine needs its own connection; recovering another engine's
+  // single-instance connection can roll back an in-flight transaction.
+  return openDatabase(path, version: 6, singleInstance: singleInstance,
+      onConfigure: (db) async {
     await db.execute('PRAGMA foreign_keys = ON');
   }, onCreate: (db, _) async {
     await db.execute('''CREATE TABLE tasks(
@@ -49,6 +52,7 @@ Future<Database> openAppDb({String? path}) async {
     await createChatsTable(db);
     await _createAssistantPreferences(db);
     await _createPending(db);
+    await _createFollowThrough(db);
   }, onUpgrade: (db, oldVersion, newVersion) async {
     if (oldVersion < 2) await _createProfileTable(db);
     if (oldVersion < 3) {
@@ -57,14 +61,51 @@ Future<Database> openAppDb({String? path}) async {
     }
     if (oldVersion < 4) await _createAssistantPreferences(db);
     if (oldVersion < 5) await _createPending(db);
+    if (oldVersion < 6) await _createFollowThrough(db);
   });
+}
+
+/// v6 follow-through. Only nullable columns and new tables, so old rows and
+/// the widget's `tasks(title,status,due_at)` read stay valid.
+/// tasks: `ends_at`/`subject` (optional meeting details), `deadline_at`
+/// (confirmed deadline; also ends a daily recurrence), `daily_minute`
+/// (daily reminder time, minutes after midnight, with `recurrence` 'daily';
+/// `due_at` = next occurrence), `outcome` (what the user said happened),
+/// `awaiting`/`awaiting_at` (the one open question about the task:
+/// 'details' or 'outcome'; global, so it survives chat switches/restarts).
+/// conversations: `task_id`/`kind` tag proactive messages.
+/// proactive_events: one row per delivered occurrence key (idempotency).
+/// review_items: tasks raised in each evening review (`day` = yyyy-mm-dd).
+/// Saved quiet-hour choices are preserved; an absent preferences row gets
+/// the 22:00-07:00 default when read by the repository.
+Future<void> _createFollowThrough(DatabaseExecutor db) async {
+  for (final c in [
+    'ends_at INTEGER',
+    'subject TEXT',
+    'deadline_at INTEGER',
+    'daily_minute INTEGER',
+    'outcome TEXT',
+    'awaiting TEXT',
+    'awaiting_at INTEGER',
+  ]) {
+    await db.execute('ALTER TABLE tasks ADD COLUMN $c');
+  }
+  await db.execute('ALTER TABLE conversations ADD COLUMN '
+      'task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL');
+  await db.execute('ALTER TABLE conversations ADD COLUMN kind TEXT');
+  await db.execute('CREATE TABLE proactive_events(key TEXT PRIMARY KEY, '
+      'task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL, '
+      'created_at INTEGER NOT NULL)');
+  await db.execute('CREATE TABLE review_items(day TEXT NOT NULL, '
+      'task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, '
+      'answered INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(day, task_id))');
 }
 
 /// v5: one open clarification per chat (structured JSON, see ClarifyDraft), so
 /// it survives restarts without being re-read from assistant prose.
-Future<void> _createPending(DatabaseExecutor db) => db.execute(
-    'CREATE TABLE pending_clarifications(chat_id TEXT PRIMARY KEY, '
-    'draft TEXT NOT NULL, updated_at INTEGER NOT NULL)');
+Future<void> _createPending(DatabaseExecutor db) =>
+    db.execute('CREATE TABLE pending_clarifications(chat_id TEXT PRIMARY KEY, '
+        'draft TEXT NOT NULL, updated_at INTEGER NOT NULL)');
 
 /// v4: `reminders.kind` ('reminder' = event time, 'pre' = early alert,
 /// 'follow_up') groups one task's notification plan; existing rows stay
@@ -74,7 +115,8 @@ Future<void> _createPending(DatabaseExecutor db) => db.execute(
 /// delay, see AlertIntent), kept after its alerts fire or were skipped, so a
 /// due change regenerates it. Null = no plan (or cancelled; never re-armed).
 Future<void> _createAssistantPreferences(DatabaseExecutor db) async {
-  await db.execute("ALTER TABLE reminders ADD COLUMN kind TEXT NOT NULL DEFAULT 'reminder'");
+  await db.execute(
+      "ALTER TABLE reminders ADD COLUMN kind TEXT NOT NULL DEFAULT 'reminder'");
   await db.execute('ALTER TABLE tasks ADD COLUMN alert_plan TEXT');
   await db.execute('CREATE TABLE assistant_preferences('
       'id INTEGER PRIMARY KEY CHECK(id = 1), '

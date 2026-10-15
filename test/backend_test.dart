@@ -32,8 +32,12 @@ class FakeTasks extends TaskRepo {
       {String? notes, DateTime? due, int priority = 1}) async {
     final id = ++_id;
     rows[id] = {
-      'id': id, 'title': title, 'notes': notes, 'status': 'pending',
-      'due_at': due?.millisecondsSinceEpoch, 'priority': priority,
+      'id': id,
+      'title': title,
+      'notes': notes,
+      'status': 'pending',
+      'due_at': due?.millisecondsSinceEpoch,
+      'priority': priority,
     };
     return Task(rows[id]!);
   }
@@ -46,8 +50,10 @@ class FakeTasks extends TaskRepo {
       rows.values
           .map(Task.new)
           .where((t) => includeDone || !t.done)
-          .where((t) => from == null || (t.dueAt != null && !t.dueAt!.isBefore(from)))
-          .where((t) => to == null || (t.dueAt != null && t.dueAt!.isBefore(to)))
+          .where((t) =>
+              from == null || (t.dueAt != null && !t.dueAt!.isBefore(from)))
+          .where(
+              (t) => to == null || (t.dueAt != null && t.dueAt!.isBefore(to)))
           .toList();
   @override
   Future<bool> update(int id, Map<String, Object?> v) async {
@@ -58,6 +64,49 @@ class FakeTasks extends TaskRepo {
 
   @override
   Future<bool> delete(int id) async => rows.remove(id) != null;
+
+  @override
+  Future<bool> setAwaiting(int id, String? question) =>
+      update(id, {'awaiting': question});
+
+  @override
+  Future<List<Task>> awaitingAnswers({String? question}) async => rows.values
+      .map(Task.new)
+      .where((t) =>
+          t.awaiting != null && (question == null || t.awaiting == question))
+      .toList()
+      .reversed
+      .toList();
+
+  @override
+  Future<bool> setOutcome(int id, String outcome) async {
+    final r = rows[id];
+    if (r == null) return false;
+    rows[id] = {
+      ...r,
+      'outcome': outcome.trim(),
+      if (r['awaiting'] == TaskRepo.outcomeQuestion) 'awaiting': null,
+    };
+    return true;
+  }
+
+  @override
+  Future<bool> setEventDetails(int id,
+      {DateTime? endsAt, String? subject}) async {
+    final r = rows[id];
+    if (r == null) return false;
+    final due = r['due_at'] as int?;
+    if (endsAt != null && due != null && endsAt.millisecondsSinceEpoch <= due) {
+      throw ArgumentError('The end time must be after the start.');
+    }
+    rows[id] = {
+      ...r,
+      if (endsAt != null) 'ends_at': endsAt.millisecondsSinceEpoch,
+      if (subject != null) 'subject': subject.trim(),
+      if (r['awaiting'] == TaskRepo.details) 'awaiting': null,
+    };
+    return true;
+  }
 }
 
 class FakeReminders extends ReminderRepo {
@@ -68,8 +117,12 @@ class FakeReminders extends ReminderRepo {
   Future<Reminder> create(String title, DateTime at, {int? taskId}) async {
     final id = ++_id;
     rows[id] = {
-      'id': id, 'title': title, 'trigger_at': at.millisecondsSinceEpoch,
-      'task_id': taskId, 'enabled': 1, 'sync': 'schedule',
+      'id': id,
+      'title': title,
+      'trigger_at': at.millisecondsSinceEpoch,
+      'task_id': taskId,
+      'enabled': 1,
+      'sync': 'schedule',
     };
     return Reminder(rows[id]!);
   }
@@ -129,6 +182,17 @@ class FakeConversations extends ConversationRepo {
   @override
   Future<List<Message>> recent(String session, {int n = 8}) async =>
       msgs.reversed.take(n).toList().reversed.toList();
+
+  /// Like the SQLite version: the user's messages sharing a term, newest first.
+  @override
+  Future<List<Message>> relevant(String query, {int limit = 5}) async {
+    final ts = MemoryRepo.terms(query);
+    return msgs.reversed
+        .where(
+            (m) => m.role == 'user' && ts.any(m.content.toLowerCase().contains))
+        .take(limit)
+        .toList();
+  }
 }
 
 /// Model stand-in: records calls; each call waits on [next] when set.
@@ -216,11 +280,13 @@ void main() {
     expect(tasks.rows.length, 1);
     expect(await s.handle('what are my tasks?'), contains('buy milk'));
     expect(await s.handle('complete task 1'), contains('#1'));
-    expect(e.calls, 3, reason: 'model-first: consulted every conversational turn');
+    expect(e.calls, 3,
+        reason: 'model-first: consulted every conversational turn');
     expect(s.lastFallbackReason, contains('not a valid plan'));
     // a grounded chat plan is shown as the model said it
     e.output = '{"intent":"chat","reply":"Doing great, thanks for asking!"}';
-    expect(await s.handle('hey, how is it going'), 'Doing great, thanks for asking!');
+    expect(await s.handle('hey, how is it going'),
+        'Doing great, thanks for asking!');
     expect(e.calls, 4);
     await s.close();
     expect(e.unloads, 0, reason: 'sessions never unload the shared model');
@@ -232,7 +298,7 @@ void main() {
       'add task call mom next friday',
       'add task dentist on 12/03',
       'add task pay rent in 2 weeks',
-      'remind me on monday to call Bob',
+      'remind me next monday to call Bob',
       'add task tomorrow',
     ]) {
       expect(r.fastRoute(s), isNull, reason: s);
@@ -240,7 +306,8 @@ void main() {
     }
     final s = session(RuleEngine(clock: () => _now));
     await s.start();
-    expect(await s.handle('add task call mom next friday'), contains("didn't add"));
+    expect(await s.handle('add task call mom next friday'),
+        contains("didn't add"));
     expect(tasks.rows, isEmpty);
   });
 
@@ -308,7 +375,8 @@ void main() {
   test('explicit remember is saved before the success reply', () async {
     final s = session(SpyEngine());
     await s.start();
-    expect(await s.handle('Remember that I like green tea'), contains('remember'));
+    expect(
+        await s.handle('Remember that I like green tea'), contains('remember'));
     expect(memory.items, ['User likes green tea']);
     expect(log.indexOf('memory:User likes green tea'),
         lessThan(log.indexWhere((l) => l.startsWith('assistant:'))));
@@ -346,7 +414,8 @@ void main() {
       expect(() => parseToolCall(bad), throwsA(isA<ToolError>()), reason: bad);
     }
     expect(
-        parseToolCall(tool('create_task', '{"title":"a","due":"2028-02-29T10:00:00"}'))
+        parseToolCall(tool(
+                'create_task', '{"title":"a","due":"2028-02-29T10:00:00"}'))
             .args['due'],
         DateTime(2028, 2, 29, 10));
     expect(parseToolCall(tool('complete_task', '{"title":"Buy milk"}')).args,
@@ -356,7 +425,8 @@ void main() {
   test('prompt_too_long asks for shorter input, never falls back', () async {
     final s = session(ThrowingEngine('prompt_too_long'));
     await s.start();
-    expect(await s.handle('tell me a long story'), AssistantSession.tooLongReply);
+    expect(
+        await s.handle('tell me a long story'), AssistantSession.tooLongReply);
     expect(s.lastFallbackReason, isNull);
     expect(s.lastTiming.keys, containsAll(['route', 'context', 'total']));
   });
@@ -374,7 +444,8 @@ void main() {
     await s.start();
     await s.handle('how are you doing');
     expect(s.lastFallbackReason, contains('llama_error'));
-    expect(await s.handle('add task Call Bob'), contains('Call Bob'), reason: 'rules fallback');
+    expect(await s.handle('add task Call Bob'), contains('Call Bob'),
+        reason: 'rules fallback');
     expect(s.lastFallbackReason, contains('llama_error'));
     await s.handle('2+2'); // app-side calculator: no model, reason reset
     expect(s.lastFallbackReason, isNull);
@@ -382,10 +453,14 @@ void main() {
 
   test('fast route keeps casing, greets, and skips negated/compound text', () {
     final r = RuleEngine(clock: () => _now);
-    expect((r.fastRoute('Add task Call Bob tomorrow')!['arguments']
-        as Map)['title'], 'Call Bob');
-    expect((r.fastRoute('remind me at 5pm to call Mom')!['arguments']
-        as Map)['title'], 'call Mom');
+    expect(
+        (r.fastRoute('Add task Call Bob tomorrow')!['arguments']
+            as Map)['title'],
+        'Call Bob');
+    expect(
+        (r.fastRoute('remind me at 5pm to call Mom')!['arguments']
+            as Map)['title'],
+        'call Mom');
     expect(r.fastRoute('Hello!')!['type'], 'respond');
     expect(r.fastRoute('What are my tasks for today')!['tool'], 'list_tasks');
     for (final t in [
@@ -415,8 +490,11 @@ void main() {
     await tasks.create('Keep me');
     await tasks.create('Me too');
     await tasks.create('And me');
-    for (final t in ['do not delete task 3', 'never complete task 1',
-        'I will delete task 2 tomorrow']) {
+    for (final t in [
+      'do not delete task 3',
+      'never complete task 1',
+      'I will delete task 2 tomorrow'
+    ]) {
       await s.handle(t);
     }
     expect(tasks.rows.length, 3);
@@ -430,24 +508,34 @@ void main() {
     await tasks.create('Call Bob');
     await tasks.create('call bob!');
     final r = RuleEngine(clock: () => _now);
-    final rename = parseToolCall(jsonEncode(r.fastRoute('rename task Buy milk to Buy oat milk')));
+    final rename = parseToolCall(
+        jsonEncode(r.fastRoute('rename task Buy milk to Buy oat milk')));
     expect(rename.args, {'target_title': 'Buy milk', 'title': 'Buy oat milk'});
     expect(await x.execute(rename), contains('#1'));
     expect((await tasks.get(1))!.title, 'Buy oat milk');
     await expectLater(
-        x.execute(ToolCall('edit_task', {'target_title': 'Call Bob', 'title': 'x'})),
-        throwsA(isA<ToolError>().having((e) => e.message, 'm', contains('Which'))));
+        x.execute(
+            ToolCall('edit_task', {'target_title': 'Call Bob', 'title': 'x'})),
+        throwsA(
+            isA<ToolError>().having((e) => e.message, 'm', contains('Which'))));
     expect((await tasks.get(2))!.title, 'Call Bob');
     // numeric API preserved; exactly one selector
-    expect(await x.execute(ToolCall('edit_task', {'id': 2, 'priority': 2})), contains('#2'));
-    String tool(String a) => '{"type":"tool","tool":"edit_task","arguments":$a}';
-    for (final bad in ['{"title":"x"}', '{"id":1,"target_title":"Buy","title":"x"}']) {
-      expect(() => parseToolCall(tool(bad)), throwsA(isA<ToolError>()), reason: bad);
+    expect(await x.execute(ToolCall('edit_task', {'id': 2, 'priority': 2})),
+        contains('#2'));
+    String tool(String a) =>
+        '{"type":"tool","tool":"edit_task","arguments":$a}';
+    for (final bad in [
+      '{"title":"x"}',
+      '{"id":1,"target_title":"Buy","title":"x"}'
+    ]) {
+      expect(() => parseToolCall(tool(bad)), throwsA(isA<ToolError>()),
+          reason: bad);
     }
     // reminder by title
     await x.execute(ToolCall('create_reminder',
         {'title': 'Dentist', 'at': _now.add(const Duration(hours: 1))}));
-    final move = parseToolCall(jsonEncode(r.fastRoute('move reminder Dentist to tomorrow at 9am')));
+    final move = parseToolCall(
+        jsonEncode(r.fastRoute('move reminder Dentist to tomorrow at 9am')));
     expect(move.args['target_title'], 'Dentist');
     expect(await x.execute(move), contains('#1'));
     expect((await reminders.get(1))!.triggerAt, DateTime(2026, 10, 8, 9));
@@ -455,7 +543,8 @@ void main() {
 
   test('widget refresh failure never fails a committed write', () async {
     final x = ToolExecutor(tasks, reminders, memory, NoopScheduler(),
-        clock: () => _now, onTasksChanged: () async => throw Exception('widget'));
+        clock: () => _now,
+        onTasksChanged: () async => throw Exception('widget'));
     expect(await x.execute(ToolCall('create_task', {'title': 'Once'})),
         contains('Added'));
     await Future<void>.delayed(Duration.zero);
@@ -521,16 +610,17 @@ void main() {
       await x.execute(ToolCall('create_reminder',
           {'title': 'call', 'at': _now.add(const Duration(hours: 1))}));
       expect((await reminders.get(1))!.sync, isNull);
-      await expectLater(x.execute(ToolCall('cancel_reminder', {'title': 'Call'})),
-          throwsA(isA<ToolError>().having((e) => e.message, 'message',
-              contains('may still go off'))));
+      await expectLater(
+          x.execute(ToolCall('cancel_reminder', {'title': 'Call'})),
+          throwsA(isA<ToolError>().having(
+              (e) => e.message, 'message', contains('may still go off'))));
       final r = (await reminders.get(1))!;
       expect(r.enabled, isFalse);
       expect(r.sync, 'cancel');
       // next start: cancel still fails -> reported, and not re-armed
       final scheduled = <int>[];
-      final startup = _CountingScheduler(() => false, failCancel: true,
-          scheduled: scheduled);
+      final startup = _CountingScheduler(() => false,
+          failCancel: true, scheduled: scheduled);
       expect(await startup.rescheduleAll(reminders), [1]);
       expect(scheduled, isEmpty);
       // recovery: cancel succeeds, intent cleared

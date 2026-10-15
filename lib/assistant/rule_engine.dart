@@ -53,7 +53,9 @@ class ClarifyDraft {
         title.trim().isEmpty ||
         (m != null && m is! bool) ||
         (f != null && f is! bool) ||
-        (t != null && (t is! String || !RegExp(r'^\d{1,2}(?::\d{2})? [AP]M$').hasMatch(t)))) {
+        (t != null &&
+            (t is! String ||
+                !RegExp(r'^\d{1,2}(?::\d{2})? [AP]M$').hasMatch(t)))) {
       return null;
     }
     return ClarifyDraft(
@@ -63,6 +65,31 @@ class ClarifyDraft {
         followUp: f as bool?,
         time: t as String?);
   }
+}
+
+/// A repeating time of day from [RuleEngine.parseDaily], all local time.
+class DailySchedule {
+  final int hour, minute;
+
+  /// First occurrence: today, or tomorrow once today's time has passed.
+  final DateTime first;
+
+  /// Last occurrence (inclusive), at [hour]:[minute] on the end date; null =
+  /// until the task is done.
+  final DateTime? until;
+
+  /// The text with the schedule words removed (title candidate).
+  final String rest;
+
+  /// Disclosure of a default used (e.g. "I took that as 7 PM."), or null.
+  final String? note;
+  const DailySchedule(
+      {required this.hour,
+      required this.minute,
+      required this.first,
+      this.until,
+      this.rest = '',
+      this.note});
 }
 
 /// A create request parsed from plain language; [at] null = no time given.
@@ -101,7 +128,8 @@ class RuleEngine extends LlmEngine {
   static Map<String, Object?> _say(String s) => {'type': 'respond', 'text': s};
 
   static const supportedWhen =
-      'I understand today, tomorrow, tonight, morning/afternoon/evening '
+      'I understand today, tomorrow, tonight, weekdays like Monday, dates like '
+      '5 November or 2026-11-05, morning/afternoon/evening '
       '(9 AM / 3 PM / 7 PM), noon, "in 20 minutes", and times like 5pm.';
 
   static final _clockRe = RegExp(
@@ -114,9 +142,24 @@ class RuleEngine extends LlmEngine {
 
   static int? _numWord(String s) {
     const w = {
-      'a': 1, 'an': 1, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-      'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'fifteen': 15,
-      'twenty': 20, 'thirty': 30, 'forty': 40, 'fortyfive': 45, 'forty-five': 45,
+      'a': 1,
+      'an': 1,
+      'one': 1,
+      'two': 2,
+      'three': 3,
+      'four': 4,
+      'five': 5,
+      'six': 6,
+      'seven': 7,
+      'eight': 8,
+      'nine': 9,
+      'ten': 10,
+      'fifteen': 15,
+      'twenty': 20,
+      'thirty': 30,
+      'forty': 40,
+      'fortyfive': 45,
+      'forty-five': 45,
       'sixty': 60,
     };
     return int.tryParse(s) ?? w[s.toLowerCase()];
@@ -131,31 +174,45 @@ class RuleEngine extends LlmEngine {
   /// (time, text without the phrase, disclosure of any default used). The
   /// time may already be past: callers ask instead of silently moving it.
   (DateTime?, String, String?) _when(String text) {
+    final w = _parse(text);
+    return (w.at, w.rest, w.note);
+  }
+
+  /// [_when] plus whether a day (dated) or a time of day (timed) was given.
+  ({DateTime? at, String rest, String? note, bool dated, bool timed}) _parse(
+      String text) {
     final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final none = (at: null, rest: text, note: null, dated: false, timed: false);
     var rest = text;
     final rel = _inRe.firstMatch(rest);
     if (rel != null) {
       final n = _numWord(rel.group(1)!);
-      if (n == null) return (null, text, null);
+      if (n == null) return none;
       final u = rel.group(2)!.toLowerCase();
       final d = u.startsWith('min')
           ? Duration(minutes: n)
           : u.startsWith('h')
               ? Duration(hours: n)
               : Duration(days: n);
-      return (now.add(d), _squash(rest.replaceFirst(rel.group(0)!, '')), null);
+      return (
+        at: now.add(d),
+        rest: _squash(rest.replaceFirst(rel.group(0)!, '')),
+        note: null,
+        dated: true,
+        timed: true
+      );
     }
-    int? offset, part;
+    int? part;
     String? partName;
     rest = rest.replaceAll(_slangDay, 'tomorrow');
-    for (final w in {'tomorrow': 1, 'today': 0, 'tonight': 0}.entries) {
-      final re = _ci('\\b${w.key}\\b');
-      if (re.hasMatch(rest)) {
-        offset = w.value;
-        rest = rest.replaceFirst(re, '');
-        if (w.key == 'tonight') (part, partName) = (20, 'tonight');
-      }
-    }
+    final found = _dateIn(rest, now, _onLead);
+    // Impossible, out-of-range or contradicting dates: the words stay in the
+    // text, so callers see an unsupported date and ask.
+    if (found == null) return none;
+    final date = found.date;
+    rest = found.rest;
+    if (found.tonight) (part, partName) = (20, 'tonight');
     for (final e in {'morning': 9, 'afternoon': 15, 'evening': 19}.entries) {
       final re = _ci('\\b(?:in (?:the )?|this )?${e.key}\\b');
       if (re.hasMatch(rest)) {
@@ -172,51 +229,237 @@ class RuleEngine extends LlmEngine {
       } else if (m.group(1) != null) {
         h = int.parse(m.group(1)!);
         min = int.parse(m.group(2) ?? '0');
-        if (h < 1 || h > 12) return (null, text, null); // 0am, 13pm
+        if (h < 1 || h > 12) return none; // 0am, 13pm
         h = h % 12 + (m.group(3)!.toLowerCase() == 'pm' ? 12 : 0);
       } else {
         h = int.parse(m.group(4)!);
         min = int.parse(m.group(5) ?? '0');
-        // bare "at 7" today, after 7 AM passed (or tonight): the evening one.
         // bare "at 7": afternoon/evening/tonight mean PM; with no part of
         // day, today after 7 AM passed means the evening one.
         if (h >= 1 &&
             h < 12 &&
             (part != null
                 ? part >= 12
-                : (offset ?? 0) == 0 &&
-                    DateTime(now.year, now.month, now.day, h, min).isBefore(now))) {
+                : (date == null || date == today) &&
+                    DateTime(now.year, now.month, now.day, h, min)
+                        .isBefore(now))) {
           h += 12;
           if (part == null) note = 'I took that as ${_clock(h, min)}.';
         }
       }
-      if (h > 23 || min > 59) return (null, text, null);
+      if (h > 23 || min > 59) return none;
+      final clash =
+          (at: null, rest: text, note: conflict, dated: false, timed: false);
       // An explicit clock wins over the part-of-day default, but must agree.
       if (part != null &&
-          (part == 9 ? h >= 12 : part == 15 ? h < 12 || h >= 18 : h < 17)) {
-        return (null, text, conflict);
+          (part == 9
+              ? h >= 12
+              : part == 15
+                  ? h < 12 || h >= 18
+                  : h < 17)) {
+        return clash;
       }
       rest = rest.replaceFirst(m.group(0)!, '');
       // Two clock times ("8:10 … 9pm"): ask, never pick one.
-      if (_clockRe.hasMatch(rest)) return (null, text, conflict);
+      if (_clockRe.hasMatch(rest)) return clash;
     }
     if (h == null && part != null) {
       h = part;
       note = '${partName![0].toUpperCase()}${partName.substring(1)} means '
           '${_clock(part, 0)} unless you say otherwise.';
     }
-    if (h == null && offset == null) return (null, text, null);
-    final day = DateTime(now.year, now.month, now.day + (offset ?? 0));
+    if (h == null && date == null) return none;
+    final timed = h != null;
+    final day = date ?? today;
     if (h == null) {
       // A day alone: 9 AM, or the next full hour when that already passed today.
-      h = offset == 0 && now.hour >= 9 ? now.hour + 1 : 9;
-      if (h > 23) return (null, text, null);
+      h = day == today && now.hour >= 9 ? now.hour + 1 : 9;
+      if (h > 23) return none;
       note = "I used ${_clock(h, 0)} since you didn't give a time.";
     }
     return (
-      DateTime(day.year, day.month, day.day, h, min ?? 0),
-      _squash(rest),
-      note
+      at: DateTime(day.year, day.month, day.day, h, min ?? 0),
+      rest: _squash(rest),
+      note: note,
+      dated: date != null,
+      timed: timed
+    );
+  }
+
+  static const _months = '(january|february|march|april|may|june|july|august|'
+      'september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|'
+      'sep|oct|nov|dec)';
+  static const _onLead = r'\b(?:on\s+)?';
+  static const _untilLead =
+      r'\b(?:until|till|til|ending(?:\s+on)?)\s+(?:on\s+)?';
+  static final _relWeekday = _ci(
+      r'\b(?:next|last|coming)\s+(?:mon|tues|wednes|thurs|fri|satur|sun)day\b');
+
+  /// The calendar day named in [text] after [lead]: today/tomorrow/tonight,
+  /// a weekday (the next one, today included), "5 November"/"Nov 5th"
+  /// (optionally with a year) or ISO 2026-11-05. A named date without a year
+  /// is this year's, even if past (callers ask; never rolled into next year).
+  /// Null when a date is impossible ("30 February"), its year is out of range,
+  /// "Nov 5 Dec"-style ambiguous, or two named days disagree.
+  static ({DateTime? date, String rest, bool tonight})? _dateIn(
+      String text, DateTime now, String lead) {
+    final today = DateTime(now.year, now.month, now.day);
+    var rest = text;
+    final days = <DateTime>[];
+    var tonight = false;
+    var bad = false;
+    RegExpMatch? take(String p) {
+      final m = _ci('$lead$p').firstMatch(rest);
+      if (m != null) rest = rest.replaceFirst(m.group(0)!, ' ');
+      return m;
+    }
+
+    void add(int y, int mo, int d) {
+      final day = DateTime(y, mo, d);
+      // DateTime normalizes 30 Feb to 2 Mar: an impossible date is refused.
+      if (y < now.year - 1 ||
+          y > now.year + 100 ||
+          day.month != mo ||
+          day.day != d) {
+        bad = true;
+      } else {
+        days.add(day);
+      }
+    }
+
+    int month(String s) =>
+        const [
+          'jan',
+          'feb',
+          'mar',
+          'apr',
+          'may',
+          'jun',
+          'jul',
+          'aug',
+          'sep',
+          'oct',
+          'nov',
+          'dec'
+        ].indexOf(s.toLowerCase().substring(0, 3)) +
+        1;
+    int year(String? s) => s == null ? now.year : int.parse(s);
+
+    final iso = take(r'(\d{4})-(\d{2})-(\d{2})\b');
+    if (iso != null) {
+      add(int.parse(iso.group(1)!), int.parse(iso.group(2)!),
+          int.parse(iso.group(3)!));
+    }
+    const dmP =
+        '(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?(?:\\s+of)?\\s+$_months\\b\\.?'
+        '(?:,?\\s+(\\d{4})\\b)?';
+    const mdP =
+        '$_months\\.?\\s+(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b(?:,?\\s+(\\d{4})\\b)?';
+    // "10 Nov 5": which number is the day?
+    if (_ci('$lead$dmP').hasMatch(rest) && _ci('$lead$mdP').hasMatch(rest))
+      return null;
+    final dm = take(dmP);
+    final md = take(mdP);
+    if (dm != null)
+      add(year(dm.group(3)), month(dm.group(2)!), int.parse(dm.group(1)!));
+    if (md != null)
+      add(year(md.group(3)), month(md.group(1)!), int.parse(md.group(2)!));
+    for (final (word, offset) in [
+      ('tomorrow', 1),
+      ('today', 0),
+      ('tonight', 0)
+    ]) {
+      if (take('$word\\b') != null) {
+        days.add(DateTime(today.year, today.month, today.day + offset));
+        if (word == 'tonight') tonight = true;
+      }
+    }
+    // "next Friday" is left for the caller to ask about.
+    final wd = _relWeekday.hasMatch(rest)
+        ? null
+        : take(r'(?:this\s+)?(mon|tues|wednes|thurs|fri|satur|sun)day\b');
+    int? weekday;
+    if (wd != null) {
+      weekday = const ['mon', 'tues', 'wednes', 'thurs', 'fri', 'satur', 'sun']
+              .indexOf(wd.group(1)!.toLowerCase()) +
+          1;
+      if (days.isEmpty) {
+        days.add(DateTime(today.year, today.month,
+            today.day + (weekday - today.weekday) % 7));
+      }
+    }
+    if (bad || days.any((d) => d != days.first)) return null;
+    if (weekday != null && days.first.weekday != weekday) return null;
+    return (
+      date: days.isEmpty ? null : days.first,
+      rest: rest,
+      tonight: tonight
+    );
+  }
+
+  static final _dailyRe = _ci(r'\b(?:daily|every ?day|each day)\b');
+  static final _untilDoneRe = _ci(
+      r"\b(?:until|till|til)\s+(?:it'?s\s+|i'?m\s+|i\s+am\s+)?(?:done|complete|completed|finished)\b");
+
+  /// For callers that store a repeating reminder: "daily at 8:46 AM until
+  /// 5 November", "every day 7pm till done". Null when [text] has no
+  /// daily/every-day words. Otherwise exactly one of schedule / problem
+  /// (a question to ask the user; nothing should be saved). The time of day
+  /// is required; an end date is optional (null = until the task is done).
+  /// Nothing is scheduled here.
+  ({DailySchedule? schedule, String? problem})? parseDaily(String text) {
+    var t = _norm(text);
+    final m = _dailyRe.firstMatch(t);
+    if (m == null) return null;
+    ({DailySchedule? schedule, String? problem}) ask(String p) =>
+        (schedule: null, problem: p);
+    t = t.replaceFirst(m.group(0)!, ' ').replaceAll(_untilDoneRe, ' ');
+    final now = clock();
+    DateTime? last;
+    final cutoff = _ci(_untilLead).firstMatch(t);
+    if (cutoff != null) {
+      // A cutoff's clock must never become the daily reminder time.
+      if (_clockRe.hasMatch(t.substring(cutoff.end))) {
+        return ask(
+            'Please give the daily reminder time and an end date without a separate end time.');
+      }
+      final end = _dateIn(t, now, _untilLead);
+      if (end == null || end.date == null || end.tonight) {
+        return ask(
+            "I couldn't read that end date. Which date should it run until, "
+            'e.g. "until 5 November"?');
+      }
+      (last, t) = (end.date, end.rest);
+    }
+    final w = _parse(_squash(t));
+    if (w.note == conflict || w.at == null || !w.timed) {
+      return ask('What time each day should I remind you?');
+    }
+    if (w.dated) {
+      return ask('Should it start on that day, or run every day? Say e.g. '
+          '"daily at 8:46 AM until 5 November".');
+    }
+    final at = w.at!;
+    final first = at.isBefore(now)
+        ? DateTime(at.year, at.month, at.day + 1, at.hour, at.minute)
+        : at;
+    final until = last == null
+        ? null
+        : DateTime(last.year, last.month, last.day, at.hour, at.minute);
+    if (until != null && until.isBefore(first)) {
+      return ask(
+          'That end date is already past, so there would be no reminders. '
+          'Which date should it run until?');
+    }
+    return (
+      schedule: DailySchedule(
+          hour: at.hour,
+          minute: at.minute,
+          first: first,
+          until: until,
+          rest: w.rest,
+          note: w.note),
+      problem: null
     );
   }
 
@@ -250,11 +493,13 @@ class RuleEngine extends LlmEngine {
   static bool isQuestionOrNegated(String raw) {
     final t = _req(raw);
     // "Can you remind me…?" is a polite request, not a question.
-    final polite = _ci(r'^\W*(?:(?:hi|hello|hey)\W+)?(?:can|could|would|will) ?(?:you|u)\b')
-        .hasMatch(raw.trim());
+    final polite =
+        _ci(r'^\W*(?:(?:hi|hello|hey)\W+)?(?:can|could|would|will) ?(?:you|u)\b')
+            .hasMatch(raw.trim());
     return (raw.contains('?') && !polite) ||
         _question.hasMatch(t) ||
-        _ci(r"\b(?:not|don'?t|do not|never|haven'?t|hasn'?t|won'?t|no longer)\b").hasMatch(t);
+        _ci(r"\b(?:not|don'?t|do not|never|haven'?t|hasn'?t|won'?t|no longer)\b")
+            .hasMatch(t);
   }
 
   /// Model-extracted title tidied: filler ("too", "also", "pls") and a leading
@@ -277,7 +522,9 @@ class RuleEngine extends LlmEngine {
 
   /// Date/time phrases [_when] does not understand. Left in a title they mean
   /// "ask / let the model try", never "store it in the title" or "guess a date".
+  /// Repeats ("daily … until …") go through [parseDaily], never a one-off.
   static final _unsupportedDate = RegExp(
+      r'\b(?:daily|every ?day|each day|until|till)\b|\b\d{1,2}(?:st|nd|rd|th)?(?: of)? may\b|\bmay \d{1,2}\b|'
       r'\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\b|'
       r'\b(?:january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b|'
       r'\b(?:next|this|last) (?:week|weekend|month|year)\b|\bweekend\b|'
@@ -311,7 +558,8 @@ class RuleEngine extends LlmEngine {
     // nested-repetition regex to backtrack on).
     final i = r.toLowerCase().indexOf('remind me');
     if (i > 0) {
-      final words = r.substring(0, i).split(RegExp(r'[\s,]+'))..removeWhere((w) => w.isEmpty);
+      final words = r.substring(0, i).split(RegExp(r'[\s,]+'))
+        ..removeWhere((w) => w.isEmpty);
       if (words.isNotEmpty && words.every(_timeWord.hasMatch)) {
         r = '${r.substring(i)} ${words.join(' ')}';
       }
@@ -322,7 +570,9 @@ class RuleEngine extends LlmEngine {
   /// One word of a leading when-phrase ("Morning", "8:10", "8:10am", "am", "in", "20", "minutes").
   static final _timeWord = _ci(
       r'^(?:today|tomorrow|tonight|this|next|week|in|the|morning|afternoon|evening|noon|at|on|'
-      r'(?:mon|tues|wednes|thurs|fri|satur|sun)day|minutes?|mins?|hours?|am|pm|'
+      r'(?:mon|tues|wednes|thurs|fri|satur|sun)day|minutes?|mins?|hours?|am|pm|of|'
+      r'january|february|march|april|may|june|july|august|september|october|november|december|'
+      r'jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|\d{1,2}(?:st|nd|rd|th)|\d{4}(?:-\d{2}-\d{2})?|'
       r'\d{1,2}(?::\d{2})?(?:am|pm)?)$');
 
   static RegExp _ci(String p) => RegExp(p, caseSensitive: false);
@@ -360,8 +610,8 @@ class RuleEngine extends LlmEngine {
   static final _remindQueryRe =
       _ci(r'^remind me (?:what|when|which|of what|about what)\b');
 
-  static final _postponeAbsRe = _ci(
-      r'^(?:postpone|delay|push(?: back)?)(?: the| my)? (.+?) to (.+)$');
+  static final _postponeAbsRe =
+      _ci(r'^(?:postpone|delay|push(?: back)?)(?: the| my)? (.+?) to (.+)$');
 
   /// "done with buying milk", "I bought milk": candidate task titles, most
   /// literal first ("buying milk" -> also "buy milk"; "milk" -> also "buy
@@ -371,10 +621,21 @@ class RuleEngine extends LlmEngine {
       r"^i(?:'ve| have)? (?:just )?(?:finished|completed|done) (.+)$|"
       r"^i(?:'ve| have)? (?:just )?(bought|picked up|called|paid|sent|emailed|booked|cleaned) (.+)$");
   static const _verbs = {
-    'buying': 'buy', 'bought': 'buy', 'calling': 'call', 'called': 'call',
-    'paying': 'pay', 'paid': 'pay', 'sending': 'send', 'sent': 'send',
-    'emailing': 'email', 'emailed': 'email', 'booking': 'book', 'booked': 'book',
-    'cleaning': 'clean', 'cleaned': 'clean', 'picking up': 'pick up',
+    'buying': 'buy',
+    'bought': 'buy',
+    'calling': 'call',
+    'called': 'call',
+    'paying': 'pay',
+    'paid': 'pay',
+    'sending': 'send',
+    'sent': 'send',
+    'emailing': 'email',
+    'emailed': 'email',
+    'booking': 'book',
+    'booked': 'book',
+    'cleaning': 'clean',
+    'cleaned': 'clean',
+    'picking up': 'pick up',
     'picked up': 'pick up',
   };
   static List<String>? doneRef(String raw) {
@@ -388,25 +649,31 @@ class RuleEngine extends LlmEngine {
         .replaceFirst(_ci(r'^(?:the|my) '), '')
         .trim();
     if (verb != null) return ['${_verbs[verb]} $obj'];
-    final g = _ci(r'^(buying|calling|paying|sending|emailing|booking|cleaning|picking up) (.+)$')
-        .firstMatch(obj);
+    final g =
+        _ci(r'^(buying|calling|paying|sending|emailing|booking|cleaning|picking up) (.+)$')
+            .firstMatch(obj);
     return [
       obj,
-      if (g != null) '${_verbs[g.group(1)!.toLowerCase()]} ${g.group(2)}' else 'buy $obj',
+      if (g != null)
+        '${_verbs[g.group(1)!.toLowerCase()]} ${g.group(2)}'
+      else
+        'buy $obj',
     ];
   }
 
   /// "postpone gym by 2h": (reference, raw amount), or null.
   static (String, String)? relativePostpone(String raw) {
-    final m = _ci(r'^(?:postpone|delay|push(?: back)?|move)(?: the| my)? (.+?) (?:by|for) (.+)$')
-        .firstMatch(_req(raw));
+    final m =
+        _ci(r'^(?:postpone|delay|push(?: back)?|move)(?: the| my)? (.+?) (?:by|for) (.+)$')
+            .firstMatch(_req(raw));
     return m == null ? null : (m.group(1)!.trim(), m.group(2)!);
   }
 
   /// Notification preference phrases stripped from titles; returns overrides.
   /// Disables are stripped first so "no follow-up" never reads as "follow-up";
   /// whatever negation is left afterwards is a real one.
-  static (bool? multiple, bool? followUp, String text) extractFlags(String raw) {
+  static (bool? multiple, bool? followUp, String text) extractFlags(
+      String raw) {
     var t = raw;
     bool? multiple, followUp;
     bool take(RegExp re) {
@@ -415,17 +682,20 @@ class RuleEngine extends LlmEngine {
       return true;
     }
 
-    if (take(_ci(r"\b(?:with |and )?(?:no|without) follow-?ups?\b|\b(?:and )?don'?t follow(?: me)? up\b"))) {
+    if (take(_ci(
+        r"\b(?:with |and )?(?:no|without) follow-?ups?\b|\b(?:and )?don'?t follow(?: me)? up\b"))) {
       followUp = false;
     }
-    if (take(_ci(r'\b(?:just )?once\b|\bno multiple (?:reminders|alerts|times)\b|\b(?:a |one |with a )?single (?:reminder|alert)\b'))) {
+    if (take(_ci(
+        r'\b(?:just )?once\b|\bno multiple (?:reminders|alerts|times)\b|\b(?:a |one |with a )?single (?:reminder|alert)\b'))) {
       multiple = false;
     }
     if (take(_ci(r'\b(?:(?:do|please|and)\s+)*(?:remind me )?multiple times\b|'
         r'\bwith multiple (?:reminders|alerts|notifications)\b'))) {
       multiple = true;
     }
-    if (take(_ci(r'\b(?:with (?:a )?)?follow-?ups?\b|\b(?:and |do |please )?follow(?: me)? up\b'))) {
+    if (take(_ci(
+        r'\b(?:with (?:a )?)?follow-?ups?\b|\b(?:and |do |please )?follow(?: me)? up\b'))) {
       followUp = true;
     }
     t = t.replaceAll(_ci(r'\b(?:(?:do|please)\s+)+remind me\b'), ' ');
@@ -439,7 +709,8 @@ class RuleEngine extends LlmEngine {
   static String _cleanTitle(String s) => _squash(s
       .replaceFirst(_ci(r'^(?:to|about|that)\s+'), '')
       .replaceFirst(
-          _ci(r"^i(?:'ve| have| need| must| got)(?: got)?(?: to)? (?:(?:a|an) )?"), '')
+          _ci(r"^i(?:'ve| have| need| must| got)(?: got)?(?: to)? (?:(?:a|an) )?"),
+          '')
       .replaceFirst(_ci(r'[\s,]+(?:to|at|on|by|in|for)?[\s,]*$'), ''));
 
   /// Plain-language create: "remind me…", "add task…", "I need to…",
@@ -455,12 +726,15 @@ class RuleEngine extends LlmEngine {
     if ((m = _ci(r'^remind me (.+)$').firstMatch(t)) != null) {
       tool = 'create_reminder';
       (multiple, followUp, body) = extractFlags(m!.group(1)!);
-    } else if ((m = _ci(r'^(?:add|create|new) (?:a )?task:? (.+)$').firstMatch(t)) != null ||
+    } else if ((m = _ci(r'^(?:add|create|new) (?:a )?task:? (.+)$')
+                .firstMatch(t)) !=
+            null ||
         (m = _captureRe.firstMatch(t)) != null) {
       body = m!.group(1)!;
-    } else if ((m = _haveRe.firstMatch(t)) != null) {
+    } else if ((m = _haveRe.firstMatch(t)) != null ||
+        (m = _ci(r'^i want to (.+)$').firstMatch(t)) != null) {
       body = m!.group(1)!;
-      needsWhen = true; // "I have a dog" is a fact, not a commitment
+      needsWhen = true; // Untimed facts and wishes are not commitments.
     } else {
       return null;
     }
@@ -502,14 +776,18 @@ class RuleEngine extends LlmEngine {
         title: c.title,
         multiple: c.multiple,
         followUp: c.followUp,
-        time: c.at == null || c.note != null ? null : _clock(c.at!.hour, c.at!.minute));
+        time: c.at == null || c.note != null
+            ? null
+            : _clock(c.at!.hour, c.at!.minute));
   }
 
   /// A day-only reply ("tomorrow") takes the draft's explicit clock time.
-  String _withTime(ClarifyDraft d, String t) =>
-      d.time == null || _clockRe.hasMatch(t) || _inRe.hasMatch(t) || _when(t).$1 == null
-          ? t
-          : '$t at ${d.time}';
+  String _withTime(ClarifyDraft d, String t) => d.time == null ||
+          _clockRe.hasMatch(t) ||
+          _inRe.hasMatch(t) ||
+          _when(t).$1 == null
+      ? t
+      : '$t at ${d.time}';
 
   /// Reply to the question for [maybeClarify]'s draft. [maybeClarify] states why
   /// it asks when the time had passed. `keep` = still waiting (the reply repeats
@@ -531,7 +809,8 @@ class RuleEngine extends LlmEngine {
       return null;
     }
     if (extra.isNotEmpty) {
-      return ask('I\'m not sure if "$raw" is the time for "${d.title}" or a new '
+      return ask(
+          'I\'m not sure if "$raw" is the time for "${d.title}" or a new '
           'request, so I did nothing. Reply with just the time, or "cancel".');
     }
     if (at.isBefore(clock())) {
@@ -540,7 +819,10 @@ class RuleEngine extends LlmEngine {
     final args = d.tool == 'create_reminder'
         ? _reminderArgs(d.title, at, multiple: d.multiple, followUp: d.followUp)
         : {'title': d.title, 'due': at.toIso8601String()};
-    return (call: {..._tool(d.tool, args), if (note != null) 'note': note}, keep: false);
+    return (
+      call: {..._tool(d.tool, args), if (note != null) 'note': note},
+      keep: false
+    );
   }
 
   /// A reply that only answers [d]'s question (a time, or cancel): settled
@@ -556,13 +838,17 @@ class RuleEngine extends LlmEngine {
   static final _cancelRe =
       _ci(r'^(?:cancel|never ?mind|forget (?:it|about it)|stop|no)$');
   static String _extra(String rest) => rest
-      .replaceAll(_ci(r'\b(?:ok(?:ay)?|please|pls|thanks|then|make it|at|on|by|yes|for|it)\b'), '')
+      .replaceAll(
+          _ci(r'\b(?:ok(?:ay)?|please|pls|thanks|then|make it|at|on|by|yes|for|it)\b'),
+          '')
       .replaceAll(RegExp(r'[\s,.!]+'), '');
 
   /// "the past time" lead-in for a draft parked by [maybeClarify], or ''.
   String clarifyReason(String raw) {
     final at = parseCreate(raw)?.at;
-    return at == null ? '' : '${friendlyTime(at, clock())} has already passed. ';
+    return at == null
+        ? ''
+        : '${friendlyTime(at, clock())} has already passed. ';
   }
 
   static Map<String, Object?> _reminderArgs(String title, DateTime at,
@@ -576,9 +862,9 @@ class RuleEngine extends LlmEngine {
 
   /// Duration for "by 2h" / "for 30 minutes" postpone replies; null if unknown.
   static Duration? parseDuration(String raw) {
-    final m = _ci(
-            r'^(?:by|for)?\s*(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty)\s*(minutes?|mins?|m|hours?|hrs?|h|days?|d)$')
-        .firstMatch(_norm(raw));
+    final m =
+        _ci(r'^(?:by|for)?\s*(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty)\s*(minutes?|mins?|m|hours?|hrs?|h|days?|d)$')
+            .firstMatch(_norm(raw));
     final n = m == null ? null : _numWord(m.group(1)!);
     if (n == null) return null;
     final u = m!.group(2)!.toLowerCase();
@@ -607,7 +893,8 @@ class RuleEngine extends LlmEngine {
         return _tool('list_reminders', {});
       }
       if (!_ci(r'\btomorrow\b').hasMatch(t)) {
-        return _tool('list_tasks', {}); // everything pending: undated + overdue too
+        return _tool(
+            'list_tasks', {}); // everything pending: undated + overdue too
       }
       final now = clock();
       return _tool('list_tasks', {
@@ -629,26 +916,35 @@ class RuleEngine extends LlmEngine {
       });
     }
 
-    final safe = t.toLowerCase().startsWith('remind me ') ? extractFlags(t).$3 : t;
+    final safe =
+        t.toLowerCase().startsWith('remind me ') ? extractFlags(t).$3 : t;
     if (unsafe.hasMatch(safe)) return null;
 
     if ((m = _ci(r'^(?:complete|finish|mark)(?: the)? task (.+?)(?: as)?(?: done| complete| completed)?$')
-            .firstMatch(t)) != null ||
-        (m = _ci(r'^mark (.+?)(?: as)? (?:done|complete|completed)$').firstMatch(t)) != null) {
+                .firstMatch(t)) !=
+            null ||
+        (m = _ci(r'^mark (.+?)(?: as)? (?:done|complete|completed)$')
+                .firstMatch(t)) !=
+            null) {
       return _ref('complete_task', m!.group(1)!);
     }
-    if ((m = _ci(r'^(?:delete|remove)(?: the)? task (.+)$').firstMatch(t)) != null) {
+    if ((m = _ci(r'^(?:delete|remove)(?: the)? task (.+)$').firstMatch(t)) !=
+        null) {
       return _ref('delete_task', m!.group(1)!);
     }
-    if ((m = _ci(r'^cancel(?: the| my)? reminder (.+)$').firstMatch(t)) != null) {
+    if ((m = _ci(r'^cancel(?: the| my)? reminder (.+)$').firstMatch(t)) !=
+        null) {
       return _ref('cancel_reminder', m!.group(1)!);
     }
-    if ((m = _ci(r'^rename(?: the)? task (.+?) to (.+)$').firstMatch(t)) != null) {
+    if ((m = _ci(r'^rename(?: the)? task (.+?) to (.+)$').firstMatch(t)) !=
+        null) {
       return _tool('edit_task',
           {..._sel(m!.group(1)!, 'target_title'), 'title': m.group(2)!});
     }
-    if ((m = _ci(r'^(?:move|reschedule|change)(?: the| my)? reminder (.+?) to (.+)$')
-            .firstMatch(t)) != null) {
+    if ((m =
+            _ci(r'^(?:move|reschedule|change)(?: the| my)? reminder (.+?) to (.+)$')
+                .firstMatch(t)) !=
+        null) {
       final (at, rest, _) = _when(m!.group(2)!);
       if (at == null || rest.isNotEmpty || at.isBefore(clock())) return null;
       return _tool('edit_reminder',
@@ -658,14 +954,18 @@ class RuleEngine extends LlmEngine {
       final (at, rest, note) = _when(m!.group(2)!);
       if (at == null || rest.isNotEmpty || at.isBefore(clock())) return null;
       return {
-        ..._tool('edit_task',
-            {..._sel(m.group(1)!, 'target_title'), 'due': at.toIso8601String()}),
+        ..._tool('edit_task', {
+          ..._sel(m.group(1)!, 'target_title'),
+          'due': at.toIso8601String()
+        }),
         if (note != null) 'note': note,
       };
     }
     // Plain shopping / errand capture without the word "task".
-    if ((m = _ci(r'^(?:add|put) (.+?) (?:to|on) (?:my |the )?(?:shopping(?: list)?|groceries)$')
-            .firstMatch(t)) != null) {
+    if ((m =
+            _ci(r'^(?:add|put) (.+?) (?:to|on) (?:my |the )?(?:shopping(?: list)?|groceries)$')
+                .firstMatch(t)) !=
+        null) {
       return _tool('create_task', {'title': 'buy ${m!.group(1)!.trim()}'});
     }
 
@@ -674,14 +974,17 @@ class RuleEngine extends LlmEngine {
     if (c.multi) return _say(_multiReply(c.title));
     final at = c.at;
     if (at == null) {
-      return c.tool == 'create_task' ? _tool('create_task', {'title': c.title}) : null;
+      return c.tool == 'create_task'
+          ? _tool('create_task', {'title': c.title})
+          : null;
     }
     if (at.isBefore(clock())) return null; // maybeClarify asks
     return {
       ..._tool(
           c.tool,
           c.tool == 'create_reminder'
-              ? _reminderArgs(c.title, at, multiple: c.multiple, followUp: c.followUp)
+              ? _reminderArgs(c.title, at,
+                  multiple: c.multiple, followUp: c.followUp)
               : {'title': c.title, 'due': at.toIso8601String()}),
       if (c.note != null) 'note': c.note,
     };
@@ -703,8 +1006,8 @@ class RuleEngine extends LlmEngine {
   static final _question = _ci(
       r'^(?:how|why|what|when|where|which|who|explain|tell me|should|is|are|does|do i|am i|can i|could i|if|suppose|what if)\b');
 
-  static final _personalCue = _ci(
-      r"\b(?:i|me|my|mine|we|our|remember|prefer|usually|normally)\b");
+  static final _personalCue =
+      _ci(r"\b(?:i|me|my|mine|we|our|remember|prefer|usually|normally)\b");
   static final _generalRe = _ci(
       r'^(?:who|what|when|where|why|how)\s+(?:is|are|was|were|do|does|did|can|could|should)\b');
 
@@ -719,7 +1022,9 @@ class RuleEngine extends LlmEngine {
   /// the id), and any date equals what the app itself parses from the text.
   bool justifiedMutation(String tool, String user, Map<String, Object?> args) {
     if (tool == 'respond') return true;
-    if (tool == 'list_tasks' || tool == 'list_reminders' || tool == 'search_memory') {
+    if (tool == 'list_tasks' ||
+        tool == 'list_reminders' ||
+        tool == 'search_memory') {
       // A read only answers a question/lookup, never stands in for a create
       // or completion the user clearly asked for.
       if (parseCreate(user) != null || doneRef(user) != null) return false;
@@ -729,10 +1034,13 @@ class RuleEngine extends LlmEngine {
               .hasMatch(_req(user));
     }
     final t = _req(user);
-    if (unsafe.hasMatch(extractFlags(t).$3) || _question.hasMatch(t)) return false;
+    if (unsafe.hasMatch(extractFlags(t).$3) || _question.hasMatch(t))
+      return false;
     final words = ' ${normTitle(t)} ';
     bool mentions(Object? s) =>
-        s is String && normTitle(s).isNotEmpty && words.contains(' ${normTitle(s)} ');
+        s is String &&
+        normTitle(s).isNotEmpty &&
+        words.contains(' ${normTitle(s)} ');
     bool refOk() => args['id'] != null
         ? RegExp('(?:#|\\b)${args['id']}\\b').hasMatch(t)
         : mentions(args['title'] ?? args['target_title']);
@@ -740,7 +1048,8 @@ class RuleEngine extends LlmEngine {
     bool cue(String re) => _ci(re).hasMatch(t);
     switch (tool) {
       case 'create_task':
-        return cue(r'\b(?:add|create|new|put|task|to-?do|need to|have to|must|shopping)\b') &&
+        return cue(
+                r'\b(?:add|create|new|put|task|to-?do|need to|have to|must|shopping)\b') &&
             mentions(args['title']) &&
             sameWhen(args['due']);
       case 'create_reminder':
@@ -753,7 +1062,8 @@ class RuleEngine extends LlmEngine {
             args['multiple'] == extractFlags(t).$1 &&
             args['follow_up'] == extractFlags(t).$2 &&
             (args['task_id'] == null ||
-                _ci('\\btask\\s*(?:#|id\\s*|number\\s*)?${args['task_id']}\\b').hasMatch(t));
+                _ci('\\btask\\s*(?:#|id\\s*|number\\s*)?${args['task_id']}\\b')
+                    .hasMatch(t));
       case 'complete_task':
         // Only an explicit command, or a completion statement doneRef accepts
         // (it rejects questions, "if…", negations), naming that same task.
@@ -762,14 +1072,16 @@ class RuleEngine extends LlmEngine {
         return refs != null &&
             (args['id'] != null
                 ? refOk()
-                : refs.any((r) => normTitle(r) == normTitle('${args['title']}')));
+                : refs
+                    .any((r) => normTitle(r) == normTitle('${args['title']}')));
       case 'delete_task':
         return cue(r'\b(?:delete|remove)\b') && refOk();
       case 'cancel_reminder':
         return cue(r'\bcancel\b') && refOk();
       case 'edit_task':
       case 'edit_reminder':
-        return cue(r'\b(?:edit|rename|change|move|reschedule|postpone|delay|push)\b') &&
+        return cue(
+                r'\b(?:edit|rename|change|move|reschedule|postpone|delay|push)\b') &&
             refOk() &&
             (args['title'] == null || mentions(args['title'])) &&
             sameWhen(args['due'] ?? args['at']);
@@ -801,8 +1113,7 @@ class RuleEngine extends LlmEngine {
           : "I didn't add that: I don't understand that date yet. $supportedWhen");
     }
     if (t.startsWith('remind me')) {
-      return _say(
-          "I couldn't work out when, or what about. $supportedWhen "
+      return _say("I couldn't work out when, or what about. $supportedWhen "
           'Try e.g. "remind me tomorrow at 8 to call Mom".');
     }
     if (RegExp(r'^(?:add|create|new)\s+(?:a\s+)?task\b').hasMatch(t)) {
@@ -834,21 +1145,26 @@ class RuleEngine extends LlmEngine {
     }
     // Only the strict fastRoute above may emit mutations; past here the rules
     // answer read-only questions or explain, never act on unanchored text.
-    if (RegExp(r'\b(?:complete|finish|mark|delete|remove|cancel|edit|rename|change|move|postpone|delay)\b')
+    if (RegExp(
+            r'\b(?:complete|finish|mark|delete|remove|cancel|edit|rename|change|move|postpone|delay)\b')
         .hasMatch(t)) {
       return _say(
           "I didn't change anything: I couldn't tell exactly what you meant. "
           'Try e.g. "delete task 3", "complete task buy milk", or "postpone gym to tomorrow at 5".');
     }
     if (isExplicitRemember(t)) return _say("Okay, I'll remember that.");
-    if (RegExp(r"^(?:how are you|how's it going|how is it going|what'?s up|sup|you there)\b").hasMatch(t)) {
-      return _say("I'm doing well, thanks! Want to go over what's on your plate?");
+    if (RegExp(
+            r"^(?:how are you|how's it going|how is it going|what'?s up|sup|you there)\b")
+        .hasMatch(t)) {
+      return _say(
+          "I'm doing well, thanks! Want to go over what's on your plate?");
     }
     if (isGeneralKnowledge(text)) {
       return _say("I can't look that up offline, and I'd rather not guess. "
           'I can help with your tasks, reminders, and quick calculations.');
     }
-    return _say("I'm not sure what you'd like me to do with that. I can add tasks, set reminders, "
+    return _say(
+        "I'm not sure what you'd like me to do with that. I can add tasks, set reminders, "
         "tell you what's on your plate, or do quick calculations.");
   }
 
@@ -861,8 +1177,8 @@ class RuleEngine extends LlmEngine {
       r'\b(?:today|tomorrow|tonight|this (?:morning|afternoon|evening|week)|next (?:week|month)|'
       r'(?:mon|tues|wednes|thurs|fri|satur|sun)day|at \d|\d\s*(?:am|pm)|in \d+\s*(?:min|minute|hour|day)s?|'
       r'(?:have|need|got) to|gotta|must|remind)\b');
-  static final _durable =
-      _ci(r'\b(?:usually|normally|always|never|every|prefer|prefers|like|likes|love|hate)\b');
+  static final _durable = _ci(
+      r'\b(?:usually|normally|always|never|every|prefer|prefers|like|likes|love|hate)\b');
   static bool isTemporary(String text) =>
       _temporary.hasMatch(text) && !_durable.hasMatch(text);
 
@@ -880,7 +1196,8 @@ class RuleEngine extends LlmEngine {
             caseSensitive: false)
         .firstMatch(text);
     if (r != null) {
-      final inner = extractMemory(r.group(1)!); // "remember I like tea" -> "User likes tea"
+      final inner = extractMemory(
+          r.group(1)!); // "remember I like tea" -> "User likes tea"
       return inner['remember'] == true
           ? inner
           : {'remember': true, 'memory': r.group(1)!, 'category': 'fact'};

@@ -50,7 +50,24 @@
                        android:resource="@xml/assistant_widget_info"/>
         </receiver>
 
-        <!-- flutter_local_notifications: fires scheduled reminders and re-arms them after reboot. -->
+        <!-- Proactive delivery (Proactive.kt): our exact alarms, notification Done/Snooze, and
+             re-arm + catch-up after boot, app update, time or time-zone change. -->
+        <!-- Separate SQLite worker pool: a waiting background connection must not
+             block the foreground connection's queued transaction commit. -->
+        <receiver android:name=".ProactiveReceiver" android:exported="false"
+                  android:process=":proactive">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".ProactiveRefreshReceiver" android:exported="false"/>
+        <meta-data android:name="com.tekartik.sqflite.wal_enabled" android:value="true"/>
+
+        <!-- flutter_local_notifications: only the settings test notification is scheduled by it now;
+             reminders armed by older versions are cancelled at startup. -->
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
                   android:exported="false"/>
         <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"

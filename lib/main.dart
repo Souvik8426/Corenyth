@@ -3,10 +3,12 @@ import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 
+import 'data/db.dart';
 import 'data/repos.dart';
 import 'assistant/engine.dart';
 import 'assistant/session.dart';
 import 'services/app_services.dart';
+import 'services/proactive.dart';
 import 'services/reminder_scheduler.dart';
 import 'ui/reminder_settings.dart';
 import 'package:path/path.dart' as p;
@@ -24,7 +26,6 @@ import 'ui/model_status_view.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final services = await AppServices.open();
   // The widget's Talk button launches VoiceSessionActivity with initial route /voice.
   final voice = PlatformDispatcher.instance.defaultRouteName == '/voice';
   runApp(MaterialApp(
@@ -33,8 +34,74 @@ Future<void> main() async {
     theme: AppTheme.dark,
     darkTheme: AppTheme.dark,
     themeMode: ThemeMode.dark,
-    home: AppStart(services, voice: voice),
+    home: ServiceStartup(voice: voice),
   ));
+}
+
+/// Paint before initialization; startup failures must not strand the native splash.
+class ServiceStartup extends StatefulWidget {
+  final bool voice;
+  final Future<AppServices> Function() open;
+  const ServiceStartup(
+      {this.voice = false, this.open = AppServices.open, super.key});
+
+  @override
+  State<ServiceStartup> createState() => _ServiceStartupState();
+}
+
+class _ServiceStartupState extends State<ServiceStartup> {
+  late Future<AppServices> _services;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  void _start() {
+    _services = widget.open();
+    listenProactive((args) async => (await _services).runProactive(args));
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<AppServices>(
+        future: _services,
+        builder: (context, snapshot) {
+          if (snapshot.hasData)
+            return AppStart(snapshot.data!, voice: widget.voice);
+          return Scaffold(
+            body: Center(
+              child: snapshot.connectionState == ConnectionState.done &&
+                      snapshot.hasError
+                  ? Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Text(
+                          'Could not open Corenyth. Your saved data is kept.'),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () => setState(_start),
+                        child: const Text('Retry'),
+                      ),
+                    ])
+                  : const Column(mainAxisSize: MainAxisSize.min, children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Opening Corenyth…'),
+                    ]),
+            ),
+          );
+        },
+      );
+}
+
+/// Headless entrypoint ProactiveReceiver (Proactive.kt) starts when an alarm,
+/// notification action, boot or time change arrives and no app engine is
+/// alive. Delivery only: no UI, no model, no permission prompts.
+@pragma('vm:entry-point')
+Future<void> proactiveMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final services = AppServices(await openAppDb(), AlarmReminderScheduler(), '');
+  listenProactive(services.runProactive);
+  await proactiveChannel.invokeMethod('ready');
 }
 
 class AppStart extends StatefulWidget {
@@ -110,7 +177,8 @@ class AssistantHome extends StatefulWidget {
   State<AssistantHome> createState() => _AssistantHomeState();
 }
 
-class _AssistantHomeState extends State<AssistantHome> {
+class _AssistantHomeState extends State<AssistantHome>
+    with WidgetsBindingObserver {
   List<ChatSummary> _chats = [];
   String? _selected;
   String _name = '';
@@ -120,6 +188,8 @@ class _AssistantHomeState extends State<AssistantHome> {
   bool _chatBusy = false; // the open chat is sending
   int _refresh = 0;
   int _destination = 0;
+  int? _focusedTaskId;
+  int _taskFocusRevision = 0;
   // A fresh key (so a fresh ChatPage state) per selected chat: no stale log,
   // stream or session can leak from the previous chat.
   var _chat = GlobalKey<_ChatPageState>();
@@ -134,22 +204,71 @@ class _AssistantHomeState extends State<AssistantHome> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     notificationTaps.addListener(_openTasks);
+    chatTaps.addListener(_openChat);
+    widget.services.proactiveChanged.addListener(_proactive);
     _openTasks();
+    _openChat();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     notificationTaps.removeListener(_openTasks);
+    chatTaps.removeListener(_openChat);
+    widget.services.proactiveChanged.removeListener(_proactive);
     super.dispose();
+  }
+
+  /// Alarms delivered while the app was away (or by its background engine)
+  /// are caught up, then shown ([_proactive] follows the bump).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed) widget.services.resumed();
+  }
+
+  /// New check-ins: reload the list and the open chat (never mid-reply).
+  void _proactive() {
+    if (!mounted) return;
+    setState(() => _refresh++);
+    _load();
+    _chat.currentState?.refresh();
+  }
+
+  /// A tapped check-in / review notification opens its chat.
+  void _openChat() {
+    final id = chatTaps.value;
+    if (id == null) return;
+    chatTaps.value = null;
+    if (!mounted) return;
+    _openWhenIdle(id);
+  }
+
+  Future<void> _openWhenIdle(String id) async {
+    for (var i = 0; i < 50 && (_busy || _chatBusy || _loading); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!mounted) return;
+    if (id == ConversationRepo.mainChatId) {
+      await widget.services.conversations.ensureMainChat();
+    }
+    await _switch(id);
   }
 
   /// A tapped reminder notification opens Tasks (its done/postpone controls).
   void _openTasks() {
-    if (notificationTaps.value == null) return;
+    final taskId = notificationTaps.value;
+    if (taskId == null) return;
     notificationTaps.value = null;
-    if (mounted) setState(() { _destination = 1; _refresh++; });
+    if (mounted)
+      setState(() {
+        _destination = 1;
+        _refresh++;
+        _focusedTaskId = taskId;
+        _taskFocusRevision++;
+      });
   }
 
   Future<void>? _loadOp;
@@ -178,16 +297,14 @@ class _AssistantHomeState extends State<AssistantHome> {
     final want = _selected;
     try {
       final c = widget.services.conversations;
-      var chats = await c.listChats();
+      // The stable main chat (check-ins land there) always exists and is the
+      // default; deleting it clears its history and it comes back empty.
+      await c.ensureMainChat();
+      final chats = await c.listChats();
       final profile = await widget.services.profile.get();
       var selected = want;
       if (selected == null || !chats.any((chat) => chat.id == selected)) {
-        if (chats.isEmpty) {
-          selected = await c.createChat();
-          chats = await c.listChats(); // include the chat just created
-        } else {
-          selected = chats.first.id;
-        }
+        selected = ConversationRepo.mainChatId;
       }
       if (!mounted) return;
       setState(() {
@@ -199,7 +316,11 @@ class _AssistantHomeState extends State<AssistantHome> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() { _error = 'Could not load chats.'; _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = 'Could not load chats.';
+          _loading = false;
+        });
     }
   }
 
@@ -217,10 +338,14 @@ class _AssistantHomeState extends State<AssistantHome> {
       await _chat.currentState?.shutdown();
       final next = id ?? await widget.services.conversations.createChat();
       if (!mounted) return;
-      setState(() { _setSelected(next); _destination = 0; });
+      setState(() {
+        _setSelected(next);
+        _destination = 0;
+      });
       await _load();
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not open that chat. Try again.');
+      if (mounted)
+        setState(() => _error = 'Could not open that chat. Try again.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -228,14 +353,21 @@ class _AssistantHomeState extends State<AssistantHome> {
 
   Future<void> _delete(ChatSummary chat) async {
     if (_busy || _chatBusy) return;
-    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-      title: const Text('Delete chat?'),
-      content: Text('Delete “${chat.title.trim().isEmpty ? 'New chat' : chat.title}” and its messages? Your tasks and memories are kept.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
-      ],
-    ));
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('Delete chat?'),
+              content: Text(
+                  'Delete “${chat.title.trim().isEmpty ? 'New chat' : chat.title}” and its messages? Your tasks and memories are kept.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Delete')),
+              ],
+            ));
     if (confirmed != true || !mounted || _busy || _chatBusy) return;
     setState(() => _busy = true);
     try {
@@ -260,55 +392,100 @@ class _AssistantHomeState extends State<AssistantHome> {
   }
 
   void _settings() => showModalBottomSheet<void>(
-    context: context, isScrollControlled: true, showDragHandle: true,
-    builder: (_) => SafeArea(child: SingleChildScrollView(
-      padding: const EdgeInsets.all(16), child: Column(children: [
-        ModelSetupCard(widget.services),
-        const SizedBox(height: 24),
-        ReminderSettings(widget.services.preferences,
-            onTest: widget.services.testNotification),
-      ]))),
-  );
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => SafeArea(
+            child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  ModelSetupCard(widget.services),
+                  const SizedBox(height: 24),
+                  ReminderSettings(widget.services.preferences,
+                      onTest: widget.services.testNotification),
+                ]))),
+      );
 
   @override
   Widget build(BuildContext context) => AppShell(
-    onProfile: _profile, onSettings: _settings,
-    selectedDestination: _destination,
-    onDestinationChanged: (index) {
-      setState(() { _destination = index; _refresh++; });
-      _load();
-    },
-    sidebar: Builder(builder: (context) {
-      void dismiss() { if (Scaffold.maybeOf(context)?.isDrawerOpen == true) Navigator.pop(context); }
-      return ChatSidebar(chats: _chats, selectedId: _selected,
-        busy: _busy || _chatBusy || _loading, error: _error, onRetry: _load,
-        onNewChat: () { dismiss(); _switch(null); },
-        onSelect: (id) { dismiss(); _switch(id); },
-        onDelete: _delete);
-    }),
-    pages: [
-      Column(children: [
-        ModelSetupCard(widget.services, compact: true),
-        ValueListenableBuilder<String?>(
-          valueListenable: widget.services.reminderIssue,
-          builder: (_, issue, __) => issue == null
-            ? const SizedBox.shrink()
-            : Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(issue, style: TextStyle(color: AppColors.error)))),
-        Expanded(child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _selected == null
-            ? Center(child: TextButton(onPressed: _load, child: const Text('Retry loading chats')))
-            : ChatPage(widget.services, key: _chat, conversationId: _selected,
-                name: _name, draft: _drafts[_selected] ?? '',
-                onBusyChanged: (busy) { widget.services.chatBusy.value = busy; if (mounted) setState(() => _chatBusy = busy); },
-                onChanged: () { if (mounted) { setState(() => _refresh++); _load(); } })),
-      ]),
-      TasksPage(widget.services.tasks, refreshToken: _refresh,
-          reminders: widget.services.reminders),
-      MemoriesPage(memory: widget.services.memory, profile: widget.services.profile, refreshToken: _refresh),
-    ],
-  );
+        onProfile: _profile,
+        onSettings: _settings,
+        selectedDestination: _destination,
+        onDestinationChanged: (index) {
+          setState(() {
+            _destination = index;
+            _refresh++;
+          });
+          _load();
+        },
+        sidebar: Builder(builder: (context) {
+          void dismiss() {
+            if (Scaffold.maybeOf(context)?.isDrawerOpen == true)
+              Navigator.pop(context);
+          }
+
+          return ChatSidebar(
+              chats: _chats,
+              selectedId: _selected,
+              busy: _busy || _chatBusy || _loading,
+              error: _error,
+              onRetry: _load,
+              onNewChat: () {
+                dismiss();
+                _switch(null);
+              },
+              onSelect: (id) {
+                dismiss();
+                _switch(id);
+              },
+              onDelete: _delete);
+        }),
+        pages: [
+          Column(children: [
+            ModelSetupCard(widget.services, compact: true),
+            ValueListenableBuilder<String?>(
+                valueListenable: widget.services.reminderIssue,
+                builder: (_, issue, __) => issue == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        child: Text(issue,
+                            style: TextStyle(color: AppColors.error)))),
+            Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _selected == null
+                        ? Center(
+                            child: TextButton(
+                                onPressed: _load,
+                                child: const Text('Retry loading chats')))
+                        : ChatPage(widget.services,
+                            key: _chat,
+                            conversationId: _selected,
+                            name: _name,
+                            draft: _drafts[_selected] ?? '',
+                            onBusyChanged: (busy) {
+                            widget.services.chatBusy.value = busy;
+                            if (mounted) setState(() => _chatBusy = busy);
+                          }, onChanged: () {
+                            if (mounted) {
+                              setState(() => _refresh++);
+                              _load();
+                            }
+                          })),
+          ]),
+          TasksPage(widget.services.tasks,
+              key: ValueKey('task-focus-$_taskFocusRevision'),
+              focusTaskId: _focusedTaskId,
+              refreshToken: _refresh,
+              reminders: widget.services.reminders),
+          MemoriesPage(
+              memory: widget.services.memory,
+              profile: widget.services.profile,
+              refreshToken: _refresh),
+        ],
+      );
 }
 
 class WelcomeQuestionnaire extends StatefulWidget {
@@ -428,8 +605,14 @@ class ChatPage extends StatefulWidget {
   final String draft;
   final ValueChanged<bool>? onBusyChanged;
   final VoidCallback? onChanged;
-  const ChatPage(this.services, {this.closeOnEnd = false, this.name = '',
-    this.conversationId, this.draft = '', this.onBusyChanged, this.onChanged, super.key});
+  const ChatPage(this.services,
+      {this.closeOnEnd = false,
+      this.name = '',
+      this.conversationId,
+      this.draft = '',
+      this.onBusyChanged,
+      this.onChanged,
+      super.key});
   @override
   State<ChatPage> createState() => _ChatPageState();
 }
@@ -459,26 +642,57 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadConversation() async {
-    setState(() { _loading = true; _error = null; _fallback = null; log.clear(); });
+    setState(() {
+      _loading = true;
+      _error = null;
+      _fallback = null;
+      log.clear();
+    });
     try {
       await shutdown();
-      final id = widget.conversationId ?? await widget.services.conversations.createChat();
+      final id = widget.conversationId ??
+          await widget.services.conversations.createChat();
       final messages = await widget.services.conversations.messages(id);
       if (!mounted) return;
       _conversationId = id;
-      setState(() { log.addAll(messages); _loading = false; });
+      setState(() {
+        log.addAll(messages);
+        _loading = false;
+      });
       await _open();
       _scrollToEnd();
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _error = 'Could not load this conversation. Try again.'; });
+      if (mounted)
+        setState(() {
+          _loading = false;
+          _error = 'Could not load this conversation. Try again.';
+        });
     }
+  }
+
+  /// Re-reads the stored messages (check-ins written in the background)
+  /// without touching the session; skipped while a reply is running.
+  Future<void> refresh() async {
+    final id = _conversationId;
+    if (id == null || _sending || _loading) return;
+    try {
+      final messages = await widget.services.conversations.messages(id);
+      if (!mounted || _sending || _loading || id != _conversationId) return;
+      setState(() => log
+        ..clear()
+        ..addAll(messages));
+      _scrollToEnd();
+    } catch (_) {} // the shown log stays; the next refresh retries
   }
 
   Future<void> _onModelLoad() async {
     final current = session;
-    if (current == null || widget.services.modelLoad.value != ModelLoad.loaded ||
-        current.engine is LlamaChannelEngine && current.engineInUse == current.engine.name ||
-        state != SessionState.listening || _sending) return;
+    if (current == null ||
+        widget.services.modelLoad.value != ModelLoad.loaded ||
+        current.engine is LlamaChannelEngine &&
+            current.engineInUse == current.engine.name ||
+        state != SessionState.listening ||
+        _sending) return;
     await shutdown();
     if (mounted) await _open();
   }
@@ -491,34 +705,52 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _startSession() async {
     await _subscription?.cancel();
-    final current = widget.services.newSession(conversationId: _conversationId, onIdleTimeout: _end);
+    final current = widget.services
+        .newSession(conversationId: _conversationId, onIdleTimeout: _end);
     session = current;
     _subscription = current.state.stream.listen((value) {
       if (mounted) setState(() => state = value);
     });
     try {
       await current.start();
-      if (!mounted) { await current.close(); return; }
-      setState(() { state = current.current; _error = null; });
+      if (!mounted) {
+        await current.close();
+        return;
+      }
+      setState(() {
+        state = current.current;
+        _error = null;
+      });
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not start the assistant. Try again.');
+      if (mounted)
+        setState(() => _error = 'Could not start the assistant. Try again.');
     }
   }
 
   Future<void> _send() async {
     final text = input.text.trim();
     if (text.isEmpty || _sending || _loading) return;
-    setState(() { _sending = true; _error = null; _fallback = null; _streaming = null; });
+    setState(() {
+      _sending = true;
+      _error = null;
+      _fallback = null;
+      _streaming = null;
+    });
     widget.onBusyChanged?.call(true);
     try {
       if (state == SessionState.idle) await _open();
       final current = session;
-      if (!mounted || current == null || current.current != SessionState.listening) return;
+      if (!mounted ||
+          current == null ||
+          current.current != SessionState.listening) return;
       input.clear();
       setState(() => log.add(Message('user', text)));
       _scrollToEnd();
       final reply = await current.handle(text, onText: (text) {
-        if (mounted) { setState(() => _streaming = text); _scrollToEnd(); }
+        if (mounted) {
+          setState(() => _streaming = text);
+          _scrollToEnd();
+        }
       });
       if (mounted) {
         // '' = cancelled before any reply: drop the streamed draft, add nothing.
@@ -532,26 +764,39 @@ class _ChatPageState extends State<ChatPage> {
         widget.onChanged?.call();
       }
     } catch (_) {
-      if (mounted) setState(() {
-        _streaming = null;
-        _error = _stopping ? 'Response stopped.' : 'Could not finish that message. Check your tasks before retrying.';
-      });
+      if (mounted)
+        setState(() {
+          _streaming = null;
+          _error = _stopping
+              ? 'Response stopped.'
+              : 'Could not finish that message. Check your tasks before retrying.';
+        });
     } finally {
-      if (mounted) { setState(() { _sending = false; _stopping = false; }); widget.onBusyChanged?.call(false); }
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _stopping = false;
+        });
+        widget.onBusyChanged?.call(false);
+      }
     }
   }
 
   Future<void> _stop() async {
     if (_stopping) return;
     setState(() => _stopping = true);
-    try { await session?.cancel(); }
-    catch (_) { if (mounted) setState(() => _error = 'Could not stop the response.'); }
+    try {
+      await session?.cancel();
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not stop the response.');
+    }
   }
 
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scroll.hasClients) _scroll.animateTo(_scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 160), curve: Curves.easeOut);
+      if (mounted && _scroll.hasClients)
+        _scroll.animateTo(_scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 160), curve: Curves.easeOut);
     });
   }
 
@@ -562,8 +807,9 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _end() async {
     await shutdown();
-    if (widget.closeOnEnd) { await NativeBridge.closeActivity(); }
-    else if (mounted) setState(() => state = SessionState.idle);
+    if (widget.closeOnEnd) {
+      await NativeBridge.closeActivity();
+    } else if (mounted) setState(() => state = SessionState.idle);
   }
 
   @override
@@ -578,24 +824,46 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) => Column(children: [
-    if (widget.closeOnEnd)
-      Row(children: [
-        Padding(padding: const EdgeInsets.all(12), child: Text(state.name)),
-        const Spacer(), IconButton(tooltip: 'Close chat', icon: const Icon(Icons.close), onPressed: _end),
-      ]),
-    if (_error != null)
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Row(children: [
-        Expanded(child: Text(_error!, style: TextStyle(color: AppColors.error))),
-        if (!_sending) TextButton(onPressed: _loadConversation, child: const Text('Retry')),
-      ])),
-    if (_fallback != null)
-      Padding(padding: const EdgeInsets.all(12), child: Text('Answered with built-in rules: $_fallback.',
-        style: Theme.of(context).textTheme.bodySmall)),
-    Expanded(child: _loading ? const Center(child: CircularProgressIndicator()) : ChatView(
-      name: widget.name, messages: log, input: input, scroll: _scroll,
-      busy: _sending, ready: state == SessionState.listening || state == SessionState.idle,
-      streamingText: _streaming, onStop: _stopping ? null : _stop, onSend: _send)),
-  ]);
+        if (widget.closeOnEnd)
+          Row(children: [
+            Padding(padding: const EdgeInsets.all(12), child: Text(state.name)),
+            const Spacer(),
+            IconButton(
+                tooltip: 'Close chat',
+                icon: const Icon(Icons.close),
+                onPressed: _end),
+          ]),
+        if (_error != null)
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                Expanded(
+                    child: Text(_error!,
+                        style: TextStyle(color: AppColors.error))),
+                if (!_sending)
+                  TextButton(
+                      onPressed: _loadConversation, child: const Text('Retry')),
+              ])),
+        if (_fallback != null)
+          Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text('Answered with built-in rules: $_fallback.',
+                  style: Theme.of(context).textTheme.bodySmall)),
+        Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : ChatView(
+                    name: widget.name,
+                    messages: log,
+                    input: input,
+                    scroll: _scroll,
+                    busy: _sending,
+                    ready: state == SessionState.listening ||
+                        state == SessionState.idle,
+                    streamingText: _streaming,
+                    onStop: _stopping ? null : _stop,
+                    onSend: _send)),
+      ]);
 }
 
 /// Step-by-step model install guide, optionally presented as a compact status.
@@ -688,7 +956,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
   /// choice is saved and its download offered.
   Widget _picker(bool loading) => ValueListenableBuilder<bool>(
       valueListenable: widget.services.chatBusy,
-      builder: (context, replying, _) => _pickerBody(loading || replying, replying));
+      builder: (context, replying, _) =>
+          _pickerBody(loading || replying, replying));
 
   Widget _pickerBody(bool busy, bool replying) {
     final sv = widget.services;
@@ -708,7 +977,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
           enabled: !busy && !_switching,
           // The selected row stays tappable until it is the loaded model (e.g. a
           // choice saved before its file was installed).
-          onTap: m.id == sv.activeModel?.id && sv.modelLoad.value == ModelLoad.loaded
+          onTap: m.id == sv.activeModel?.id &&
+                  sv.modelLoad.value == ModelLoad.loaded
               ? null
               : () => _select(m),
           title: Text(m.label),
@@ -719,7 +989,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
         OutlinedButton(
             onPressed: () => NativeBridge.openUrl(selected.url),
             child: Text('Download ${selected.fileName}')),
-      if (replying) const Text('Wait for the current reply to finish to switch models.'),
+      if (replying)
+        const Text('Wait for the current reply to finish to switch models.'),
       const Text('The larger model needs more memory and answers more slowly. '
           'Memory use and speed have not been measured on this phone. '
           'If it fails to load, the app returns to the default model.'),
@@ -731,8 +1002,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     try {
       final ok = await widget.services.selectModel(m);
       if (!mounted) return;
-      final installed = checkModelSpec(
-              p.dirname(widget.services.modelPath), m, granted: true) ==
+      final installed = checkModelSpec(p.dirname(widget.services.modelPath), m,
+              granted: true) ==
           ModelState.ready;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
           content: Text(ok
@@ -775,39 +1046,42 @@ class _ModelSetupCardState extends State<ModelSetupCard>
           builder: (context, _) {
             final load = sv.modelLoad.value;
             return Card(
-              child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Your local model',
-                            style: Theme.of(context).textTheme.headlineSmall),
-                        const SizedBox(height: 12),
-                        Text('Selected: ${want.label}'),
-                        Text('Active: ${load == ModelLoad.loaded ? sv.activeModel?.label ?? 'local model' : 'built-in rules'}'),
-                        if (sv.modelNote.value != null)
-                          Text(sv.modelNote.value!,
-                              style: const TextStyle(color: AppColors.gold)),
-                        const SizedBox(height: 8),
-                        Text(switch (load) {
-                          ModelLoad.loaded =>
-                            'Loaded on this device. No cloud connection required.',
-                          ModelLoad.failed =>
-                            'Loading failed. The assistant is using built-in rules.',
-                          ModelLoad.loading => 'Loading on this device…',
-                          ModelLoad.idle => 'The model file is ready to load.',
-                        }),
-                        if (load == ModelLoad.failed || load == ModelLoad.idle)
-                          Padding(
-                              padding: const EdgeInsets.only(top: 16),
-                              child: FilledButton(
-                                  onPressed: _load,
-                                  child: Text(load == ModelLoad.failed
-                                      ? 'Retry loading'
-                                      : 'Load model'))),
-                        const SizedBox(height: 16),
-                        _picker(load == ModelLoad.loading),
-                      ])));
+                child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Your local model',
+                              style: Theme.of(context).textTheme.headlineSmall),
+                          const SizedBox(height: 12),
+                          Text('Selected: ${want.label}'),
+                          Text(
+                              'Active: ${load == ModelLoad.loaded ? sv.activeModel?.label ?? 'local model' : 'built-in rules'}'),
+                          if (sv.modelNote.value != null)
+                            Text(sv.modelNote.value!,
+                                style: const TextStyle(color: AppColors.gold)),
+                          const SizedBox(height: 8),
+                          Text(switch (load) {
+                            ModelLoad.loaded =>
+                              'Loaded on this device. No cloud connection required.',
+                            ModelLoad.failed =>
+                              'Loading failed. The assistant is using built-in rules.',
+                            ModelLoad.loading => 'Loading on this device…',
+                            ModelLoad.idle =>
+                              'The model file is ready to load.',
+                          }),
+                          if (load == ModelLoad.failed ||
+                              load == ModelLoad.idle)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: FilledButton(
+                                    onPressed: _load,
+                                    child: Text(load == ModelLoad.failed
+                                        ? 'Retry loading'
+                                        : 'Load model'))),
+                          const SizedBox(height: 16),
+                          _picker(load == ModelLoad.loading),
+                        ])));
           });
     Widget step(int n, String text, [Widget? action]) => Padding(
         padding: const EdgeInsets.only(top: 8),
@@ -885,7 +1159,9 @@ class ModelLoadDialog extends StatelessWidget {
             canPop: !busy,
             child: AlertDialog(
               icon: busy
-                  ? const SizedBox(width: 40, height: 40,
+                  ? const SizedBox(
+                      width: 40,
+                      height: 40,
                       child: CircularProgressIndicator(strokeWidth: 3))
                   : v == ModelLoad.loaded
                       ? const Icon(Icons.check_circle,

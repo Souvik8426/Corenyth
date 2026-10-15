@@ -13,13 +13,31 @@ class Task {
   final bool done;
   final DateTime? dueAt;
   final int priority;
+
+  /// v6 follow-through metadata (see db.dart); all optional.
+  final DateTime? completedAt, endsAt, deadlineAt, awaitingAt;
+  final String? subject, outcome;
+
+  /// Open question: [TaskRepo.details] or [TaskRepo.outcomeQuestion].
+  final String? awaiting;
+
+  /// Daily reminder time (minutes after midnight); null = not recurring.
+  final int? dailyMinute;
   Task(Map<String, Object?> r)
       : id = r['id'] as int,
         title = r['title'] as String,
         notes = r['notes'] as String?,
         done = r['status'] == 'done',
         dueAt = _dt(r['due_at']),
-        priority = r['priority'] as int;
+        priority = r['priority'] as int,
+        completedAt = _dt(r['completed_at']),
+        endsAt = _dt(r['ends_at']),
+        deadlineAt = _dt(r['deadline_at']),
+        awaitingAt = _dt(r['awaiting_at']),
+        subject = r['subject'] as String?,
+        outcome = r['outcome'] as String?,
+        awaiting = r['awaiting'] as String?,
+        dailyMinute = r['daily_minute'] as int?;
   @override
   String toString() =>
       '#$id ${done ? "[done] " : ""}$title${dueAt == null ? "" : " (due ${dueAt!.toIso8601String()})"}';
@@ -105,14 +123,26 @@ class TaskRepo {
           values.containsKey('due_at') && values['due_at'] == null) {
         await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
             where: linked, whereArgs: [id]);
-        // Plan over: restoring the task never re-arms it.
-        await tx.update('tasks', {'alert_plan': null}, where: 'id = ?', whereArgs: [id]);
+        // Plan over: restoring the task never re-arms it; a daily recurrence ends.
+        await tx.update('tasks',
+            {'alert_plan': null, 'daily_minute': null, 'recurrence': null},
+            where: 'id = ?', whereArgs: [id]);
         return true;
       }
       final previous = old.first['due_at'] as int?;
       final next = values['due_at'] as int?;
+      if (previous != null && next != null && !values.containsKey('ends_at')) {
+        // A known end time moves with its start.
+        await tx.rawUpdate(
+            'UPDATE tasks SET ends_at = ends_at + ? '
+            'WHERE id = ? AND ends_at IS NOT NULL',
+            [next - previous, id]);
+      }
       final intent = AlertIntentJson.decode(old.first['alert_plan']);
-      if (previous != null && next != null && next != previous && intent != null) {
+      if (previous != null &&
+          next != null &&
+          next != previous &&
+          intent != null) {
         await _replan(tx, id, previous, next,
             (values['title'] ?? old.first['title']) as String, intent);
       } else if (previous != null && next != null && next != previous) {
@@ -120,19 +150,28 @@ class TaskRepo {
         // alerts/follow-ups now past or in quiet hours are dropped.
         final prefs = await _readPrefs(tx), now = DateTime.now();
         final delta = Duration(milliseconds: next - previous);
-        for (final r in (await tx.query('reminders', where: linked, whereArgs: [id]))
-            .map(Reminder.new)) {
+        for (final r
+            in (await tx.query('reminders', where: linked, whereArgs: [id]))
+                .map(Reminder.new)) {
           final at = r.triggerAt.add(delta);
-          final drop = r.kind != 'reminder' && (!at.isAfter(now) || prefs.isQuiet(at));
-          await tx.update('reminders', drop
-              ? {'enabled': 0, 'sync': 'cancel'}
-              : {'trigger_at': at.millisecondsSinceEpoch, 'sync': 'schedule'},
-              where: 'id = ?', whereArgs: [r.id]);
+          final drop =
+              r.kind != 'reminder' && (!at.isAfter(now) || prefs.isQuiet(at));
+          await tx.update(
+              'reminders',
+              drop
+                  ? {'enabled': 0, 'sync': 'cancel'}
+                  : {
+                      'trigger_at': at.millisecondsSinceEpoch,
+                      'sync': 'schedule'
+                    },
+              where: 'id = ?',
+              whereArgs: [r.id]);
         }
       }
       final title = values['title'];
       if (title is String && title != old.first['title']) {
-        await tx.rawUpdate("UPDATE reminders SET title = CASE WHEN kind = 'follow_up' "
+        await tx.rawUpdate(
+            "UPDATE reminders SET title = CASE WHEN kind = 'follow_up' "
             "THEN ? ELSE ? END, sync = 'schedule' WHERE $linked",
             [followUpText(title), title, id]);
       }
@@ -140,6 +179,21 @@ class TaskRepo {
     });
     if (changed) await _synced();
     return changed;
+  }
+
+  /// Reapply stored intent after quiet-hour changes, including skipped alerts.
+  Future<void> refreshPlans() async {
+    await db.transaction((tx) async {
+      for (final t in await tx.query('tasks',
+          where:
+              "status = 'pending' AND due_at IS NOT NULL AND alert_plan IS NOT NULL")) {
+        final intent = AlertIntentJson.decode(t['alert_plan']);
+        if (intent == null) continue;
+        final at = t['due_at'] as int;
+        await _replan(tx, t['id'] as int, at, at, t['title'] as String, intent);
+      }
+    });
+    await _synced();
   }
 
   Future<void> _synced() async {
@@ -166,6 +220,174 @@ class TaskRepo {
     final want = normTitle(title);
     return (await list()).where((t) => normTitle(t.title) == want).toList();
   } // ponytail: scans pending tasks in Dart; add a normalized column if lists get huge.
+
+  /// [Task.awaiting] values: optional meeting end/subject, or how it went.
+  static const details = 'details', outcomeQuestion = 'outcome';
+
+  /// Opens (null: closes) the task's one open question. Stored on the task,
+  /// not the chat, so any chat or a restart can resume it; it never blocks
+  /// the task's reminders.
+  Future<bool> setAwaiting(int id, String? question) async =>
+      await db.update(
+          'tasks',
+          {
+            'awaiting': question,
+            'awaiting_at': question == null ? null : _now()
+          },
+          where: 'id = ?',
+          whereArgs: [id]) >
+      0;
+
+  /// Tasks with an open question (done ones too: outcomes), newest first.
+  Future<List<Task>> awaitingAnswers({String? question}) async =>
+      (await db.query('tasks',
+              where: question == null ? 'awaiting IS NOT NULL' : 'awaiting = ?',
+              whereArgs: question == null ? null : [question],
+              orderBy: 'awaiting_at DESC, id DESC'))
+          .map(Task.new)
+          .toList();
+
+  /// Saves optional meeting details and closes an open details question.
+  /// [endsAt] replaces the follow-up estimate; regenerating the plan also
+  /// removes quiet/past follow-ups or restores an earlier skipped one.
+  /// Throws [ArgumentError] when [endsAt] is not after the task's start.
+  /// False = no such task.
+  Future<bool> setEventDetails(int id,
+      {DateTime? endsAt, String? subject}) async {
+    var moved = false;
+    final found = await db.transaction((tx) async {
+      final old = await tx.query('tasks', where: 'id = ?', whereArgs: [id]);
+      if (old.isEmpty) return false;
+      final due = _dt(old.first['due_at']);
+      if (endsAt != null && due != null && !endsAt.isAfter(due)) {
+        throw ArgumentError('The end time must be after the start.');
+      }
+      final v = {
+        if (endsAt != null) 'ends_at': endsAt.millisecondsSinceEpoch,
+        if (subject != null && subject.trim().isNotEmpty)
+          'subject': subject.trim(),
+        if (old.first['awaiting'] == details) ...{
+          'awaiting': null,
+          'awaiting_at': null
+        },
+      };
+      if (v.isNotEmpty)
+        await tx.update('tasks', v, where: 'id = ?', whereArgs: [id]);
+      final intent = AlertIntentJson.decode(old.first['alert_plan']);
+      if (endsAt == null ||
+          due == null ||
+          intent?.follow == null ||
+          old.first['status'] == 'done') {
+        return true;
+      }
+      final nextIntent =
+          (lead: intent!.lead, follow: endsAt.difference(due).inMinutes);
+      await tx.update(
+          'tasks',
+          {
+            'alert_plan': nextIntent.encode(),
+          },
+          where: 'id = ?',
+          whereArgs: [id]);
+      await _replan(tx, id, due.millisecondsSinceEpoch,
+          due.millisecondsSinceEpoch, old.first['title'] as String, nextIntent);
+      moved = true;
+      return true;
+    });
+    if (moved) await _synced();
+    return found;
+  }
+
+  /// Saves what the user said happened and closes an open outcome question,
+  /// so it is never asked again.
+  Future<bool> setOutcome(int id, String outcome) async =>
+      await db.rawUpdate(
+          "UPDATE tasks SET outcome = ?, awaiting_at = CASE WHEN awaiting = 'outcome' "
+          "THEN NULL ELSE awaiting_at END, awaiting = CASE WHEN awaiting = 'outcome' "
+          'THEN NULL ELSE awaiting END WHERE id = ?',
+          [outcome.trim(), id]) >
+      0;
+
+  /// Makes pending task [id] a daily reminder at [minute] (after midnight)
+  /// until [deadline] inclusive (null = until done). Its alerts are replaced by
+  /// one event alert at the first occurrence after [now], which becomes its
+  /// due time; [deadline] is kept separately ([Task.deadlineAt]) and only
+  /// changes here. Null = task not pending, or no occurrence before [deadline].
+  Future<DateTime?> setDaily(int id, int minute,
+      {DateTime? deadline, required DateTime now}) async {
+    if (minute < 0 || minute >= 1440)
+      throw ArgumentError('Invalid daily time.');
+    final next = nextDaily(minute, now, deadline);
+    if (next == null) return null;
+    final ok = await db.transaction((tx) async {
+      final t = await tx.query('tasks',
+          where: "id = ? AND status = 'pending'", whereArgs: [id]);
+      if (t.isEmpty) return false;
+      await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
+          where: 'task_id = ? AND enabled = 1', whereArgs: [id]);
+      await tx.update(
+          'tasks',
+          {
+            'recurrence': 'daily',
+            'daily_minute': minute,
+            'deadline_at': deadline?.millisecondsSinceEpoch,
+            'due_at': next.millisecondsSinceEpoch,
+            'alert_plan': (lead: const <int>[], follow: null).encode(),
+          },
+          where: 'id = ?',
+          whereArgs: [id]);
+      await tx.insert('reminders', {
+        'task_id': id,
+        'kind': 'reminder',
+        'title': t.first['title'],
+        'trigger_at': next.millisecondsSinceEpoch,
+        'enabled': 1,
+        'sync': 'schedule',
+      });
+      return true;
+    });
+    if (!ok) return null;
+    await _synced();
+    return next;
+  }
+
+  /// Moves a pending daily task to its next occurrence after [now]; missed
+  /// ones are skipped, never replayed. The alert row is reused (same
+  /// notification id). Past its deadline the alerts are cancelled and null is
+  /// returned; the task stays pending for the evening review, due unchanged.
+  Future<DateTime?> advanceDaily(int id, DateTime now) async {
+    final t = await get(id);
+    if (t == null || t.done || t.dailyMinute == null) return null;
+    if (t.dueAt != null &&
+        t.dueAt!.isAfter(now) &&
+        (t.deadlineAt == null || !t.dueAt!.isAfter(t.deadlineAt!)))
+      return t.dueAt;
+    final next = nextDaily(t.dailyMinute!, now, t.deadlineAt);
+    if (next == null) {
+      await db.transaction((tx) async {
+        await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
+            where: 'task_id = ? AND enabled = 1', whereArgs: [id]);
+        await tx.update('tasks',
+            {'alert_plan': null, 'daily_minute': null, 'recurrence': null},
+            where: 'id = ?', whereArgs: [id]);
+      });
+      await _synced();
+      return null;
+    }
+    if (next != t.dueAt)
+      await update(id, {'due_at': next.millisecondsSinceEpoch});
+    return next;
+  }
+}
+
+/// First daily [minute] (after midnight) strictly after [after], or null when
+/// it is later than [until]. Calendar days, so DST keeps the wall-clock time.
+DateTime? nextDaily(int minute, DateTime after, [DateTime? until]) {
+  DateTime on(int day) =>
+      DateTime(after.year, after.month, day, minute ~/ 60, minute % 60);
+  var at = on(after.day);
+  if (!at.isAfter(after)) at = on(after.day + 1);
+  return until != null && at.isAfter(until) ? null : at;
 }
 
 /// Case/punctuation/whitespace-insensitive title key for exact title matching.
@@ -192,35 +414,47 @@ class ReminderRepo {
       db.transaction((tx) async {
         final id = taskId ??
             await tx.insert('tasks', {
-              'title': title, 'created_at': _now(),
+              'title': title,
+              'created_at': _now(),
               'due_at': at.millisecondsSinceEpoch,
             });
         if (taskId != null) {
           await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
               where: 'task_id = ? AND enabled = 1', whereArgs: [id]);
         }
-        await tx.update('tasks', {
-          'alert_plan': intent.encode(),
-          'due_at': at.millisecondsSinceEpoch,
-        }, where: 'id = ?', whereArgs: [id]);
+        await tx.update(
+            'tasks',
+            {
+              'alert_plan': intent.encode(),
+              'due_at': at.millisecondsSinceEpoch,
+            },
+            where: 'id = ?',
+            whereArgs: [id]);
         return [
           for (final p in plan)
             await () async {
               final values = <String, Object?>{
-                'task_id': id, 'kind': p.kind,
+                'task_id': id,
+                'kind': p.kind,
                 'title': p.kind == 'follow_up' ? followUpText(title) : title,
-                'trigger_at': p.at.millisecondsSinceEpoch, 'enabled': 1,
+                'trigger_at': p.at.millisecondsSinceEpoch,
+                'enabled': 1,
                 'sync': 'schedule',
               };
-              return Reminder({...values, 'id': await tx.insert('reminders', values)});
+              return Reminder(
+                  {...values, 'id': await tx.insert('reminders', values)});
             }(),
         ];
       });
 
   /// Enabled alerts of one task, earliest first.
   Future<List<Reminder>> forTask(int taskId) async =>
-      (await db.query('reminders', where: 'task_id = ? AND enabled = 1',
-          whereArgs: [taskId], orderBy: 'trigger_at')).map(Reminder.new).toList();
+      (await db.query('reminders',
+              where: 'task_id = ? AND enabled = 1',
+              whereArgs: [taskId],
+              orderBy: 'trigger_at'))
+          .map(Reminder.new)
+          .toList();
 
   /// Cancels a reminder together with the rest of its task's plan (one write).
   Future<List<int>> cancelGroup(Reminder r) async {
@@ -257,10 +491,14 @@ class ReminderRepo {
           await tx.update('reminders', {'enabled': 1, 'sync': 'schedule'},
               where: 'id = ?', whereArgs: [id]);
         }
-        await tx.update('tasks', {
-          'alert_plan': plan,
-          'due_at': due?.millisecondsSinceEpoch,
-        }, where: 'id = ?', whereArgs: [taskId]);
+        await tx.update(
+            'tasks',
+            {
+              'alert_plan': plan,
+              'due_at': due?.millisecondsSinceEpoch,
+            },
+            where: 'id = ?',
+            whereArgs: [taskId]);
       });
 
   /// Tasks with an enabled follow-up (fired or not): only these get the
@@ -268,7 +506,8 @@ class ReminderRepo {
   Future<Set<int>> followUpTasks() async => {
         for (final r in await db.query('reminders',
             columns: ['task_id'],
-            where: "kind = 'follow_up' AND enabled = 1 AND task_id IS NOT NULL"))
+            where:
+                "kind = 'follow_up' AND enabled = 1 AND task_id IS NOT NULL"))
           r['task_id'] as int
       };
 
@@ -352,7 +591,8 @@ typedef PlannedAlert = ({String kind, DateTime at});
 typedef AlertIntent = ({List<int> lead, int? follow});
 
 extension AlertIntentJson on AlertIntent {
-  String encode() => jsonEncode({'lead': lead, if (follow != null) 'follow': follow});
+  String encode() =>
+      jsonEncode({'lead': lead, if (follow != null) 'follow': follow});
 
   static AlertIntent? decode(Object? raw) {
     if (raw is! String) return null;
@@ -385,12 +625,14 @@ Future<void> _replan(Transaction tx, int id, int previous, int next,
       multiple: intent.lead.isNotEmpty,
       followUp: intent.follow != null,
       now: DateTime.now());
-  String key(String kind, int offsetMin) => kind == 'pre' ? 'pre:$offsetMin' : kind;
+  String key(String kind, int offsetMin) =>
+      kind == 'pre' ? 'pre:$offsetMin' : kind;
   final spare = <String, Reminder>{};
   for (final r in (await tx.query('reminders',
           where: 'task_id = ? AND enabled = 1', whereArgs: [id]))
       .map(Reminder.new)) {
-    final k = key(r.kind, (previous - r.triggerAt.millisecondsSinceEpoch) ~/ 60000);
+    final k =
+        key(r.kind, (previous - r.triggerAt.millisecondsSinceEpoch) ~/ 60000);
     if (spare.containsKey(k)) {
       await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
           where: 'id = ?', whereArgs: [r.id]);
@@ -405,7 +647,10 @@ Future<void> _replan(Transaction tx, int id, int previous, int next,
       await tx.update('reminders', v, where: 'id = ?', whereArgs: [r.id]);
     } else {
       await tx.insert('reminders', {
-        ...v, 'task_id': id, 'kind': p.kind, 'enabled': 1,
+        ...v,
+        'task_id': id,
+        'kind': p.kind,
+        'enabled': 1,
         'title': p.kind == 'follow_up' ? followUpText(title) : title,
       });
     }
@@ -434,64 +679,161 @@ List<PlannedAlert> reminderPlan(DateTime at, ReminderPreferences prefs,
 
 class Message {
   final String role, content;
-  Message(this.role, this.content);
+  final DateTime? createdAt;
+
+  /// Set on proactive check-ins: the task it is about and its kind
+  /// (e.g. 'nudge', 'follow_up', 'daily', 'review').
+  final int? taskId;
+  final String? kind;
+  Message(this.role, this.content, {this.createdAt, this.taskId, this.kind});
+
+  Message._row(Map<String, Object?> m)
+      : this(m['role'] as String, m['content'] as String,
+            createdAt: _dt(m['created_at']),
+            taskId: m['task_id'] as int?,
+            kind: m['kind'] as String?);
 }
 
 class ChatSummary {
   final String id, title;
   final DateTime updatedAt;
-  ChatSummary(this.id, this.title, this.updatedAt);
+  final bool isMain;
+  ChatSummary(this.id, this.title, this.updatedAt, {this.isMain = false});
 }
+
+/// Proactive-delivery key of one alarm occurrence. A reused alert row gets a
+/// new key per trigger time, so each daily occurrence is delivered once.
+String alertKey(Reminder r) =>
+    'alert:${r.id}:${r.triggerAt.millisecondsSinceEpoch}';
+
+/// One evening review per local calendar day.
+String reviewKey(DateTime day) => 'review:${dayKey(day)}';
+
+/// Local calendar day as yyyy-mm-dd.
+String dayKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 class ConversationRepo {
   final Database db;
   ConversationRepo(this.db);
 
+  /// The one chat proactive messages go to. Recreated on the next delivery
+  /// if the user deletes it.
+  static const mainChatId = 'main';
+
   static String newChatId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+  /// Makes sure the main chat row exists (empty title; label it in the UI).
+  Future<void> ensureMainChat() async {
+    final t = _now();
+    await db.insert('chats',
+        {'id': mainChatId, 'title': '', 'created_at': t, 'updated_at': t},
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  /// Adds a proactive check-in to the main chat once per occurrence [key]
+  /// (see [alertKey], [reviewKey]). Key and message commit in one
+  /// transaction, so a retry, restart, or second delivery path (alarm and
+  /// app reconcile) adds nothing. True = newly added. Deleting the chat
+  /// keeps the key, so old occurrences are never replayed.
+  Future<bool> addProactive(String key, String content,
+          {int? taskId, required String kind}) =>
+      db.transaction((tx) async {
+        if ((await tx
+                .query('proactive_events', where: 'key = ?', whereArgs: [key]))
+            .isNotEmpty) {
+          return false;
+        }
+        await tx.insert('proactive_events',
+            {'key': key, 'task_id': taskId, 'created_at': _now()});
+        await _insert(tx, mainChatId, 'assistant', content,
+            taskId: taskId, kind: kind);
+        return true;
+      });
+
+  /// Whether occurrence [key] was already delivered by [addProactive].
+  Future<bool> delivered(String key) async =>
+      (await db.query('proactive_events', where: 'key = ?', whereArgs: [key]))
+          .isNotEmpty;
+
+  /// The user's own messages from every chat sharing a word with [query],
+  /// most shared words first, then newest: context is global, chats only
+  /// organize display. The caller drops its current turn if already saved.
+  Future<List<Message>> relevant(String query, {int limit = 5}) async {
+    final ts = MemoryRepo.terms(query);
+    if (ts.isEmpty) return [];
+    final rows = await db.query('conversations',
+        where:
+            "role = 'user' AND (${ts.map((_) => 'content LIKE ?').join(' OR ')})",
+        whereArgs: [for (final t in ts) '%$t%'],
+        orderBy: 'id DESC',
+        limit:
+            200); // shortcut: scan the newest 200 hits; add FTS when chat search becomes slow.
+    int hits(Map<String, Object?> r) {
+      final c = (r['content'] as String).toLowerCase();
+      return ts.where(c.contains).length;
+    }
+
+    final ranked = [...rows]..sort((a, b) => hits(b) - hits(a) != 0
+        ? hits(b) - hits(a)
+        : (b['id'] as int) - (a['id'] as int));
+    return ranked.take(limit).map(Message._row).toList();
+  }
 
   /// Persists an empty chat row so it shows up in [listChats] before any message.
   Future<String> createChat() async {
     final id = newChatId(), t = _now();
-    await db.insert('chats', {'id': id, 'title': '', 'created_at': t, 'updated_at': t},
+    await db.insert(
+        'chats', {'id': id, 'title': '', 'created_at': t, 'updated_at': t},
         conflictAlgorithm: ConflictAlgorithm.ignore);
     return id;
   }
 
   /// Adds a message and creates/touches its chat row (title = first user message).
   Future<void> add(String session, String role, String content) =>
-      db.transaction((tx) async {
-        final t = _now();
-        await tx.insert('conversations', {
-          'session_id': session,
-          'role': role,
-          'content': content,
-          'created_at': t,
-        });
-        await tx.insert('chats', {'id': session, 'title': '', 'created_at': t, 'updated_at': t},
-            conflictAlgorithm: ConflictAlgorithm.ignore);
-        await tx.rawUpdate(
-            "UPDATE chats SET updated_at = ?, title = CASE WHEN title = '' AND ? = 'user' "
-            'THEN substr(?, 1, 60) ELSE title END WHERE id = ?',
-            [t, role, content, session]);
-      });
+      db.transaction((tx) => _insert(tx, session, role, content));
+
+  static Future<void> _insert(
+      Transaction tx, String session, String role, String content,
+      {int? taskId, String? kind}) async {
+    final t = _now();
+    await tx.insert('conversations', {
+      'session_id': session,
+      'role': role,
+      'content': content,
+      'created_at': t,
+      if (taskId != null) 'task_id': taskId,
+      if (kind != null) 'kind': kind,
+    });
+    await tx.insert(
+        'chats', {'id': session, 'title': '', 'created_at': t, 'updated_at': t},
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+    await tx.rawUpdate(
+        "UPDATE chats SET updated_at = ?, title = CASE WHEN title = '' AND ? = 'user' "
+        'THEN substr(?, 1, 60) ELSE title END WHERE id = ?',
+        [t, role, content, session]);
+  }
 
   /// Newest first.
   Future<List<ChatSummary>> listChats() async =>
       (await db.query('chats', orderBy: 'updated_at DESC, id DESC'))
-          .map((r) => ChatSummary(r['id'] as String, r['title'] as String,
-              _dt(r['updated_at'])!))
+          .map((r) => ChatSummary(
+              r['id'] as String, r['title'] as String, _dt(r['updated_at'])!,
+              isMain: r['id'] == mainChatId))
           .toList();
 
   /// Every message of the chat, oldest first.
   Future<List<Message>> messages(String session) async =>
       (await db.query('conversations',
               where: 'session_id = ?', whereArgs: [session], orderBy: 'id'))
-          .map((m) => Message(m['role'] as String, m['content'] as String))
+          .map(Message._row)
           .toList();
 
   Future<void> deleteChat(String id) => db.transaction((tx) async {
-        await tx.delete('pending_clarifications', where: 'chat_id = ?', whereArgs: [id]);
-        await tx.delete('conversations', where: 'session_id = ?', whereArgs: [id]);
+        await tx.delete('pending_clarifications',
+            where: 'chat_id = ?', whereArgs: [id]);
+        await tx
+            .delete('conversations', where: 'session_id = ?', whereArgs: [id]);
         await tx.delete('chats', where: 'id = ?', whereArgs: [id]);
       });
 
@@ -502,9 +844,7 @@ class ConversationRepo {
         whereArgs: [session],
         orderBy: 'id DESC',
         limit: n);
-    return r.reversed
-        .map((m) => Message(m['role'] as String, m['content'] as String))
-        .toList();
+    return r.reversed.map(Message._row).toList();
   }
 }
 
@@ -724,6 +1064,9 @@ class ReminderPreferences {
   bool get hasQuietHours =>
       quietStart != null && quietEnd != null && quietStart != quietEnd;
 
+  /// Evening review: 30 min before quiet hours start; 21:30 when they're off.
+  int get reviewMinute => ((quietStart ?? 22 * 60) - 30) % 1440;
+
   bool isQuiet(DateTime t) {
     if (!hasQuietHours) return false;
     final m = t.hour * 60 + t.minute, s = quietStart!, e = quietEnd!;
@@ -733,8 +1076,11 @@ class ReminderPreferences {
   /// Throws [ArgumentError] on out-of-range values instead of saving them.
   ReminderPreferences validated() {
     final leads = leadMinutes.toSet().toList()..sort((a, b) => b - a);
-    if (leads.isEmpty || leads.length > 3 || leads.any((m) => m < 1 || m > 1440)) {
-      throw ArgumentError('Early alerts must be 1-3 values between 1 and 1440 minutes.');
+    if (leads.isEmpty ||
+        leads.length > 3 ||
+        leads.any((m) => m < 1 || m > 1440)) {
+      throw ArgumentError(
+          'Early alerts must be 1-3 values between 1 and 1440 minutes.');
     }
     if (followUpMinutes < 5 || followUpMinutes > 1440) {
       throw ArgumentError('Follow-up delay must be 5-1440 minutes.');
@@ -765,7 +1111,7 @@ class ReminderPreferences {
 class ReminderPreferencesRepo {
   final Database db;
 
-  /// Called after a save that cancelled alerts, to sync platform alarms.
+  /// Called after any committed settings change to reconcile platform alarms.
   Future<void> Function()? onRemindersChanged;
   ReminderPreferencesRepo(this.db);
 
@@ -774,42 +1120,50 @@ class ReminderPreferencesRepo {
   /// Turning follow-ups off also cancels every pending follow-up, atomically.
   Future<void> save(ReminderPreferences value) async {
     value = value.validated();
-    final cancelled = await db.transaction((tx) async {
-      await tx.insert('assistant_preferences', {
-        'id': 1,
-        'multiple': value.multiple ? 1 : 0,
-        'follow_up': value.followUp ? 1 : 0,
-        'lead_minutes': value.leadMinutes.join(','),
-        'follow_up_minutes': value.followUpMinutes,
-        'quiet_start': value.quietStart,
-        'quiet_end': value.quietEnd,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.transaction((tx) async {
+      await tx.insert(
+          'assistant_preferences',
+          {
+            'id': 1,
+            'multiple': value.multiple ? 1 : 0,
+            'follow_up': value.followUp ? 1 : 0,
+            'lead_minutes': value.leadMinutes.join(','),
+            'follow_up_minutes': value.followUpMinutes,
+            'quiet_start': value.quietStart,
+            'quiet_end': value.quietEnd,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
       if (value.followUp) return 0;
       // Stored plans drop their follow-up too, so a later move can't bring it back.
       for (final t in await tx.query('tasks',
           columns: ['id', 'alert_plan'], where: 'alert_plan IS NOT NULL')) {
         final i = AlertIntentJson.decode(t['alert_plan']);
         if (i == null || i.follow == null) continue;
-        await tx.update('tasks', {'alert_plan': (lead: i.lead, follow: null).encode()},
+        await tx.update(
+            'tasks', {'alert_plan': (lead: i.lead, follow: null).encode()},
             where: 'id = ?', whereArgs: [t['id']]);
       }
       return tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
           where: "kind = 'follow_up' AND enabled = 1");
     });
-    if (cancelled > 0) {
-      try {
-        await onRemindersChanged?.call();
-      } catch (_) {} // pending cancels are retried at startup
-    }
+    try {
+      await onRemindersChanged?.call();
+    } catch (_) {} // committed settings remain saved; startup retries delivery
   }
 }
 
+/// Never saved = default quiet hours 22:00-07:00. A saved row with null quiet
+/// hours is an explicit "off"; saved choices are preserved across upgrades.
 Future<ReminderPreferences> _readPrefs(DatabaseExecutor db) async {
   final rows = await db.query('assistant_preferences', where: 'id = 1');
-  if (rows.isEmpty) return const ReminderPreferences();
+  if (rows.isEmpty)
+    return const ReminderPreferences(quietStart: 22 * 60, quietEnd: 7 * 60);
   final r = rows.first;
   final leads = (r['lead_minutes'] as String)
-      .split(',').map(int.tryParse).whereType<int>().toList();
+      .split(',')
+      .map(int.tryParse)
+      .whereType<int>()
+      .toList();
   return ReminderPreferences(
       multiple: r['multiple'] == 1,
       followUp: r['follow_up'] == 1,
@@ -837,4 +1191,74 @@ class PendingRepo {
 
   Future<void> clear(String chatId) => db.delete('pending_clarifications',
       where: 'chat_id = ?', whereArgs: [chatId]);
+}
+
+typedef ReviewAgenda = ({
+  List<Task> unresolved,
+  List<Task> finished,
+  List<Task> tomorrow
+});
+
+/// Evening-review participation. Nothing here moves deadlines or creates
+/// alerts: ignored tasks simply stay pending and are raised again.
+class ReviewRepo {
+  final Database db;
+  ReviewRepo(this.db);
+
+  /// Read from current rows at delivery time, so done, deleted or moved tasks
+  /// never appear stale. unresolved: pending and due before tomorrow
+  /// (overdue included), plus pending tasks an earlier review raised that were
+  /// never answered, whatever their date. finished: completed on [day].
+  /// tomorrow: pending, due tomorrow, not already unresolved.
+  Future<ReviewAgenda> agenda(DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
+    final t1 =
+        DateTime(day.year, day.month, day.day + 1).millisecondsSinceEpoch;
+    final t2 =
+        DateTime(day.year, day.month, day.day + 2).millisecondsSinceEpoch;
+    Future<List<Task>> q(String where, List<Object?> args) async =>
+        (await db.rawQuery(
+                'SELECT * FROM tasks t WHERE $where ORDER BY due_at IS NULL, due_at, id',
+                args))
+            .map(Task.new)
+            .toList();
+    final unresolved = await q(
+        "status = 'pending' AND (due_at < ? OR EXISTS (SELECT 1 FROM review_items r "
+        'WHERE r.task_id = t.id AND r.answered = 0))',
+        [t1]);
+    final seen = {for (final t in unresolved) t.id};
+    return (
+      unresolved: unresolved,
+      finished: await q(
+          "status = 'done' AND completed_at >= ? AND completed_at < ?",
+          [start, t1]),
+      tomorrow: [
+        for (final t in await q(
+            "status = 'pending' AND due_at >= ? AND due_at < ?", [t1, t2]))
+          if (!seen.contains(t.id)) t
+      ],
+    );
+  }
+
+  /// Records the tasks the review of [day] asked about (idempotent).
+  Future<void> record(DateTime day, Iterable<int> taskIds) =>
+      db.transaction((tx) async {
+        for (final id in taskIds) {
+          await tx.insert('review_items', {'day': dayKey(day), 'task_id': id},
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+      });
+
+  /// The user answered about [taskId] (in any chat): its open review rows close.
+  Future<void> answered(int taskId) =>
+      db.update('review_items', {'answered': 1},
+          where: 'task_id = ? AND answered = 0', whereArgs: [taskId]);
+
+  /// Pending task id -> reviews that raised it without an answer.
+  Future<Map<int, int>> ignoredCounts() async => {
+        for (final r in await db.rawQuery(
+            'SELECT r.task_id, COUNT(*) AS n FROM review_items r JOIN tasks t ON t.id = r.task_id '
+            "WHERE r.answered = 0 AND t.status = 'pending' GROUP BY r.task_id"))
+          r['task_id'] as int: r['n'] as int
+      };
 }

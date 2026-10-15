@@ -18,6 +18,7 @@ via [llama.cpp](https://github.com/ggml-org/llama.cpp)). The app declares **no I
   is unusable.
 - **Tasks and reminders**: SQLite storage. Reminders are scheduled with AlarmManager and fire even when the app is closed.
 - **Chat history**: saved chats in a sidebar (drawer on phones), streamed replies with Stop.
+- **Follow-through**: shared task context across chats, optional preparation nudges, meeting outcome conversations, daily schedules and one evening review before DND. Proactive messages are saved in the main chat with notification actions. Background messages use factual templates; local Qwen handles interactive context and wording.
 - **Memory**: explicit "remember ..." and clear personal facts are saved per turn, searched with SQLite FTS4.
 - **Home-screen widget**: shows pending tasks and opens a translucent assistant window.
 
@@ -72,10 +73,10 @@ modified time) before the native load. The selection is stored privately under t
 | Path | Purpose |
 |---|---|
 | `lib/assistant/engine.dart` | `LlmEngine` interface, Qwen ChatML prompt (KV-cache friendly layout), `LlamaChannelEngine` |
-| `lib/assistant/tools.dart` | Tool schemas, the generated GBNF grammar, JSON extraction and validation, `ToolExecutor` (the only code that mutates state) |
+| `lib/assistant/tools.dart` | Tool schemas, the generated GBNF grammar, JSON extraction and validation, `ToolExecutor` for validated task actions |
 | `lib/assistant/session.dart` | Session state machine, semantic planning, clarification handling, rules fallback, diagnostics |
 | `lib/assistant/rule_engine.dart` | Deterministic fallback planner (emits the same JSON as the LLM) |
-| `lib/data/` | SQLite schema v5 (tasks, reminder plans, chats, conversations, profile, memories + FTS4) and repositories |
+| `lib/data/` | SQLite schema v6 (tasks, reminder plans, event details, daily schedules, chats, global context, proactive records, profile, memories + FTS4) and repositories |
 | `lib/ui/` | App shell, chat view, chat history sidebar, Tasks and Memories pages, model status |
 | `lib/services/` | Composition root, model catalog/selection, install checks, reminder scheduler, native bridge |
 | `android/app/src/main/cpp/` | CMake build of llama.cpp and the JNI bridge (`llama_jni.cpp`) |
@@ -114,6 +115,9 @@ An earlier build was measured once on a Snapdragon 7+ Gen 2 phone (model load un
 [docs/performance-validation.md](docs/performance-validation.md).
 
 ## Roadmap
+
+See the [expectation report](docs/expectation-gap-report.md), [implementation result](docs/follow-through-implementation.md) and [six-step execution plan](corenyth-follow-through-plan.md) for this follow-through update.
+
 - Speech: sherpa-onnx VAD + streaming ASR into `AssistantSession.handle`, TTS through the `speak` callback,
   runtime microphone permission
 - Wiring `cancel` to voice barge-in (typed chat already streams and has Stop)

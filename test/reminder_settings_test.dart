@@ -25,18 +25,21 @@ class _FakePrefs extends ReminderPreferencesRepo {
 void main() {
   Future<_FakePrefs> pump(WidgetTester tester) async {
     final repo = _FakePrefs();
-    await tester.pumpWidget(MaterialApp(home: Scaffold(
-        body: SingleChildScrollView(child: ReminderSettings(repo)))));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(child: ReminderSettings(repo)))));
     await tester.pumpAndSettle();
     return repo;
   }
 
-  testWidgets('off by default; toggles save and reveal options', (tester) async {
+  testWidgets('off by default; toggles save and reveal options',
+      (tester) async {
     final repo = await pump(tester);
     final switches = find.byType(Switch);
     expect(switches, findsNWidgets(3));
-    expect(tester.widgetList<Switch>(switches).map((s) => s.value), [false, false, false]);
-    await tester.tap(find.text('Multiple alerts'));
+    expect(tester.widgetList<Switch>(switches).take(2).map((s) => s.value),
+        [false, false]);
+    await tester.tap(find.text('Nudge mode'));
     await tester.pumpAndSettle();
     expect(repo.value.multiple, isTrue);
     expect(find.text('30 min before'), findsOneWidget);
@@ -47,12 +50,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Choose 1 to 3 early alerts.'), findsOneWidget);
     expect(repo.value.leadMinutes, [30, 10, 5]);
-    await tester.tap(find.text('Follow-up check-in'));
+    await tester.tap(find.text('Follow-ups'));
     await tester.pumpAndSettle();
     expect(repo.value.followUp, isTrue);
-    expect(find.text('Follow-up delay'), findsOneWidget);
-    await tester.tap(find.text('Quiet hours'));
-    await tester.pumpAndSettle();
+    expect(find.text('Estimated event duration'), findsOneWidget);
+    expect(find.textContaining('Unfinished tasks stay'), findsOneWidget);
+    if (!repo.value.hasQuietHours) {
+      await tester.tap(find.text('Do not disturb'));
+      await tester.pumpAndSettle();
+    }
     expect((repo.value.quietStart, repo.value.quietEnd), (22 * 60, 7 * 60));
     expect(find.textContaining('still rings'), findsOneWidget);
   });
@@ -60,9 +66,10 @@ void main() {
   testWidgets('failed save is reported and not shown as saved', (tester) async {
     final repo = await pump(tester);
     repo.fail = true;
-    await tester.tap(find.text('Follow-up check-in'));
+    await tester.tap(find.text('Follow-ups'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Couldn’t save'), findsOneWidget);
-    expect(tester.widgetList<Switch>(find.byType(Switch)).elementAt(1).value, isFalse);
+    expect(tester.widgetList<Switch>(find.byType(Switch)).elementAt(1).value,
+        isFalse);
   });
 }

@@ -4,6 +4,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../data/repos.dart';
+import 'proactive.dart';
 
 abstract class ReminderScheduler {
   Future<void> schedule(Reminder r);
@@ -18,6 +19,12 @@ abstract class ReminderScheduler {
   /// its time. Accepted by Android != shown to the user.
   Future<DateTime> scheduleTest(Duration delay) =>
       throw UnsupportedError('no test notifications here');
+
+  /// Shows a delivered check-in (see ProactiveDelivery). No-op here.
+  Future<void> notify(ProactiveNotice n) async {}
+
+  /// Arms the one evening-review alarm at [at]; null cancels it. No-op here.
+  Future<void> scheduleReview(DateTime? at) async {}
 
   /// Call on app start: alarms are lost on reinstall/force-clear, and a schedule
   /// or cancel may have failed or been interrupted. Re-arms every upcoming
@@ -74,11 +81,19 @@ abstract class ReminderScheduler {
 /// Task id of the notification the user tapped (deep link to Tasks).
 final notificationTaps = ValueNotifier<int?>(null);
 
-String notificationHeading(Reminder r) => switch (r.kind) {
-      'pre' => 'Coming up',
-      'follow_up' => 'Follow-up',
-      _ => 'Reminder',
-    };
+/// Chat id of the notification the user tapped (check-ins, evening review).
+final chatTaps = ValueNotifier<String?>(null);
+
+/// Native notification target: 'task:<id>' or 'chat:<id>'.
+void openTarget(String? target) {
+  if (target == null) return;
+  if (target.startsWith('task:')) {
+    final id = int.tryParse(target.substring(5));
+    if (id != null) notificationTaps.value = id;
+  } else if (target.startsWith('chat:')) {
+    chatTaps.value = target.substring(5);
+  }
+}
 
 /// For tests / headless use.
 class NoopScheduler extends ReminderScheduler {
@@ -88,7 +103,10 @@ class NoopScheduler extends ReminderScheduler {
   Future<void> cancel(int id) async {}
 }
 
-/// AlarmManager-backed notifications; no model/Dart session needed when they fire.
+/// Exact AlarmManager alarms armed natively (Proactive.kt). When one fires,
+/// ProactiveReceiver runs Dart delivery (current task state, main chat,
+/// notification) even with the app closed; no model is loaded for it. The
+/// plugin only asks permissions, reports their state and sends the test.
 class AlarmReminderScheduler extends ReminderScheduler {
   final _plugin = FlutterLocalNotificationsPlugin();
 
@@ -97,40 +115,46 @@ class AlarmReminderScheduler extends ReminderScheduler {
     await _plugin.initialize(
         const InitializationSettings(
             android: AndroidInitializationSettings('@mipmap/ic_launcher')),
-        onDidReceiveNotificationResponse: (n) => _tap(n.payload));
+        onDidReceiveNotificationResponse: (n) => openTarget(n.payload));
     final launch = await _plugin.getNotificationAppLaunchDetails();
     if (launch?.didNotificationLaunchApp == true) {
-      _tap(launch!.notificationResponse?.payload);
+      openTarget(launch!.notificationResponse?.payload);
     }
+    // Reminders armed by the plugin before this version would fire a second,
+    // unchecked notification; they are re-armed natively at startup.
+    try {
+      for (final p in await _plugin.pendingNotificationRequests()) {
+        if (p.id != _testId) await _plugin.cancel(p.id);
+      }
+      openTarget(await proactiveChannel.invokeMethod<String>('takeLaunch'));
+    } catch (_) {} // best effort; permissions are still requested below
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     await android?.requestNotificationsPermission();
     await android?.requestExactAlarmsPermission();
   }
 
+  /// Throws (PlatformException exact_alarms_not_permitted) when exact alarms
+  /// are not allowed, so the intent stays pending and the issue is shown.
   @override
-  Future<void> schedule(Reminder r) => _plugin.zonedSchedule(
-        r.id,
-        notificationHeading(r),
-        r.title,
-        // from() converts the instant, so UTC as the target zone is correct.
-        tz.TZDateTime.from(r.triggerAt, tz.UTC),
-        const NotificationDetails(
-            android: AndroidNotificationDetails('reminders', 'Reminders',
-                importance: Importance.high, priority: Priority.high)),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        payload: r.taskId == null ? null : 'task:${r.taskId}',
-      );
+  Future<void> schedule(Reminder r) => proactiveChannel.invokeMethod(
+      'arm', {'id': r.id, 'at': r.triggerAt.millisecondsSinceEpoch});
 
-  static void _tap(String? payload) {
-    final id = int.tryParse(payload?.replaceFirst('task:', '') ?? '');
-    if (id != null) notificationTaps.value = id;
-  }
+  /// Also removes the reminder's notification if it is still shown.
+  @override
+  Future<void> cancel(int id) =>
+      proactiveChannel.invokeMethod('disarm', {'id': id});
 
   @override
-  Future<void> cancel(int id) => _plugin.cancel(id);
+  Future<void> notify(ProactiveNotice n) =>
+      proactiveChannel.invokeMethod('notify', n.toMap());
+
+  /// Inexact when exact alarms are not allowed: the review is not time-critical.
+  @override
+  Future<void> scheduleReview(DateTime? at) => at == null
+      ? proactiveChannel.invokeMethod('disarm', {'id': reviewNotificationId})
+      : proactiveChannel
+          .invokeMethod('armReview', {'at': at.millisecondsSinceEpoch});
 
   /// Fixed id far above reminder row ids, so a test never replaces a reminder.
   static const _testId = 2000000000;

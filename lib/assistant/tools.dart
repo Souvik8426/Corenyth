@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/repos.dart';
 import '../services/reminder_scheduler.dart';
+import 'follow_through.dart' show briefingText;
 
 class ToolError implements Exception {
   final String message;
@@ -25,12 +26,25 @@ const toolSchemas = <String, Map<String, String>>{
   'create_task': {'title': 's!', 'notes': 's', 'due': 'd', 'priority': 'i'},
   // Exactly one selector: an id, or the exact current title (`target_title` for
   // edits, so it never mixes with the replacement `title`). See [_selector].
-  'edit_task': {'id': 'i', 'target_title': 's', 'title': 's', 'notes': 's', 'due': 'd', 'priority': 'i'},
+  'edit_task': {
+    'id': 'i',
+    'target_title': 's',
+    'title': 's',
+    'notes': 's',
+    'due': 'd',
+    'priority': 'i'
+  },
   'complete_task': {'id': 'i', 'title': 's'},
   'delete_task': {'id': 'i', 'title': 's'},
   'list_tasks': {'from': 'd', 'to': 'd', 'include_done': 'b'},
   // multiple / follow_up: per-reminder overrides of ReminderPreferences.
-  'create_reminder': {'title': 's!', 'at': 'd!', 'task_id': 'i', 'multiple': 'b', 'follow_up': 'b'},
+  'create_reminder': {
+    'title': 's!',
+    'at': 'd!',
+    'task_id': 'i',
+    'multiple': 'b',
+    'follow_up': 'b'
+  },
   'list_reminders': {},
   'edit_reminder': {'id': 'i', 'target_title': 's', 'title': 's', 'at': 'd'},
   'cancel_reminder': {'id': 'i', 'title': 's'},
@@ -39,7 +53,8 @@ const toolSchemas = <String, Map<String, String>>{
 };
 
 /// GBNF: non-empty JSON string (no raw control chars, standard escapes).
-const jsonStrRule = r'str ::= "\"" ([^"\\\x7F\x00-\x1F] | "\\" ["\\/bfnrt])+ "\""';
+const jsonStrRule =
+    r'str ::= "\"" ([^"\\\x7F\x00-\x1F] | "\\" ["\\/bfnrt])+ "\""';
 
 /// GBNF grammar (llama.cpp) generated from [toolSchemas]: the model can only emit
 /// one JSON object with a known tool, its required args, and correctly typed values
@@ -59,8 +74,14 @@ final String toolGrammar = () {
   final rules = <String>[];
   final alts = <String>[];
   for (final t in toolSchemas.entries.where((e) => e.key != 'respond')) {
-    final req = [for (final e in t.value.entries) if (e.value.endsWith('!')) kv(e.key, e.value)];
-    final opt = [for (final e in t.value.entries) if (!e.value.endsWith('!')) kv(e.key, e.value)];
+    final req = [
+      for (final e in t.value.entries)
+        if (e.value.endsWith('!')) kv(e.key, e.value)
+    ];
+    final opt = [
+      for (final e in t.value.entries)
+        if (!e.value.endsWith('!')) kv(e.key, e.value)
+    ];
     String args;
     if (req.isEmpty && opt.isEmpty) {
       args = '';
@@ -131,7 +152,9 @@ ToolCall parseToolCall(String raw) {
       return ToolCall('respond', _validate('respond', {'text': j['text']}));
     case 'tool':
       final tool = j['tool'], a = j['arguments'];
-      if (tool is! String || tool == 'respond' || !toolSchemas.containsKey(tool)) {
+      if (tool is! String ||
+          tool == 'respond' ||
+          !toolSchemas.containsKey(tool)) {
         throw ToolError('unknown tool: $tool');
       }
       if (a is! Map) throw ToolError('$tool: "arguments" must be an object');
@@ -161,8 +184,12 @@ DateTime? parseLocalDateTime(String s) {
   if (m == null) return null;
   final f = [for (var i = 1; i <= 6; i++) int.parse(m.group(i) ?? '0')];
   final d = DateTime(f[0], f[1], f[2], f[3], f[4], f[5]);
-  if (d.year != f[0] || d.month != f[1] || d.day != f[2] ||
-      d.hour != f[3] || d.minute != f[4] || d.second != f[5]) {
+  if (d.year != f[0] ||
+      d.month != f[1] ||
+      d.day != f[2] ||
+      d.hour != f[3] ||
+      d.minute != f[4] ||
+      d.second != f[5]) {
     return null; // also catches DST-gap hours that don't exist locally
   }
   return d;
@@ -171,7 +198,8 @@ DateTime? parseLocalDateTime(String s) {
 Map<String, Object?> _validate(String tool, Map<String, Object?> args) {
   final schema = toolSchemas[tool]!;
   final extra = args.keys.where((k) => !schema.containsKey(k));
-  if (extra.isNotEmpty) throw ToolError('$tool: unknown argument "${extra.first}"');
+  if (extra.isNotEmpty)
+    throw ToolError('$tool: unknown argument "${extra.first}"');
   final sel = _selector[tool];
   if (sel != null && (args['id'] == null) == (args[sel] == null)) {
     throw ToolError('$tool: needs exactly one of "id" or "$sel"');
@@ -194,7 +222,10 @@ Map<String, Object?> _validate(String tool, Map<String, Object?> args) {
         final n = v is int
             ? v
             : v is String
-                ? int.tryParse(v) ?? (e.key == 'priority' ? _priorityWords[v.toLowerCase()] : null)
+                ? int.tryParse(v) ??
+                    (e.key == 'priority'
+                        ? _priorityWords[v.toLowerCase()]
+                        : null)
                 : null;
         if (n == null) throw ToolError('$tool: "${e.key}" must be an integer');
         if (e.key == 'priority' && (n < 0 || n > 2)) {
@@ -258,7 +289,8 @@ class ToolExecutor {
         final v = <String, Object?>{
           if (a['title'] != null) 'title': a['title'],
           if (a['notes'] != null) 'notes': a['notes'],
-          if (a['due'] != null) 'due_at': (a['due'] as DateTime).millisecondsSinceEpoch,
+          if (a['due'] != null)
+            'due_at': (a['due'] as DateTime).millisecondsSinceEpoch,
           if (a['priority'] != null) 'priority': a['priority'],
         };
         if (v.isEmpty) throw ToolError('edit_task: nothing to change');
@@ -266,7 +298,8 @@ class ToolExecutor {
         if (!await tasks.update(id, v)) throw ToolError('No task #$id.');
         _changed();
         final t = (await tasks.get(id))!;
-        final moved = alerts.isNotEmpty && (a['due'] != null || a['title'] != null);
+        final moved =
+            alerts.isNotEmpty && (a['due'] != null || a['title'] != null);
         return 'Updated task #$id ${t.title}'
             '${a['due'] == null ? "" : ", now due ${_when(t.dueAt!)}"}.'
             '${moved ? " Its reminders moved with it." : ""}'
@@ -275,7 +308,8 @@ class ToolExecutor {
         final id = await _taskId(a);
         final t = await tasks.get(id);
         final alerts = await _alertsFor(id);
-        if (t == null || !await tasks.complete(id)) throw ToolError('No task #$id.');
+        if (t == null || !await tasks.complete(id))
+          throw ToolError('No task #$id.');
         _changed();
         return 'Nice, marked #$id ${t.title} done.'
             '${alerts.isEmpty ? "" : " I cancelled its remaining reminders."}'
@@ -284,7 +318,8 @@ class ToolExecutor {
         final id = await _taskId(a);
         final t = await tasks.get(id);
         final alerts = await _alertsFor(id);
-        if (t == null || !await tasks.delete(id)) throw ToolError('No task #$id.');
+        if (t == null || !await tasks.delete(id))
+          throw ToolError('No task #$id.');
         _changed();
         return 'Deleted task #$id ${t.title}.'
             '${alerts.isEmpty ? "" : " Its reminders are cancelled too."}'
@@ -296,14 +331,22 @@ class ToolExecutor {
             includeDone: a['include_done'] == true);
         return l.isEmpty
             ? 'No tasks.'
-            : l.map((t) => '#${t.id} ${t.done ? "[done] " : ""}${t.title}'
-                '${t.dueAt == null ? "" : " (due ${_when(t.dueAt!)})"}').join('\n');
+            : l
+                .map((t) => '#${t.id} ${t.done ? "[done] " : ""}${t.title}'
+                    '${t.dueAt == null ? "" : " (due ${_when(t.dueAt!)})"}')
+                .join('\n');
       case 'list_reminders':
         final l = await reminders.upcoming();
         return l.isEmpty
             ? 'No upcoming reminders.'
-            : l.map((r) => '#${r.id} ${r.title}: ${_when(r.triggerAt)}'
-                '${switch (r.kind) { 'pre' => ' (early alert)', 'follow_up' => ' (follow-up)', _ => '' }}').join('\n');
+            : l
+                .map((r) => '#${r.id} ${r.title}: ${_when(r.triggerAt)}'
+                    '${switch (r.kind) {
+                      'pre' => ' (early alert)',
+                      'follow_up' => ' (follow-up)',
+                      _ => ''
+                    }}')
+                .join('\n');
       case 'create_reminder':
         return _createReminder(a);
       case 'edit_reminder':
@@ -318,7 +361,9 @@ class ToolExecutor {
           throw ToolError('edit_reminder: nothing to change');
         }
         final task = old.taskId == null ? null : await tasks.get(old.taskId!);
-        if (task != null && old.kind == 'reminder' && task.dueAt == old.triggerAt) {
+        if (task != null &&
+            old.kind == 'reminder' &&
+            task.dueAt == old.triggerAt) {
           return _editPlan(id, task, a['title'] as String?, at);
         }
         final v = <String, Object?>{
@@ -375,24 +420,88 @@ class ToolExecutor {
       case 'search_memory':
         final m = await memory.search(a['query'] as String);
         return m.isEmpty ? 'I have nothing stored about that.' : m.join('\n');
+      // App-built only (not in [toolSchemas], so no model output can name them).
+      case 'briefing':
+        return briefingText(
+            await tasks.list(), await reminders.upcoming(), clock());
+      case 'create_daily':
+        return _createDaily(
+            a['title'] as String, a['minute'] as int, a['until'] as DateTime?);
     }
     throw ToolError('unknown tool ${c.tool}');
+  }
+
+  /// A pending task reminded every day at [minute] (after midnight) until
+  /// [until] (inclusive; null = until done). All or nothing: if its alarm
+  /// can't be set, the task is removed again.
+  Future<String> _createDaily(String title, int minute, DateTime? until) async {
+    final now = clock();
+    for (final t in await tasks.byTitle(title)) {
+      if (t.dailyMinute == minute) {
+        return 'You already have that daily reminder: ${t.title}, every day at '
+            '${_clock(DateTime(2000, 1, 1, minute ~/ 60, minute % 60))}.';
+      }
+    }
+    final t = await tasks.create(title);
+    final DateTime? first;
+    try {
+      first = await tasks.setDaily(t.id, minute, deadline: until, now: now);
+    } catch (_) {
+      await tasks.delete(t.id);
+      rethrow;
+    }
+    if (first == null) {
+      await tasks.delete(t.id);
+      throw ToolError(
+          'That end date leaves no day for a reminder, so I saved nothing.');
+    }
+    final mine = {for (final r in await reminders.forTask(t.id)) r.id};
+    bool stuck;
+    try {
+      stuck = (await scheduler.syncPending(reminders)).any(mine.contains);
+    } catch (_) {
+      stuck = true;
+    }
+    if (stuck) {
+      await tasks.delete(t.id); // durable cancel intent; retried at startup
+      try {
+        await scheduler.syncPending(reminders);
+      } catch (_) {}
+      throw ToolError(
+          "I couldn't schedule that daily reminder, so it was not saved. Check notification and alarm permissions.");
+    }
+    _changed();
+    return "Okay, I'll remind you every day at ${_clock(first)}, starting ${_when(first)}, "
+        '${until == null ? 'until you mark it done' : 'until ${fullDate(until)}'}: $title.';
   }
 
   Future<String> _createReminder(Map<String, Object?> a) async {
     final title = a['title'] as String, at = a['at'] as DateTime;
     final now = clock();
     if (!at.isAfter(now)) throw ToolError('Reminder time is in the past.');
+    // App-built only: this item's own early-alert offsets (the saved
+    // preferences stay as they are).
+    final lead = a['lead'] as List<int>?;
+    if (lead != null &&
+        (lead.isEmpty ||
+            lead.length > 3 ||
+            lead.any((m) => m < 1 || m > 1440))) {
+      throw ToolError(
+          'Early alerts must be 1-3 values between 1 and 1440 minutes before.');
+    }
     final tid = a['task_id'] as int?;
     final linked = tid == null ? null : await tasks.get(tid);
     if (tid != null && linked == null) throw ToolError('No task #$tid.');
     if (linked != null && linked.done) {
-      throw ToolError('Task #$tid is done. Restore it first if you want a reminder for it.');
+      throw ToolError(
+          'Task #$tid is done. Restore it first if you want a reminder for it.');
     }
     // A repeated request must not double the notification.
     final want = normTitle(title);
     for (final r in await reminders.upcoming()) {
-      if (r.kind == 'reminder' && r.triggerAt == at && normTitle(r.title) == want) {
+      if (r.kind == 'reminder' &&
+          r.triggerAt == at &&
+          normTitle(r.title) == want) {
         return 'You already have that reminder: ${r.title}, ${_when(at)}.';
       }
     }
@@ -410,27 +519,32 @@ class ToolExecutor {
         throw ToolError(failure);
       }
       await reminders.synced(r.id);
-      return await _confirm(at, r.title);
+      return '${await _confirm(at, r.title)}'
+          '${lead == null ? '' : ' (Early alerts need a task-linked reminder, so this is a single alert.)'}';
     }
-    final prefs = await prefsRepo.get();
-    final multiple = a['multiple'] as bool? ?? prefs.multiple;
+    final saved0 = await prefsRepo.get();
+    final prefs = lead == null ? saved0 : saved0.copyWith(leadMinutes: lead);
+    final multiple = lead != null || (a['multiple'] as bool? ?? prefs.multiple);
     final followUp = a['follow_up'] as bool? ?? prefs.followUp;
     final plan = reminderPlan(at, prefs,
         multiple: multiple, followUp: followUp, now: now);
     // Linking to a task replaces its plan; keep what's needed to undo it.
     final priorPlan = tid == null ? null : await reminders.planOf(tid);
-    final prior = tid == null ? const <int>[] : [for (final r in await reminders.forTask(tid)) r.id];
-    final saved = await reminders.createPlan(title, at, plan, taskId: tid,
-        intent: (
-          lead: multiple ? prefs.leadMinutes : const <int>[],
-          follow: followUp ? prefs.followUpMinutes : null,
-        ));
+    final prior = tid == null
+        ? const <int>[]
+        : [for (final r in await reminders.forTask(tid)) r.id];
+    final saved =
+        await reminders.createPlan(title, at, plan, taskId: tid, intent: (
+      lead: multiple ? prefs.leadMinutes : const <int>[],
+      follow: followUp ? prefs.followUpMinutes : null,
+    ));
     try {
       for (final r in saved) {
         await scheduler.schedule(r);
         await reminders.synced(r.id);
       }
-      if (prior.isNotEmpty) await scheduler.syncPending(reminders); // old alarms off
+      if (prior.isNotEmpty)
+        await scheduler.syncPending(reminders); // old alarms off
     } catch (_) {
       // All or nothing: a half-armed plan would invite a retry that duplicates.
       if (tid == null) {
@@ -451,8 +565,10 @@ class ToolExecutor {
       if (leftover || unrestored) {
         throw ToolError([
           "I couldn't schedule all alerts for that reminder, so it was not saved.",
-          if (leftover) 'Some of its alerts that were already set may still go off.',
-          if (unrestored) "Some of the task's earlier alarms may not be restored yet.",
+          if (leftover)
+            'Some of its alerts that were already set may still go off.',
+          if (unrestored)
+            "Some of the task's earlier alarms may not be restored yet.",
           "I'll keep retrying when the app syncs or next starts.",
         ].join(' '));
       }
@@ -488,7 +604,8 @@ class ToolExecutor {
 
   /// Moves/renames a task's whole plan through [TaskRepo.update]; rolled back
   /// if its alarms can't be set.
-  Future<String> _editPlan(int id, Task task, String? title, DateTime? at) async {
+  Future<String> _editPlan(
+      int id, Task task, String? title, DateTime? at) async {
     final group = {for (final r in await _alertsFor(task.id)) r.id};
     await tasks.update(task.id, {
       if (title != null) 'title': title,
@@ -497,9 +614,13 @@ class ToolExecutor {
     // Regeneration may add rows, so check every alert of the task.
     Future<bool> stuck() async {
       final failed = await scheduler.syncPending(reminders);
-      final ids = {...group, for (final r in await reminders.forTask(task.id)) r.id};
+      final ids = {
+        ...group,
+        for (final r in await reminders.forTask(task.id)) r.id
+      };
       return failed.any(ids.contains);
     }
+
     if (await stuck()) {
       // Moving back regenerates the whole prior plan from the stored intent.
       await tasks.update(task.id,
@@ -514,6 +635,10 @@ class ToolExecutor {
         '${group.length > 1 ? " Its other alerts moved with it." : ""}';
   }
 
+  /// Applies pending alarm intents after a write made outside [execute]
+  /// (e.g. meeting details moving a follow-up): '' or an honest note.
+  Future<String> sync() => _sync();
+
   /// Applies pending alarm intents after a task write; honest when it can't.
   Future<String> _sync() async {
     try {
@@ -525,8 +650,8 @@ class ToolExecutor {
   Future<List<Reminder>> _alertsFor(int taskId) async =>
       (await reminders.upcoming()).where((r) => r.taskId == taskId).toList();
 
-  static final _shopping =
-      RegExp(r'^(?:buy|get|pick up|grab|purchase)\s+(.+)$', caseSensitive: false);
+  static final _shopping = RegExp(r'^(?:buy|get|pick up|grab|purchase)\s+(.+)$',
+      caseSensitive: false);
 
   /// " You also still need to buy eggs and bread." for other pending
   /// shopping tasks (done ones are excluded by [TaskRepo.list]).
@@ -536,7 +661,9 @@ class ToolExecutor {
       for (final o in await tasks.list())
         if (o.id != t.id) _shopping.firstMatch(o.title.trim())?.group(1)
     ].whereType<String>().toSet();
-    return others.isEmpty ? '' : ' You also still need to buy ${_join(others)}.';
+    return others.isEmpty
+        ? ''
+        : ' You also still need to buy ${_join(others)}.';
   }
 
   void _changed() {
@@ -554,7 +681,8 @@ class ToolExecutor {
         'task', title);
   }
 
-  Future<int> _reminderId(Map<String, Object?> a, [String key = 'title']) async {
+  Future<int> _reminderId(Map<String, Object?> a,
+      [String key = 'title']) async {
     if (a['id'] != null) return a['id'] as int;
     final title = a[key] as String;
     return _one(await reminders.byTitle(title), (r) => r.id,
@@ -580,12 +708,31 @@ class ToolExecutor {
 
   static String _join(Iterable<String> l) {
     final x = l.toList();
-    return x.length < 2 ? x.join() : '${x.take(x.length - 1).join(', ')} and ${x.last}';
+    return x.length < 2
+        ? x.join()
+        : '${x.take(x.length - 1).join(', ')} and ${x.last}';
   }
 }
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
+];
+
+/// "Thu 5 Nov 2026": a date with its year always spelled out (deadlines).
+String fullDate(DateTime d) =>
+    '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]} ${d.year}';
 
 /// "tomorrow (Wed 14 Oct) at 9:00 AM": always the exact date and time, with
 /// today/tomorrow/yesterday spelled out relative to [now].
@@ -595,6 +742,11 @@ String friendlyTime(DateTime d, DateTime now) {
       .inDays;
   final date = '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]}'
       '${d.year == now.year ? '' : ' ${d.year}'}';
-  final rel = switch (days) { 0 => 'today', 1 => 'tomorrow', -1 => 'yesterday', _ => null };
+  final rel = switch (days) {
+    0 => 'today',
+    1 => 'tomorrow',
+    -1 => 'yesterday',
+    _ => null
+  };
   return '${rel == null ? 'on $date' : '$rel ($date)'} at ${ToolExecutor._clock(d)}';
 }
