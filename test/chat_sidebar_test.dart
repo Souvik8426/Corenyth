@@ -60,4 +60,23 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'New chat'));
     expect(created, 0);
   });
+
+  testWidgets('the widget option shows only when wired and calls back',
+      (tester) async {
+    var asked = 0;
+    Widget sidebar(VoidCallback? onAdd) => MaterialApp(
+        home: Scaffold(
+            body: ChatSidebar(
+          chats: const [],
+          onNewChat: () {},
+          onSelect: (_) {},
+          onDelete: (_) {},
+          onAddWidget: onAdd,
+        )));
+    await tester.pumpWidget(sidebar(null));
+    expect(find.text('Add home screen widget'), findsNothing);
+    await tester.pumpWidget(sidebar(() => asked++));
+    await tester.tap(find.text('Add home screen widget'));
+    expect(asked, 1);
+  });
 }

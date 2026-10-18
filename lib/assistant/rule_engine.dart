@@ -637,6 +637,10 @@ class RuleEngine extends LlmEngine {
     'cleaned': 'clean',
     'picking up': 'pick up',
     'picked up': 'pick up',
+    // "done with the meeting with ceo" names "schedule a meet with ceo"
+    'meeting': 'meet',
+    'meetings': 'meet',
+    'met': 'meet',
   };
   static List<String>? doneRef(String raw) {
     if (raw.contains('?')) return null; // "am I done with…?" is a question

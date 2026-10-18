@@ -339,7 +339,7 @@ void main() {
     expect(find.text('I prefer quiet mornings.'), findsOneWidget);
     expect(find.text('The workshop opens on Friday.'), findsOneWidget);
     expect(find.textContaining('Mem0 is not connected'), findsOneWidget);
-    expect(find.textContaining('session closes'), findsOneWidget);
+    expect(find.textContaining('during the conversation'), findsOneWidget);
     expect(find.textContaining('encrypted'), findsNothing);
     expect(memories.searchCalls, 0);
   });

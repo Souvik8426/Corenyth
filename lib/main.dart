@@ -351,6 +351,17 @@ class _AssistantHomeState extends State<AssistantHome>
     }
   }
 
+  /// The launcher's own "Add to home screen" prompt; where it isn't
+  /// available, how to add the widget by hand.
+  Future<void> _addWidget() async {
+    final asked = await NativeBridge.pinWidget();
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(asked
+            ? 'Confirm on the prompt to place the Corenyth widget.'
+            : 'Long-press your home screen, tap Widgets, then pick Corenyth.')));
+  }
+
   Future<void> _delete(ChatSummary chat) async {
     if (_busy || _chatBusy) return;
     final confirmed = await showDialog<bool>(
@@ -438,7 +449,11 @@ class _AssistantHomeState extends State<AssistantHome>
                 dismiss();
                 _switch(id);
               },
-              onDelete: _delete);
+              onDelete: _delete,
+              onAddWidget: () {
+                dismiss();
+                _addWidget();
+              });
         }),
         pages: [
           Column(children: [
@@ -1159,10 +1174,13 @@ class ModelLoadDialog extends StatelessWidget {
             canPop: !busy,
             child: AlertDialog(
               icon: busy
-                  ? const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(strokeWidth: 3))
+                  ? const Center(
+                      heightFactor: 1,
+                      child: SizedBox.square(
+                          dimension: 40,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              semanticsLabel: 'Loading local model')))
                   : v == ModelLoad.loaded
                       ? const Icon(Icons.check_circle,
                           color: AppColors.success, size: 40)

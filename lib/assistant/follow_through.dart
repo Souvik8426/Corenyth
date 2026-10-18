@@ -477,3 +477,42 @@ bool safeReply(String reply, String grounding) {
   };
   return RegExp(r'\d+').allMatches(t).every((m) => known.contains(m.group(0)));
 }
+
+List<String> _plainWords(String s) => s
+    .toLowerCase()
+    .replaceAll('’', "'")
+    .split(RegExp(r"[^a-z0-9']+"))
+    .where((w) => w.isNotEmpty)
+    .toList();
+
+/// A model reply that parrots the user's message back (a known small-model
+/// failure): five or more of the user's words in a row, or a reply made
+/// almost only of the user's own words.
+bool echoes(String reply, String user) {
+  final r = _plainWords(reply), u = _plainWords(user);
+  if (r.isEmpty || u.isEmpty) return false;
+  final grams = <String>{
+    for (var i = 0; i + 5 <= u.length; i++) u.sublist(i, i + 5).join(' ')
+  };
+  for (var i = 0; i + 5 <= r.length; i++) {
+    if (grams.contains(r.sublist(i, i + 5).join(' '))) return true;
+  }
+  final content = r.where((w) => w.length >= 3).toList();
+  if (content.length < 3) return false;
+  final said = u.toSet();
+  return content.where(said.contains).length * 10 >= content.length * 7;
+}
+
+final _complaint = _ci(
+    r"\b(?:that|this|you|u|ur|your (?:reply|answer|response))\s*(?:was|were|is|are|'s|r)\s+"
+    r"(?:so\s+|really\s+|very\s+)?(?:dumb|stupid|useless|unhelpful|nonsense|not helpful)\b|"
+    r"\b(?:just\s+)?(?:repeated|copied|echoed|replied|said)\s+(?:back\s+)?(?:what|whatever)\s+(?:i|me)\s+"
+    r"(?:said|says|typed|wrote|prompted|asked|sent)\b|"
+    r"\b(?:proper|real|actual|better)\s+(?:reply|answer|response)\b|"
+    r"\b(?:answer|reply to|respond to)\s+(?:my\s+)?(?:previous|last|earlier)\s+(?:prompt|message|question|msg)\b|"
+    r"\b(?:you|u)\s+(?:didn'?t|did not|never)\s+(?:answer|reply|respond|get it|understand)\b|"
+    r"\bnot what i (?:asked|said|meant)\b");
+
+/// The user says the assistant's last reply missed ("that was dumb, give a
+/// proper reply"); such a turn re-answers their earlier message.
+bool isComplaint(String text) => _complaint.hasMatch(text);

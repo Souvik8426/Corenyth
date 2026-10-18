@@ -288,6 +288,10 @@ class AssistantSession {
       _leadMin = lead.minutes;
       text = lead.text;
     }
+    if (isComplaint(text) && !_isCommand(text)) {
+      timing['route'] = route.elapsedMilliseconds;
+      return _complaint();
+    }
     final follow = await _followThrough(text);
     timing['route'] = route.elapsedMilliseconds;
     if (follow != null) return follow;
@@ -631,6 +635,73 @@ class AssistantSession {
 
   static String _cut(String s) => s.length > 160 ? s.substring(0, 160) : s;
 
+  /// The last few turns of this chat for a prose reply, this turn excluded.
+  /// Check-ins and replies listing tasks stay out: task facts come from SQLite.
+  Future<List<Message>> _chatHistory() async {
+    try {
+      final l = await conversations.recent(id, n: 7);
+      if (l.isNotEmpty && l.last.role == 'user' && l.last.content.trim() == _said) {
+        l.removeLast();
+      }
+      return [
+        for (final m in l)
+          if (m.role == 'user' ||
+              (m.kind == null && !RegExp(r'#\d').hasMatch(m.content)))
+            Message(m.role, _cut(m.content))
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// "That was dumb, give a proper reply to my previous prompt": the last
+  /// reply missed, so answer the user's earlier message again (no writes).
+  Future<ToolCall> _complaint() async {
+    String? earlier;
+    try {
+      final l = await conversations.recent(id, n: 12);
+      var skipped = false;
+      for (final m in l.reversed) {
+        if (m.role != 'user') continue;
+        if (!skipped && m.content.trim() == _said) {
+          skipped = true;
+          continue;
+        }
+        if (!isComplaint(m.content)) {
+          earlier = m.content.trim();
+          break;
+        }
+      }
+    } catch (_) {}
+    if (earlier == null) {
+      return _say("Sorry, that wasn't helpful. What would you like me to do? "
+          'I can add tasks, set reminders, or go over your plans.');
+    }
+    final last = _lastTask == null ? null : await taskRepo.get(_lastTask!);
+    final t = last != null && named([last], earlier).isNotEmpty ? last : null;
+    final String fallback;
+    if (t == null) {
+      fallback = 'Sorry, that reply missed the point. About "${_cut(earlier)}": '
+          'should I make it a task or a reminder, or did you just want to talk it through?';
+    } else if (t.done) {
+      fallback = 'Sorry, that reply missed the point. #${t.id} ${t.title} is marked done'
+          '${t.outcome == null ? '' : ', and I noted: ${_cut(t.outcome!)}'}. '
+          'Want a reminder to follow up on it later?';
+    } else {
+      fallback = 'Sorry, that reply missed the point. About #${t.id} ${t.title}: '
+          'should I mark it done, or move it to another day?';
+    }
+    return _say(await _converse(
+        earlier,
+        [
+          if (t != null) 'Task: ${_line(t)}',
+          if (t?.outcome != null) 'Outcome noted: ${t!.outcome}',
+        ],
+        fallback,
+        'Your previous reply was unhelpful. Start with a short apology, then respond properly to this message and offer one useful next step.',
+        history: await _chatHistory()));
+  }
+
   /// The user's own earlier messages from any chat sharing words with [text]
   /// (this turn excluded). Optional context: a failed read is just none.
   Future<List<Message>> _related(String text) async {
@@ -647,9 +718,11 @@ class AssistantSession {
 
   /// A short reply from the local model about facts the app read, in the
   /// user's tone. Only prose: anything claiming an action, carrying an
-  /// ungrounded number, or not a plain reply falls back to [fallback].
+  /// ungrounded number, parroting the message, or not a plain reply falls
+  /// back to [fallback]. [history]: recent turns from [_chatHistory].
   Future<String> _converse(
-      String text, List<String> facts, String fallback, String goal) async {
+      String text, List<String> facts, String fallback, String goal,
+      {List<Message> history = const []}) async {
     if (engineInUse != engine.name || engine is RuleEngine) return fallback;
     if (loadEngine != null) {
       try {
@@ -663,6 +736,7 @@ class AssistantSession {
     final p = Prompt(PromptKind.reply, text,
         now: clock(),
         context: context,
+        history: history,
         personalContext: buildPersonalContext(
             await profile.get() ?? const UserProfile(), const []));
     String? raw;
@@ -679,7 +753,9 @@ class AssistantSession {
       final r = c.args['text'];
       if (c.tool == 'respond' &&
           r is String &&
-          safeReply(r, '$context\n$text')) {
+          safeReply(r, '$context\n$text') &&
+          !echoes(r, text) &&
+          !echoes(r, _said)) {
         _diag['reply'] = 'model';
         return r.trim();
       }
@@ -765,7 +841,9 @@ class AssistantSession {
               ? 'When does it end, and what is it about? Then I can check in right after it ends. (Optional.)'
               : 'Optional: when does it end, and what is it about?');
         }
-        final k = keyWords(t.title).where((w) => !isEventTitle(w)).toSet();
+        final k = keyWords(t.title)
+            .where((w) => !isEventTitle(w) && w != 'meet')
+            .toSet();
         for (final o in await taskRepo.list()) {
           if (o.id != t.id &&
               isArrangement(o.title) &&
@@ -778,8 +856,9 @@ class AssistantSession {
         }
         return [reply, ...more].join(' ');
       }
-      if (c.tool != 'complete_task' || before == null || !before.event)
-        return reply;
+      if (c.tool != 'complete_task' ||
+          before == null ||
+          (!before.event && c.args['outcome'] == null)) return reply;
       final t = before.task;
       await review?.answered(t.id);
       final outcome =
@@ -795,7 +874,7 @@ class AssistantSession {
                 sp.outcome,
                 [_line(t)],
                 'Thanks for telling me how it went; I noted it.',
-                'The meeting is over and the user said how it went. Acknowledge that in one sentence; do not ask how it went.');
+                'This is finished and the user said how it went (it may not have happened). Acknowledge that in one sentence; do not ask how it went.');
         return [
           reply,
           if (ack.isNotEmpty) ack,
@@ -804,6 +883,7 @@ class AssistantSession {
               : 'To set a reminder from it, send it on its own, e.g. "${sp.request}".',
         ].join(' ');
       }
+      if (!before.event) return reply;
       if ((await tools.preferences?.get())?.followUp ?? false) {
         await taskRepo.setAwaiting(t.id, TaskRepo.outcomeQuestion);
         return '$reply How did it go? Anything from it you want me to remind you about later?';
@@ -978,7 +1058,16 @@ class AssistantSession {
               'list_tasks', rangeArgs(_rangeIn(text) ?? 'all', clock()));
         }
         final r = s.reply;
-        return r != null && !_groundless(r, open) ? _say(r) : null;
+        final planned =
+            r != null && !_groundless(r, open) && !echoes(r, text) ? r : null;
+        final said = await _converse(
+            text,
+            const [],
+            planned ?? '',
+            'Small talk or a general message. Reply naturally to what the user actually said, in one or two sentences.',
+            history: await _chatHistory());
+        if (said.isNotEmpty && !_groundless(said, open)) return _say(said);
+        return planned == null ? null : _say(planned);
       case 'list':
         if (command()) return null;
         // The day the user said wins over a missing or different model range.

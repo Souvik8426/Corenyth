@@ -137,6 +137,9 @@ void main() {
     await t.pumpWidget(MaterialApp(
         home: Scaffold(body: ModelLoadDialog(load, onRetry: () => retried++))));
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(t.getSize(find.byType(CircularProgressIndicator)), const Size(40, 40));
+    await t.pump(const Duration(milliseconds: 250));
+    expect(t.getSize(find.byType(CircularProgressIndicator)), const Size(40, 40));
     expect(find.text('OK'), findsNothing);
     load.value = ModelLoad.loaded;
     await t.pump();

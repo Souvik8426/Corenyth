@@ -33,6 +33,8 @@ open class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "refreshWidget" -> { WidgetProvider.refreshAll(this); result.success(null) }
+                    "widgetCount" -> result.success(WidgetProvider.count(this))
+                    "pinWidget" -> result.success(WidgetProvider.requestPin(this))
                     "modelsDir" -> {
                         val dir = modelsDir()
                         val granted = storageGranted()

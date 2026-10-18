@@ -2,6 +2,8 @@
 <resources>
     <color name="corenyth_background">#000000</color>
     <color name="corenyth_surface">#121016</color>
+    <color name="corenyth_surface_raised">#1C1922</color>
+    <color name="corenyth_outline">#2B292F</color>
     <color name="corenyth_ivory">#F3ECDD</color>
     <color name="corenyth_muted">#A9A3B5</color>
     <color name="corenyth_lavender">#B9A6E8</color>

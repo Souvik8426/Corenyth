@@ -329,7 +329,8 @@ void main() {
         '{"intent":"create_task","title":"milk","when":"tomorrow"}';
     await s.handle('add milk tomorrow');
     await s.handle('hmm');
-    final r = model.prompts.last.render();
+    final r =
+        model.prompts.lastWhere((p) => p.kind == PromptKind.plan).render();
     expect(
         r,
         allOf(

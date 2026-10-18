@@ -70,7 +70,7 @@ Use a tool only with clear evidence in the request. "remind me what…" / catch-
   /// model can only talk about the facts it is given.
   static const replySystem =
       '''You are a warm, concise offline personal assistant. Reply to the user's message in one or two short sentences, in their preferred tone, as {"type":"respond","text":"..."}.
-Use only the Facts given; never invent people, dates, times, results or tasks. You cannot act: never say you set, saved, scheduled, changed, moved, sent or contacted anything. When it helps, end by offering one or two next options as a question.''';
+Use only the Facts given; never invent people, dates, times, results or tasks. You cannot act: never say you set, saved, scheduled, changed, moved, sent or contacted anything. Never repeat the user's message back; speak as the assistant, to the user. When it helps, end by offering one or two next options as a question.''';
 
   /// [replySystem]'s output: a respond object only, never a tool call.
   static const replyGrammar =
@@ -148,13 +148,24 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
     return b.toString();
   }
 
-  /// No history either: [context] carries the facts the app read from SQLite.
+  /// [context] carries the facts the app read from SQLite; [history] is the
+  /// recent conversation (the caller leaves out task lists), so "my previous
+  /// message" means something. Never a source of task facts.
   String _renderReply(DateTime now) {
     final b = StringBuffer('<|im_start|>system\n$replySystem');
     if (personalContext.isNotEmpty) {
       b.write('\nAbout the user:\n${neutralizeChatMl(personalContext)}');
     }
-    b.write('<|im_end|>\n<|im_start|>user\n');
+    b.write('<|im_end|>\n');
+    for (final m in history) {
+      final assistant = m.role == 'assistant';
+      final c = assistant
+          ? jsonEncode({'type': 'respond', 'text': m.content})
+          : m.content;
+      b.write('<|im_start|>${assistant ? 'assistant' : 'user'}\n'
+          '${neutralizeChatMl(c)}<|im_end|>\n');
+    }
+    b.write('<|im_start|>user\n');
     b.writeln('Now: ${now.toIso8601String().substring(0, 16)}');
     if (context != null && context!.isNotEmpty) {
       b.writeln('Facts:\n${neutralizeChatMl(context!)}');

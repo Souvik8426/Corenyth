@@ -307,7 +307,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
             ],
           ],
           const SizedBox(height: 8),
-          const Text('Memories are extracted when a session closes. Refresh to see newly saved context. Mem0 is not connected in this version.',
+          const Text('Personal facts and explicit “remember” requests are saved on this device during the conversation. Refresh to see newly saved context. Mem0 is not connected in this version.',
               style: TextStyle(color: AppColors.muted, height: 1.6)),
           const SizedBox(height: 24),
         ],

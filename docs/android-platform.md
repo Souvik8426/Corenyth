@@ -14,8 +14,11 @@
 ## Widget
 
 - Layout `assistant_widget.xml`, metadata `assistant_widget_info.xml`.
-- Shows the count of pending tasks and the first three titles, ordered by due date, then id.
-- Tap opens `VoiceSessionActivity`, which shows the chat with the close button.
+- Styled like the app (logo, dark surface, lavender accents): the count of pending tasks ("All clear" when none),
+  the first three titles ordered by due date, then id, and a "Message Corenyth…" pill.
+- Any tap opens `MainActivity` (the full app).
+- "Add home screen widget" in the chat sidebar calls `pinWidget` (`AppWidgetManager.requestPinAppWidget`, Android 8+
+  with a supporting launcher); otherwise a snackbar explains adding it from the home screen's widget picker.
 - `refreshWidget` is called after every task change (`ToolExecutor._changed`).
 - If the database file is missing or unreadable, the widget shows zero tasks.
 

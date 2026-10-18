@@ -18,6 +18,20 @@ class NativeBridge {
     }
   }
 
+  /// Asks the launcher to place the Corenyth widget on the home screen.
+  /// False when it can't (older Android, some launchers, not on Android):
+  /// the user then adds it from the home screen's widget picker.
+  static Future<bool> pinWidget() async {
+    try {
+      return await _ch.invokeMethod<bool>('pinWidget') ?? false;
+    } on MissingPluginException {
+      return false;
+    } catch (e) {
+      debugPrint('widget pin failed: $e');
+      return false;
+    }
+  }
+
   /// Public `Documents/localmodels`. Creates it when storage access is granted, so
   /// calling this on every boot also re-creates it if the user deleted it.
   static Future<({String path, bool granted})> modelsDir() async {

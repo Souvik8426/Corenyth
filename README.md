@@ -20,7 +20,7 @@ via [llama.cpp](https://github.com/ggml-org/llama.cpp)). The app declares **no I
 - **Chat history**: saved chats in a sidebar (drawer on phones), streamed replies with Stop.
 - **Follow-through**: shared task context across chats, optional preparation nudges, meeting outcome conversations, daily schedules and one evening review before DND. Proactive messages are saved in the main chat with notification actions. Background messages use factual templates; local Qwen handles interactive context and wording.
 - **Memory**: explicit "remember ..." and clear personal facts are saved per turn, searched with SQLite FTS4.
-- **Home-screen widget**: shows pending tasks and opens a translucent assistant window.
+- **Home-screen widget**: themed card with pending tasks that opens the app; add it from the chat sidebar.
 
 ## Requirements
 - Flutter (Dart SDK 3.3+)

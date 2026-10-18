@@ -23,12 +23,14 @@ messages. Unsent drafts are kept per chat while the app runs.
 2. `-> processing`. Persist the user turn. Explicit "remember ..." and clear personal facts are saved to memory.
 3. **App-only first** (`_early`): a bare id answering this session's "Which one?", arithmetic (`calculator.dart`),
    or a reply that only gives the time (or "cancel") for this chat's open clarification.
-4. **Follow-through before planning**: daily schedules, optional meeting details/outcomes, event completion,
+4. **Complaints** ("that was dumb, give a proper reply to my previous prompt", `isComplaint`): the user's last
+   non-complaint message is answered again as prose (no writes), grounded in the last task mentioned.
+5. **Follow-through before planning**: daily schedules, optional meeting details/outcomes, event completion,
    progress updates and briefings are checked against current task data. Ambiguous people/tasks ask which one;
    a full name or task number can answer. Timed errands use configured nudges when enabled; ordinary errand
    follow-through belongs to the evening review unless explicitly requested otherwise. Questions about an end
    time do not change it. Contextual discussion can use the local model's prose-only reply prompt.
-5. **Model-first semantic plan** (`_semantic`), whenever the model is installed and loaded:
+6. **Model-first semantic plan** (`_semantic`), whenever the model is installed and loaded:
    - `ensureModel()` again (the model may have been released on memory pressure).
    - One compact `PromptKind.plan` prompt: fixed system text, `Now`, the open clarification (`Pending:`), the
      current pending tasks fresh from SQLite as `#id title` (max 10), related earlier user messages across chats,
@@ -40,17 +42,19 @@ messages. Unsent drafts are kept per chat while the app runs.
      unreadable `when` asks and stores a draft; numbers must be typed by the user; ids resolve against pending tasks
      (exact title, or every ref word in a title; several = "Which one?"); negations/questions never write;
      `list` runs `list_tasks` for `today|tomorrow|overdue|all` (`rangeArgs`; tomorrow excludes undated); `chat`
-     prose is dropped if it mentions tasks, ids, dates or claims an action. A plan of the wrong kind for a clear
+     gets a second `PromptKind.reply` call that sees the last few turns of this chat (task lists and check-ins
+     left out), with the plan's own sentence as fallback. Chat prose is dropped if it mentions tasks, ids, dates,
+     claims an action, or parrots the user's message (`echoes`). A plan of the wrong kind for a clear
      command (list/chat for "remind me…") falls to the rules.
    - `prompt_too_long` -> a reply asking for a shorter message. `llama_cancelled` -> the turn ends with `''`.
      Other failures, an invalid plan, or a plan the app rejects -> rules, with `lastFallbackReason` set.
-6. **Rules fallback** (`_rules`, also the whole path with no model): open clarification, "postpone X by 2h",
+7. **Rules fallback** (`_rules`, also the whole path with no model): open clarification, "postpone X by 2h",
    "done with X", missing/unsupported dates, then `RuleEngine.fastRoute`/`plan`.
-7. If cancelled before the action, nothing runs and `handle` returns `''` (the UI drops the streamed draft).
-8. `ToolExecutor.execute(call)` against SQLite; a `ToolError` becomes the reply. After a new meeting, ask for optional
+8. If cancelled before the action, nothing runs and `handle` returns `''` (the UI drops the streamed draft).
+9. `ToolExecutor.execute(call)` against SQLite; a `ToolError` becomes the reply. After a new meeting, ask for optional
    end/subject. After event completion, cancel its scheduled follow-up and discuss the outcome immediately if enabled.
    Persist the reply, `-> speaking -> listening`.
-9. `lastTiming` (`route`, `context`, `execution`, `total` ms) and `lastDiagnostics` (`model`:
+10. `lastTiming` (`route`, `context`, `execution`, `total` ms) and `lastDiagnostics` (`model`:
    called/invalid/failed/unavailable, `intent`, `tool`, `db`: ok/error/none) hold no message text and are printed
    with `debugPrint` for local debugging only.
 

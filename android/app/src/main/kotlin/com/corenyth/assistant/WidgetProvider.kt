@@ -7,11 +7,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
+import android.os.Build
 import android.widget.RemoteViews
 
 /**
  * Passive widget: reads pending tasks straight from the app's SQLite file
- * (no Flutter engine, no model). Tap -> VoiceSessionActivity.
+ * (no Flutter engine, no model). Any tap opens the app.
  */
 class WidgetProvider : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
@@ -19,6 +20,21 @@ class WidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
+        /** Widgets of this app currently on the home screen. */
+        fun count(ctx: Context): Int = AppWidgetManager.getInstance(ctx)
+            .getAppWidgetIds(ComponentName(ctx, WidgetProvider::class.java)).size
+
+        /**
+         * Asks the launcher to place the widget (Android 8+). False when the
+         * launcher can't; the user then adds it by long-pressing the home screen.
+         */
+        fun requestPin(ctx: Context): Boolean {
+            if (Build.VERSION.SDK_INT < 26) return false
+            val mgr = AppWidgetManager.getInstance(ctx)
+            if (!mgr.isRequestPinAppWidgetSupported) return false
+            return mgr.requestPinAppWidget(ComponentName(ctx, WidgetProvider::class.java), null, null)
+        }
+
         fun refreshAll(ctx: Context) {
             val mgr = AppWidgetManager.getInstance(ctx)
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, WidgetProvider::class.java))
@@ -28,13 +44,17 @@ class WidgetProvider : AppWidgetProvider() {
         private fun render(ctx: Context): RemoteViews {
             val (count, titles) = pendingTasks(ctx)
             val v = RemoteViews(ctx.packageName, R.layout.assistant_widget)
-            v.setTextViewText(R.id.widget_count, "$count pending task${if (count == 1) "" else "s"}")
-            v.setTextViewText(R.id.widget_list, titles.joinToString("\n") { "☐ $it" })
-            val intent = Intent(ctx, VoiceSessionActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            v.setTextViewText(R.id.widget_count, if (count == 0) "All clear" else "$count pending")
+            v.setTextViewText(
+                R.id.widget_list,
+                if (titles.isEmpty()) "Nothing pending. Tap to plan something."
+                else titles.joinToString("\n") { "•  $it" })
+            val intent = Intent(ctx, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             val pi = PendingIntent.getActivity(
                 ctx, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             v.setOnClickPendingIntent(R.id.widget_root, pi)
+            v.setOnClickPendingIntent(R.id.widget_message, pi)
             return v
         }
 

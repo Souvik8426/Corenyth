@@ -11,6 +11,9 @@ class ChatSidebar extends StatelessWidget {
   final String? error;
   final VoidCallback? onRetry;
 
+  /// Shown as "Add home screen widget" at the bottom when set.
+  final VoidCallback? onAddWidget;
+
   const ChatSidebar({
     super.key,
     required this.chats,
@@ -21,6 +24,7 @@ class ChatSidebar extends StatelessWidget {
     this.busy = false,
     this.error,
     this.onRetry,
+    this.onAddWidget,
   });
 
   @override
@@ -142,6 +146,15 @@ class ChatSidebar extends StatelessWidget {
                       },
                     ),
             ),
+            if (onAddWidget != null) ...[
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.widgets_outlined, color: colorScheme.primary),
+                title: const Text('Add home screen widget'),
+                subtitle: const Text('Your tasks at a glance, one tap to chat'),
+                onTap: onAddWidget,
+              ),
+            ],
           ],
         ),
       ),

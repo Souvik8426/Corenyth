@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lavender circle with an up arrow, like the chat send button. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/corenyth_lavender"/>
+        </shape>
+    </item>
+    <item android:drawable="@drawable/widget_arrow"
+        android:top="8dp" android:bottom="8dp" android:left="8dp" android:right="8dp"/>
+</layer-list>

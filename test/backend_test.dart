@@ -287,7 +287,7 @@ void main() {
     e.output = '{"intent":"chat","reply":"Doing great, thanks for asking!"}';
     expect(await s.handle('hey, how is it going'),
         'Doing great, thanks for asking!');
-    expect(e.calls, 4);
+    expect(e.calls, 5, reason: 'chat: the plan, then a reply with recent turns');
     await s.close();
     expect(e.unloads, 0, reason: 'sessions never unload the shared model');
   });
