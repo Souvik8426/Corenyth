@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/> <!-- for the future ASR step -->
 
     <application
-        android:label="Assistant"
+        android:label="Corenyth"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
 

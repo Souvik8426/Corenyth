@@ -1,21 +1,60 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-
+import '../mascot/mascot_emotion.dart';
 import '../data/repos.dart';
 import '../theme/app_colors.dart';
+import 'mascot_emotion_scope.dart';
 import 'assistant_message.dart';
+import 'ghost_mascot.dart';
 
-/// Presentation only: messages and submission stay owned by the real session.
-class ChatView extends StatelessWidget {
+/// One user turn and its reply; proactive assistant messages stand on their own.
+class _Exchange {
+  final List<Message> messages;
+  final int end;
+  _Exchange(this.messages, this.end);
+}
+
+List<_Exchange> _exchanges(List<Message> messages, String? streaming) {
+  final result = <_Exchange>[];
+  for (var i = 0; i < messages.length; i++) {
+    final message = messages[i];
+    if (message.role == 'assistant' &&
+        message.kind == null &&
+        result.isNotEmpty &&
+        result.last.messages.first.role == 'user' &&
+        result.last.messages.length == 1) {
+      final previous = result.removeLast();
+      result.add(_Exchange([...previous.messages, message], i + 1));
+    } else {
+      result.add(_Exchange([message], i + 1));
+    }
+  }
+  if (streaming != null) {
+    final draft = Message('assistant', streaming);
+    if (result.isNotEmpty &&
+        result.last.messages.first.role == 'user' &&
+        result.last.messages.length == 1) {
+      final previous = result.removeLast();
+      result.add(_Exchange([...previous.messages, draft], messages.length));
+    } else {
+      result.add(_Exchange([draft], messages.length));
+    }
+  }
+  return result;
+}
+
+class ChatView extends StatefulWidget {
   final String name;
   final List<Message> messages;
   final TextEditingController input;
+  // Retained for caller compatibility; paging owns history scrolling now.
   final ScrollController scroll;
-  final bool busy;
-  final bool ready;
+  final bool busy, ready;
   final VoidCallback onSend;
   final Widget? status;
   final VoidCallback? onStop;
   final String? streamingText;
+  final ValueChanged<MascotEmotion>? onEmotionChanged;
   const ChatView(
       {required this.name,
       required this.messages,
@@ -27,164 +66,282 @@ class ChatView extends StatelessWidget {
       this.status,
       this.onStop,
       this.streamingText,
+      this.onEmotionChanged,
       super.key});
+  @override
+  State<ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<ChatView> {
+  late List<_Exchange> _turns;
+  late final PageController _pages;
+  int _selected = 0;
+  int _userTurns = 0;
+  bool _paging = false;
+  int? _pendingPage;
+  double? _restingMascotHeight;
+  Size? _mascotViewport;
+  double _overscroll = 0;
+
+  void _read() {
+    _turns = _exchanges(widget.messages, widget.streamingText);
+  }
+
+  int get _users => widget.messages.where((m) => m.role == 'user').length;
+  MascotEmotion get _emotion => const MascotEmotionInterpreter().interpret(
+      widget.messages.take(_turns.isEmpty ? 0 : _turns[_selected].end));
 
   @override
-  Widget build(BuildContext context) => Column(children: [
-        if (status != null) status!,
-        Expanded(
-          child: messages.isEmpty
-              ? _welcome(context)
-              : ListView.builder(
-                  controller: scroll,
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-                  itemCount: messages.length + (streamingText == null ? 0 : 1),
-                  itemBuilder: (context, index) => _MessageBubble(
-                      index == messages.length
-                          ? Message('assistant', streamingText!)
-                          : messages[index])),
-        ),
-        if (busy)
-          Padding(
-              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-              child: Row(children: [
-                const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
-                const SizedBox(width: 10),
+  void initState() {
+    super.initState();
+    _read();
+    _selected = math.max(0, _turns.length - 1);
+    _userTurns = _users;
+    _pages = PageController(initialPage: _selected);
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previousCount = _turns.length;
+    final wasLatest = _selected >= previousCount - 1;
+    _read();
+    final submitted = _users > _userTurns;
+    _userTurns = _users;
+    final next = submitted || wasLatest
+        ? math.max(0, _turns.length - 1)
+        : _selected.clamp(0, math.max(0, _turns.length - 1)).toInt();
+    if (next != _selected) {
+      _selected = next;
+      _pendingPage = next;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_pages.hasClients) _pages.jumpToPage(next);
+        setState(() => _selected = next);
+        widget.onEmotionChanged?.call(_emotion);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _pendingPage = null;
+        });
+      });
+    }
+  }
+
+  void _view(int index) {
+    if (_pendingPage != null && index != _pendingPage) return;
+    setState(() {
+      _selected = index;
+      _overscroll = 0;
+    });
+    widget.onEmotionChanged?.call(_emotion);
+  }
+
+  Future<void> _go(int index) async {
+    if (_paging || !_pages.hasClients || index < 0 || index >= _turns.length)
+      return;
+    _paging = true;
+    try {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _pages.jumpToPage(index);
+      } else {
+        await _pages.animateToPage(index,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOutCubic);
+      }
+    } finally {
+      _paging = false;
+    }
+  }
+
+  bool _edge(ScrollNotification notification, int index) {
+    if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification) _overscroll = 0;
+    if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      _overscroll += notification.overscroll;
+      if (_overscroll.abs() > 44) {
+        _go(index + (_overscroll > 0 ? 1 : -1));
+        _overscroll = 0;
+      }
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MascotEmotionScope(
+        emotion: _emotion,
+        child: Column(children: [
+          if (widget.status != null) widget.status!,
+          Expanded(child: LayoutBuilder(builder: (context, bounds) {
+            final view = View.of(context);
+            final keyboardHeight =
+                view.viewInsets.bottom / view.devicePixelRatio;
+            final viewport = view.physicalSize / view.devicePixelRatio;
+            // Remember the resting size: Scaffold resizes for the keyboard and
+            // the navigation dock may disappear, neither should resize the ghost.
+            if (keyboardHeight == 0 ||
+                _mascotViewport != viewport ||
+                _restingMascotHeight == null) {
+              final restingHeight = bounds.maxHeight + keyboardHeight;
+              _restingMascotHeight = math.min(
+                  restingHeight * (restingHeight < 440 ? 0.12 : 0.22),
+                  restingHeight < 440 ? 64.0 : 160.0);
+              _mascotViewport = viewport;
+            }
+            // Only yield space on exceptionally short windows to keep input usable.
+            final mascotHeight = math.min(
+                _restingMascotHeight!, math.max(0.0, bounds.maxHeight - 160));
+            return Column(children: [
+              SizedBox(
+                  key: const ValueKey('mascot-stage'),
+                  height: mascotHeight,
+                  child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: LayoutBuilder(
+                          builder: (context, space) => Center(
+                                  child: GhostMascot(
+                                key: const ValueKey('conversation-mascot'),
+                                size: math.max(
+                                    0,
+                                    math.min(space.maxWidth,
+                                        space.maxHeight / 1.35)),
+                              ))))),
+              Expanded(
+                  child: Column(children: [
+                if (_turns.isNotEmpty)
+                  SizedBox(
+                      height: 32,
+                      child: Row(children: [
+                        IconButton(
+                            tooltip: 'Previous exchange',
+                            padding: EdgeInsets.zero,
+                            onPressed:
+                                _selected > 0 ? () => _go(_selected - 1) : null,
+                            icon: const Icon(Icons.keyboard_arrow_up_rounded,
+                                size: 20)),
+                        Expanded(
+                            child: Text(
+                                'Exchange ${_selected + 1} of ${_turns.length}',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.labelSmall)),
+                        IconButton(
+                            tooltip: 'Next exchange',
+                            padding: EdgeInsets.zero,
+                            onPressed: _selected < _turns.length - 1
+                                ? () => _go(_selected + 1)
+                                : null,
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                                size: 20)),
+                      ])),
                 Expanded(
-                  child: Text(
-                      streamingText == null
-                          ? 'Corenyth is thinking…'
-                          : 'Corenyth is replying…',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ),
-                if (onStop != null)
-                  TextButton.icon(
-                      onPressed: onStop,
-                      icon: const Icon(Icons.stop_rounded),
-                      label: const Text('Stop')),
+                    child: _turns.isEmpty
+                        ? _welcome(context)
+                        : PageView.builder(
+                            key: const ValueKey('exchange-pager'),
+                            controller: _pages,
+                            scrollDirection: Axis.vertical,
+                            onPageChanged: _view,
+                            itemCount: _turns.length,
+                            itemBuilder: (context, index) =>
+                                NotificationListener<ScrollNotification>(
+                              onNotification: (notification) =>
+                                  _edge(notification, index),
+                              child: SingleChildScrollView(
+                                key: PageStorageKey('exchange-$index'),
+                                physics: const ClampingScrollPhysics(
+                                    parent: AlwaysScrollableScrollPhysics()),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 4),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      for (final message
+                                          in _turns[index].messages)
+                                        _MessageBubble(message)
+                                    ]),
+                              ),
+                            ),
+                          )),
+                if (widget.busy)
+                  Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(children: [
+                        Expanded(
+                            child: Text(
+                                widget.streamingText == null
+                                    ? 'Corenyth is thinking…'
+                                    : 'Corenyth is replying…',
+                                style: Theme.of(context).textTheme.bodySmall)),
+                        if (widget.onStop != null)
+                          TextButton(
+                              onPressed: widget.onStop,
+                              child: const Text('Stop')),
+                      ])),
+                _composer(context),
               ])),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: input,
-              builder: (context, value, _) => TextField(
-                    key: const ValueKey('chat-composer'),
-                    controller: input,
-                    minLines: 1,
-                    maxLines: 5,
-                    textCapitalization: TextCapitalization.sentences,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) {
-                      if (ready && !busy) onSend();
-                    },
-                    decoration: InputDecoration(
+            ]);
+          })),
+        ]),
+      );
+
+  Widget _composer(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: widget.input,
+            builder: (context, value, _) => TextField(
+                  key: const ValueKey('chat-composer'),
+                  controller: widget.input,
+                  minLines: 1,
+                  maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) {
+                    if (widget.ready && !widget.busy) widget.onSend();
+                  },
+                  decoration: InputDecoration(
                       hintText: 'Message Corenyth…',
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 16),
-                      suffixIcon: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: IconButton.filled(
-                            tooltip: 'Send message',
-                            onPressed:
-                                ready && !busy && value.text.trim().isNotEmpty
-                                    ? onSend
-                                    : null,
-                            style: IconButton.styleFrom(
-                                backgroundColor: AppColors.lavender,
-                                foregroundColor: AppColors.surface,
-                                minimumSize: const Size(48, 48)),
-                            icon: const Icon(Icons.arrow_upward_rounded,
-                                size: 22),
-                          )),
-                    ),
-                  )),
-        ),
-      ]);
+                          horizontal: 16, vertical: 12),
+                      suffixIcon: IconButton.filled(
+                          tooltip: 'Send message',
+                          onPressed: widget.ready &&
+                                  !widget.busy &&
+                                  value.text.trim().isNotEmpty
+                              ? widget.onSend
+                              : null,
+                          style: IconButton.styleFrom(
+                              backgroundColor: AppColors.lavender,
+                              foregroundColor: AppColors.surface),
+                          icon: const Icon(Icons.arrow_upward_rounded,
+                              size: 22))),
+                )),
+      );
 
-  Widget _welcome(BuildContext context) => LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-            controller: scroll,
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                  minHeight:
-                      (constraints.maxHeight - 40).clamp(0, double.infinity)),
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                        child: Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: AppColors.coreGradient,
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: AppColors.lavender
-                                          .withValues(alpha: 0.16),
-                                      blurRadius: 36,
-                                      spreadRadius: 4)
-                                ]),
-                            child: const Icon(Icons.auto_awesome_rounded,
-                                color: AppColors.surface, size: 28))),
-                    const SizedBox(height: 24),
-                    Text(
-                        name.trim().isEmpty
-                            ? 'A little space to think.'
-                            : 'Hello, ${name.trim()}.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium),
-                    const SizedBox(height: 8),
-                    Text('Clear your mind. Make room for what matters.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: AppColors.muted)),
-                    const SizedBox(height: 32),
-                    Align(
-                        alignment: Alignment.center,
-                        child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 400),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  _prompt(
-                                      context,
-                                      Icons.check_circle_outline_rounded,
-                                      'What tasks do I have?'),
-                                  const SizedBox(height: 12),
-                                  _prompt(
-                                      context,
-                                      Icons.lightbulb_outline_rounded,
-                                      'Help me plan my day'),
-                                ]))),
-                  ]),
-            ),
-          ));
-
-  Widget _prompt(BuildContext context, IconData icon, String text) =>
-      OutlinedButton(
-        onPressed: ready && !busy
-            ? () {
-                input.text = text;
-                onSend();
-              }
-            : null,
-        style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            minimumSize: const Size(48, 52)),
-        child: Row(children: [
-          Icon(icon, size: 20, color: AppColors.lavender),
-          const SizedBox(width: 12),
-          Expanded(child: Text(text)),
-          const SizedBox(width: 8),
-          const Icon(Icons.north_east_rounded, size: 16, color: AppColors.muted)
+  Widget _welcome(BuildContext context) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(children: [
+          Text(
+              widget.name.trim().isEmpty
+                  ? 'A little space to think.'
+                  : 'Hello, ${widget.name.trim()}.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final prompt in ['What tasks do I have?', 'Help me plan my day'])
+            TextButton(
+                onPressed: widget.ready && !widget.busy
+                    ? () {
+                        widget.input.text = prompt;
+                        widget.onSend();
+                      }
+                    : null,
+                child: Text(prompt)),
         ]),
       );
 }
@@ -215,8 +372,8 @@ class _MessageBubble extends StatelessWidget {
               Padding(
                   padding: const EdgeInsets.only(left: 4, bottom: 8),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.auto_awesome_rounded,
-                        size: 14, color: AppColors.gold),
+                    Image.asset('assets/branding/corenyth-logo-dark.png',
+                        width: 22, height: 26, excludeFromSemantics: true),
                     const SizedBox(width: 8),
                     Text('CORENYTH',
                         style: Theme.of(context)

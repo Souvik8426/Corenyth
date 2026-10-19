@@ -1,3 +1,5 @@
+import 'mascot/mascot_emotion.dart';
+import 'ui/mascot_emotion_scope.dart';
 import 'ui/model_loading_indicator.dart';
 import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
@@ -180,6 +182,7 @@ class AssistantHome extends StatefulWidget {
 
 class _AssistantHomeState extends State<AssistantHome>
     with WidgetsBindingObserver {
+  MascotEmotion _mascotEmotion = MascotEmotion.calm;
   List<ChatSummary> _chats = [];
   String? _selected;
   String _name = '';
@@ -199,6 +202,7 @@ class _AssistantHomeState extends State<AssistantHome>
   void _setSelected(String? id) {
     if (id == _selected) return;
     _selected = id;
+    _mascotEmotion = MascotEmotion.calm;
     _chat = GlobalKey<_ChatPageState>();
   }
 
@@ -419,7 +423,9 @@ class _AssistantHomeState extends State<AssistantHome>
       );
 
   @override
-  Widget build(BuildContext context) => AppShell(
+  Widget build(BuildContext context) => MascotEmotionScope(
+      emotion: _mascotEmotion,
+      child: AppShell(
         onProfile: _profile,
         onSettings: _settings,
         selectedDestination: _destination,
@@ -481,7 +487,11 @@ class _AssistantHomeState extends State<AssistantHome>
                             conversationId: _selected,
                             name: _name,
                             draft: _drafts[_selected] ?? '',
-                            onBusyChanged: (busy) {
+                            onEmotionChanged: (emotion) {
+                            if (mounted && emotion != _mascotEmotion) {
+                              setState(() => _mascotEmotion = emotion);
+                            }
+                          }, onBusyChanged: (busy) {
                             widget.services.chatBusy.value = busy;
                             if (mounted) setState(() => _chatBusy = busy);
                           }, onChanged: () {
@@ -501,7 +511,7 @@ class _AssistantHomeState extends State<AssistantHome>
               profile: widget.services.profile,
               refreshToken: _refresh),
         ],
-      );
+      ));
 }
 
 class WelcomeQuestionnaire extends StatefulWidget {
@@ -619,6 +629,7 @@ class ChatPage extends StatefulWidget {
   final String name;
   final String? conversationId;
   final String draft;
+  final ValueChanged<MascotEmotion>? onEmotionChanged;
   final ValueChanged<bool>? onBusyChanged;
   final VoidCallback? onChanged;
   const ChatPage(this.services,
@@ -627,6 +638,7 @@ class ChatPage extends StatefulWidget {
       this.conversationId,
       this.draft = '',
       this.onBusyChanged,
+      this.onEmotionChanged,
       this.onChanged,
       super.key});
   @override
@@ -675,6 +687,7 @@ class _ChatPageState extends State<ChatPage> {
         log.addAll(messages);
         _loading = false;
       });
+      _publishEmotion();
       await _open();
       _scrollToEnd();
     } catch (_) {
@@ -697,8 +710,14 @@ class _ChatPageState extends State<ChatPage> {
       setState(() => log
         ..clear()
         ..addAll(messages));
+      _publishEmotion();
       _scrollToEnd();
     } catch (_) {} // the shown log stays; the next refresh retries
+  }
+
+  void _publishEmotion() {
+    widget.onEmotionChanged
+        ?.call(const MascotEmotionInterpreter().interpret(log));
   }
 
   Future<void> _onModelLoad() async {
@@ -761,6 +780,7 @@ class _ChatPageState extends State<ChatPage> {
           current.current != SessionState.listening) return;
       input.clear();
       setState(() => log.add(Message('user', text)));
+      _publishEmotion();
       _scrollToEnd();
       final reply = await current.handle(text, onText: (text) {
         if (mounted) {
@@ -872,6 +892,7 @@ class _ChatPageState extends State<ChatPage> {
                 : ChatView(
                     name: widget.name,
                     messages: log,
+                    onEmotionChanged: widget.onEmotionChanged,
                     input: input,
                     scroll: _scroll,
                     busy: _sending,

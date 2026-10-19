@@ -33,6 +33,7 @@ class _AppShellState extends State<AppShell> {
       _selected = widget.selectedDestination!;
     }
   }
+
   static const _labels = ['Chat', 'Tasks', 'Memories'];
   static const _icons = [
     Icons.chat_bubble_outline_rounded,
@@ -60,13 +61,14 @@ class _AppShellState extends State<AppShell> {
           padding: EdgeInsets.fromLTRB(wide ? 24 : 16, 8, wide ? 24 : 16, 12),
           child: Row(children: [
             if (!wide && widget.sidebar != null)
-              Builder(builder: (context) => IconButton(
-                tooltip: 'Chat history',
-                onPressed: () => Scaffold.of(context).openDrawer(),
-                icon: const Icon(Icons.menu_rounded),
-              )),
-            Image.asset('branding/corenyth-logo.png',
-                width: 36, height: 36, excludeFromSemantics: true),
+              Builder(
+                  builder: (context) => IconButton(
+                        tooltip: 'Chat history',
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        icon: const Icon(Icons.menu_rounded),
+                      )),
+            Image.asset('assets/branding/corenyth-logo-dark.png',
+                width: 36, height: 44, excludeFromSemantics: true),
             const SizedBox(width: 10),
             Expanded(
                 child: Column(

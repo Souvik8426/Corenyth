@@ -113,8 +113,9 @@ void main() {
     await t.pumpWidget(MaterialApp(
         theme: AppTheme.dark,
         builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: const TextScaler.linear(1.8)),
+            data: MediaQuery.of(context).copyWith(
+                disableAnimations: true,
+                textScaler: const TextScaler.linear(1.8)),
             child: child!),
         home: Scaffold(
             body: ChatView(
