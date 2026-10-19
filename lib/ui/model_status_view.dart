@@ -7,12 +7,16 @@ class ModelStatusView extends StatelessWidget {
   final ModelState? modelState;
   final ModelLoad load;
   final VoidCallback onTap;
+
   /// Catalog label the user chose (may differ from [activeLabel] after fallback).
   final String? selectedLabel;
+
   /// Catalog label actually loaded, or null when on rules.
   final String? activeLabel;
+
   /// True when active model is not the selected one (or rules after failed load).
   final bool fellBack;
+  final String? lastAnswerSource;
 
   const ModelStatusView(
       {required this.modelState,
@@ -21,15 +25,15 @@ class ModelStatusView extends StatelessWidget {
       this.selectedLabel,
       this.activeLabel,
       this.fellBack = false,
+      this.lastAnswerSource,
       super.key});
 
   @override
   Widget build(BuildContext context) {
     final label = switch (load) {
       ModelLoad.loading => 'Loading local model…',
-      ModelLoad.loaded => activeLabel != null
-          ? 'Using $activeLabel'
-          : 'Local model loaded',
+      ModelLoad.loaded =>
+        activeLabel != null ? 'Loaded · $activeLabel' : 'Local model loaded',
       ModelLoad.failed => fellBack && activeLabel != null
           ? 'Using $activeLabel · selected failed'
           : 'Model unavailable · Built-in rules',
@@ -68,6 +72,9 @@ class ModelStatusView extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                   Text(label, style: Theme.of(context).textTheme.bodySmall),
+                  if (lastAnswerSource != null)
+                    Text('Last answer: $lastAnswerSource',
+                        style: Theme.of(context).textTheme.labelSmall),
                   if (detail != null)
                     Text(detail,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(

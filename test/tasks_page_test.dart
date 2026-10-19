@@ -51,7 +51,7 @@ class _TaskRepo extends TaskRepo {
 
   @override
   Future<Task> create(String title,
-      {String? notes, DateTime? due, int priority = 1}) async {
+      {String? notes, DateTime? due, int priority = 1, String? opId}) async {
     await _beforeWrite();
     final id = rows.isEmpty ? 1 : rows.keys.reduce((a, b) => a > b ? a : b) + 1;
     final row = _row(id, title, notes: notes, due: due, priority: priority);

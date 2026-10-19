@@ -1,0 +1,21 @@
+{
+  "path": "/Users/kawaiii_neko/Documents/GitHub/Corenyth/build/app/outputs/flutter-apk/app-release.apk",
+  "sha256": "c12f336e0f155b7d28dcfa9d4d8f12b6e072d3266d57da023a180cc1cd146fd2",
+  "bytes": 72051776,
+  "revision": "c1d1ada-dirty-20b1a29933ed",
+  "revision_found_in_arm64_binary": true,
+  "internet_permission": false,
+  "permissions": [
+    "package: com.corenyth.assistant",
+    "uses-permission: name='android.permission.MANAGE_EXTERNAL_STORAGE'",
+    "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE' maxSdkVersion='29'",
+    "uses-permission: name='android.permission.POST_NOTIFICATIONS'",
+    "uses-permission: name='android.permission.SCHEDULE_EXACT_ALARM'",
+    "uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'",
+    "uses-permission: name='android.permission.RECORD_AUDIO'",
+    "uses-permission: name='android.permission.VIBRATE'",
+    "permission: com.corenyth.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    "uses-permission: name='com.corenyth.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'"
+  ],
+  "installed_on_phone": false
+}

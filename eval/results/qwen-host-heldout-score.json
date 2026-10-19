@@ -1,0 +1,339 @@
+{
+  "mode": "Qwen3-0.6B-Q4_0 host CPU (not Android latency)",
+  "split": "heldout",
+  "counts": {
+    "fail": 18,
+    "pass": 12,
+    "incomplete": 4
+  },
+  "categories": {
+    "ambiguity": {
+      "pass": 4
+    },
+    "chat": {
+      "fail": 1,
+      "pass": 3
+    },
+    "lists": {
+      "fail": 4
+    },
+    "memory": {
+      "fail": 4
+    },
+    "negation": {
+      "pass": 2,
+      "incomplete": 1,
+      "fail": 1
+    },
+    "progress": {
+      "incomplete": 3,
+      "fail": 1
+    },
+    "scheduling": {
+      "fail": 3,
+      "pass": 3
+    },
+    "updates": {
+      "fail": 4
+    }
+  },
+  "cases": [
+    {
+      "id": "H-S01",
+      "category": "scheduling",
+      "status": "fail",
+      "errors": [
+        "missing/ambiguous create_reminder"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-S02",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-S03",
+      "category": "scheduling",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "missing/ambiguous create_reminder"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-S04",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-S05",
+      "category": "scheduling",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "missing/ambiguous create_daily"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-S06",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-U01",
+      "category": "updates",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "task not complete"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-U02",
+      "category": "updates",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "task unchanged",
+        "wrong moved time"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-U03",
+      "category": "updates",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "task not deleted"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-U04",
+      "category": "updates",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "reminder not cancelled"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-L01",
+      "category": "lists",
+      "status": "fail",
+      "errors": [
+        "missing answer t1"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-L02",
+      "category": "lists",
+      "status": "fail",
+      "errors": [
+        "missing answer t1",
+        "missing answer t3"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-L03",
+      "category": "lists",
+      "status": "fail",
+      "errors": [
+        "missing answer t1"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-L04",
+      "category": "lists",
+      "status": "fail",
+      "errors": [
+        "missing answer r1",
+        "missing answer r2"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-P01",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "H-P02",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "H-P03",
+      "category": "progress",
+      "status": "fail",
+      "errors": [
+        "missing clarification question",
+        "wrong clarification field"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-P04",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "H-Y01",
+      "category": "memory",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "memory not saved"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-Y02",
+      "category": "memory",
+      "status": "fail",
+      "errors": [
+        "missing answer m1"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-Y03",
+      "category": "memory",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "memory not saved"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-Y04",
+      "category": "memory",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "memory not saved",
+        "old memory not superseded"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-A01",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-A02",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-A03",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-A04",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-N01",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-N02",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-N03",
+      "category": "negation",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "H-N04",
+      "category": "negation",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "missing/ambiguous create_reminder"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-C01",
+      "category": "chat",
+      "status": "fail",
+      "errors": [
+        "missing reply fact"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "H-C02",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-C03",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "H-C04",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    }
+  ]
+}

@@ -17,7 +17,10 @@ class _Memory extends MemoryRepo {
   _Memory(super.db);
   @override
   Future<int> add(String content,
-      {String category = 'fact', double importance = 0.5}) async {
+      {String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source}) async {
     items.add(content);
     return items.length;
   }
@@ -110,7 +113,8 @@ void main() {
     expect(done.done, isTrue);
     final row = await db.query('tasks', where: 'id = ?', whereArgs: [buy.id]);
     expect(row.single['completed_at'], isNotNull);
-    expect((await tasks.list()).map((t) => t.title), ['bring milk', 'Calculate 46+50']);
+    expect((await tasks.list()).map((t) => t.title),
+        ['bring milk', 'Calculate 46+50']);
     // every linked alarm disabled and cancelled on the platform
     expect(await reminders.forTask(buy.id), isEmpty);
     expect(scheduler.cancelled, containsAll(alarms.map((r) => r.id)));
@@ -118,9 +122,11 @@ void main() {
     expect(memory.items, isEmpty);
 
     // repeating it changes nothing and says so
-    expect(await s.handle('Okay i am done with buying milk'), contains('already marked done'));
+    expect(await s.handle('Okay i am done with buying milk'),
+        contains('already marked done'));
     expect((await tasks.list()).length, 2);
-    expect((await tasks.list(includeDone: true)).length, 3, reason: 'no new task');
+    expect((await tasks.list(includeDone: true)).length, 3,
+        reason: 'no new task');
   });
 
   test('other natural phrasings', () async {
@@ -146,7 +152,10 @@ void main() {
     await tasks.create('Buy milk!');
     await tasks.create('bring milk');
     final ask = await s.handle('I am done with buying milk');
-    expect(ask, allOf(contains('#1'), contains('#2'), contains('Which'), isNot(contains('#3'))));
+    expect(
+        ask,
+        allOf(contains('#1'), contains('#2'), contains('Which'),
+            isNot(contains('#3'))));
     expect((await tasks.list()).length, 3);
     await s.handle('#2');
     expect((await tasks.get(2))!.done, isTrue);
@@ -154,11 +163,15 @@ void main() {
     expect((await tasks.get(3))!.done, isFalse);
   });
 
-  test('clear completion with an unknown target asks directly, then completes the pick',
+  test(
+      'clear completion with an unknown target asks directly, then completes the pick',
       () async {
     await screenshotTasks();
     final reply = await s.handle("I'm done with buying bread");
-    expect(reply, allOf(contains('buying bread'), contains('Which one'), contains('#2 bring milk')));
+    expect(
+        reply,
+        allOf(contains('buying bread'), contains('Which one'),
+            contains('#2 bring milk')));
     expect(model.calls, greaterThan(0));
     expect((await tasks.list()).length, 3);
     await s.handle('2');
@@ -183,7 +196,8 @@ void main() {
     expect(RuleEngine.doneRef('I got a new phone'), isNull);
   });
 
-  test('a model-proposed completion needs an explicit command or statement', () async {
+  test('a model-proposed completion needs an explicit command or statement',
+      () async {
     await screenshotTasks();
     model.output =
         '{"type":"tool","tool":"complete_task","arguments":{"title":"buy milk"}}';
@@ -200,11 +214,18 @@ void main() {
     expect(model.calls, greaterThan(0), reason: 'the model really proposed it');
     model.output =
         '{"type":"tool","tool":"complete_task","arguments":{"title":"bring milk"}}';
-    await s.handle('Okay i am done with buying milk'); // rules act; model unused
+    await s
+        .handle('Okay i am done with buying milk'); // rules act; model unused
     expect((await tasks.get(2))!.done, isFalse);
     final r = RuleEngine(clock: () => _now);
-    expect(r.justifiedMutation('complete_task', 'Can you complete task buy milk?', {'title': 'buy milk'}), isTrue);
-    expect(r.justifiedMutation('complete_task', 'I finished buying milk', {'title': 'bring milk'}), isFalse);
+    expect(
+        r.justifiedMutation('complete_task', 'Can you complete task buy milk?',
+            {'title': 'buy milk'}),
+        isTrue);
+    expect(
+        r.justifiedMutation(
+            'complete_task', 'I finished buying milk', {'title': 'bring milk'}),
+        isFalse);
   });
 
   test('explicit complete_task by id and title still work', () async {

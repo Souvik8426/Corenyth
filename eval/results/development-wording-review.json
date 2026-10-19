@@ -1,0 +1,49 @@
+{
+  "reviewer": "Codex direct qualitative review; not an independent human or automated semantic judge",
+  "source_sha256": "20b1a29933ed466945d69f1a1f1dfb8a7af3e5f2f416f831f304882be9f6c21b",
+  "cases": [
+    {
+      "id": "P-001",
+      "verdict": "pass",
+      "reason": "Names the correct task, does not claim an action, offers a follow-up.",
+      "observed_reply": "Thanks for the update on #1 ask Aditya to arrange the client meeting. I haven't changed anything. Want a reminder to follow up on it?"
+    },
+    {
+      "id": "P-005",
+      "verdict": "pass_with_wording_note",
+      "reason": "Acknowledges halfway progress and leaves status/date unchanged; repeats the user\u2019s progress statement rather than adding much help.",
+      "observed_reply": "You're halfway through the report. Let me know if you need help with anything else."
+    },
+    {
+      "id": "P-007",
+      "verdict": "pass",
+      "reason": "Grounded bank-task acknowledgement; asks about follow-up without scheduling it.",
+      "observed_reply": "Thanks for the update on #1 follow up with the bank about the loan. I haven't changed anything. Want a reminder to follow up on it?"
+    },
+    {
+      "id": "P-009",
+      "verdict": "pass",
+      "reason": "Names the gym task and asks whether to move/follow up; no fabricated completion or date change.",
+      "observed_reply": "Thanks for the update on #1 gym. I haven't changed anything. Want a reminder to follow up, or should I move it?"
+    },
+    {
+      "id": "N-008",
+      "verdict": "pass",
+      "reason": "Keeps the picnic unchanged and leaves the decision with the user; no memory lookup shown.",
+      "observed_reply": "picnic is still on your list. Let me know if you decide to change it."
+    },
+    {
+      "id": "C-004",
+      "verdict": "wording_grounding_issue",
+      "reason": "Assumes the trip was great although the user only reported returning from Goa. No domain write.",
+      "observed_reply": "Hey there! I'm glad you had a great trip to Goa. Let me know if there's anything else you need!"
+    },
+    {
+      "id": "C-006",
+      "verdict": "weak_quality",
+      "reason": "Responds in joke form but the joke is weak. No domain write; this is a model capability limit, not a state-accuracy pass claim.",
+      "observed_reply": "Sure! Here's a joke for you: 'What do you call a person who is always hungry? A hungry person.'"
+    }
+  ],
+  "limits": "Automated state accuracy does not establish universal response quality. No held-out inputs or expected labels were inspected while tuning."
+}

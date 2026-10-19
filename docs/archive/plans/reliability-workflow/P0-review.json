@@ -1,0 +1,17 @@
+{
+  "stage": "P0",
+  "decision": "accept",
+  "required_software_checks_passed": true,
+  "evidence": [
+    "docs/plans/reliability-workflow/P0-parent-review.md",
+    "docs/plans/reliability-workflow/P0-analyze.txt",
+    "docs/plans/reliability-workflow/P0-tests.txt",
+    "docs/plans/reliability-workflow/P0-base-tests.txt",
+    "docs/plans/reliability-workflow/P0-build.txt"
+  ],
+  "deferred_device_checks": [
+    "installed APK/model identity and failure cause",
+    "real native model accuracy",
+    "physical reminder/follow-through and lifecycle checks"
+  ]
+}

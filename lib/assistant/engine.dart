@@ -1,10 +1,58 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
 import '../data/repos.dart';
 import 'semantic.dart';
 import 'tools.dart';
+
+/// Source revision baked in at build time
+/// (`--dart-define=CORENYTH_GIT_SHA=$(git rev-parse --short HEAD)`), so a
+/// phone log names the checkout that produced the installed APK.
+const buildRevision =
+    String.fromEnvironment('CORENYTH_GIT_SHA', defaultValue: 'unknown');
+
+/// Bumped by hand when the plan/reply contract changes meaning. The legacy
+/// interpreter keeps plan-v1; the unified one uses [planContractV2].
+const promptContractVersion = 'plan-v1';
+const planContractV2 = 'plan-v2';
+
+/// First 12 hex of SHA-256 over every fixed prompt and grammar the model is
+/// given: any wording change shows up in turn diagnostics and eval records.
+final String promptFingerprint = sha256
+    .convert(utf8.encode([
+      Prompt.planSystem,
+      Prompt.replySystem,
+      Prompt.memorySystem,
+      Prompt.actionSystem,
+      semanticGrammar,
+      Prompt.replyGrammar,
+      Prompt.memoryGrammar,
+      toolGrammar,
+    ].join('\u0000')))
+    .toString()
+    .substring(0, 12);
+
+/// [promptFingerprint] for plan-v2 ([Prompt.planSystemV2], [semanticGrammarV2]).
+final String promptFingerprintV2 = sha256
+    .convert(utf8.encode([
+      Prompt.planSystemV2,
+      Prompt.replySystem,
+      Prompt.memorySystem,
+      Prompt.actionSystem,
+      semanticGrammarV2,
+      Prompt.replyGrammar,
+      Prompt.memoryGrammar,
+      toolGrammar,
+    ].join('\u0000')))
+    .toString()
+    .substring(0, 12);
+
+/// `contract:fingerprint` for diagnostics and eval records.
+String promptIdentity(String contract) => contract == planContractV2
+    ? '$planContractV2:$promptFingerprintV2'
+    : '$promptContractVersion:$promptFingerprint';
 
 /// action: legacy tool-call prompt (kept for the rules engine contract);
 /// plan: the model-first semantic plan (see semantic.dart); memory: fact extraction;
@@ -34,6 +82,10 @@ class Prompt {
 
   /// The app's clock for `Now:` (tests inject it); null = the device clock.
   final DateTime? now;
+
+  /// plan only: [promptContractVersion] (plan-v1) or [planContractV2],
+  /// choosing the system prompt and grammar.
+  final String contract;
   Prompt(this.kind, this.user,
       {this.memories = const [],
       this.tasks,
@@ -42,7 +94,17 @@ class Prompt {
       this.history = const [],
       this.pending,
       this.context,
-      this.now});
+      this.now,
+      this.contract = promptContractVersion});
+
+  /// The grammar the native side constrains this prompt with.
+  String get grammar => switch (kind) {
+        PromptKind.action => toolGrammar,
+        PromptKind.plan =>
+          contract == planContractV2 ? semanticGrammarV2 : semanticGrammar,
+        PromptKind.memory => Prompt.memoryGrammar,
+        PromptKind.reply => Prompt.replyGrammar,
+      };
 
   /// Stable (KV-cache friendly). Untrusted text only ever appears in the user turn.
   static const planSystem =
@@ -54,6 +116,19 @@ when: copy the user's own time words exactly (e.g. "tomo", "morning 8:10", "in 2
 range (list only): today | tomorrow | overdue | all.
 multiple / follow_up: only if the user asks for extra alerts or a follow-up (true) or refuses them (false).
 negated: true if the user says not to, or is only asking or supposing.
+reply (chat only): one short friendly sentence; never mention tasks, times or reminders.''';
+
+  /// plan-v2: authorization is its own explicit label, so a polite request
+  /// ("Can you remind me…?") is never mistaken for "only asking".
+  static const planSystemV2 =
+      '''Turn the user's message into ONE JSON plan for an offline task assistant. The app reads and writes the database; you never state facts about the user's tasks.
+intent: create_task (something to do) | create_reminder (asks to be reminded/notified) | complete (says something is done) | delete | postpone (move a task later) | list (asks what is planned/pending) | recall (asks what they told you) | answer_pending (only gives the time the Pending question asked for) | cancel_pending | progress (news about an existing task, e.g. "Aditya hasn't replied") | outcome (how a finished event went) | details (when an event ends or what it is about) | chat (small talk or a general question).
+title: the action itself, short, as the user said it, without filler like "too", "also", "pls", "I have to". For recall: what to look up. For details: the subject.
+ref: for complete/delete/postpone/progress/outcome/details, the #id from Current tasks or the task's words.
+when: copy the user's own time words exactly (e.g. "tomo", "morning 8:10", "in 20 min", "by 2h"); never turn them into a date. For details: the end time words. Omit if none.
+range (list only): today | tomorrow | overdue | all.
+multiple / follow_up: only if the user asks for extra alerts or a follow-up (true) or refuses them (false).
+authorization: request (asks you to do something, including polite questions such as "Can you remind me to call Mum at 5?") | statement (tells a plan, fact or news, e.g. "I have a meeting at 3") | question (only asks for information, e.g. "How do reminders work?") | hypothetical (supposes or is undecided: "what if", "maybe I should", "should I") | negated (tells you not to do it: "don't remind me").
 reply (chat only): one short friendly sentence; never mention tasks, times or reminders.''';
 
   /// Stable across turns, so the native KV cache can reuse it (no dates in here).
@@ -131,7 +206,8 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
   /// No chat history: old assistant replies (e.g. earlier task lists) must never
   /// reach the model as current facts. Current tasks come fresh from SQLite.
   String _renderPlan(DateTime now) {
-    final b = StringBuffer('<|im_start|>system\n$planSystem');
+    final b = StringBuffer('<|im_start|>system\n'
+        '${contract == planContractV2 ? planSystemV2 : planSystem}');
     if (personalContext.isNotEmpty) {
       b.write('\nAbout the user:\n${neutralizeChatMl(personalContext)}');
     }
@@ -184,7 +260,8 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
           history: history ?? this.history,
           pending: pending,
           context: context,
-          now: now);
+          now: now,
+          contract: contract);
 
   /// Candidate renders from fullest to smallest: drop oldest history first, then
   /// optional context (memories, personal context; tasks answer the request so stay).
@@ -305,15 +382,25 @@ class LlamaChannelEngine extends LlmEngine {
   @override
   String get name => 'llama.cpp';
 
+  /// Why the last [load] returned false, or null after a success:
+  /// `native_false` (llama.cpp could not open the model or create its
+  /// context; logcat tag `llama.cpp` says which), a native error code
+  /// (`llama_unavailable`, `llama_error`), or `no_plugin`.
+  String? lastLoadError;
+
   @override
   Future<bool> load() async {
     try {
-      return await _ch.invokeMethod<bool>(
+      final ok = await _ch.invokeMethod<bool>(
               'load', {'path': modelPath, 'contextSize': contextSize}) ??
           false;
+      lastLoadError = ok ? null : 'native_false';
+      return ok;
     } on MissingPluginException {
+      lastLoadError = 'no_plugin';
       return false;
-    } on PlatformException {
+    } on PlatformException catch (e) {
+      lastLoadError = e.code;
       return false;
     }
   }
@@ -352,12 +439,7 @@ class LlamaChannelEngine extends LlmEngine {
             'id': id,
             'prompts': p.budgeted(contextSize, maxTokens),
             'maxTokens': maxTokens,
-            'grammar': switch (p.kind) {
-              PromptKind.action => toolGrammar,
-              PromptKind.plan => semanticGrammar,
-              PromptKind.memory => Prompt.memoryGrammar,
-              PromptKind.reply => Prompt.replyGrammar,
-            },
+            'grammar': p.grammar,
             'stream': onText != null,
           }) ??
           '';

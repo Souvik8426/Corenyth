@@ -1,0 +1,2326 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart
+00:00 +0: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/time_first_screenshot_test.dart: the exact time-first request schedules the requested action, not a task list
+turn timing ms: {route: 8, context: 2, execution: 2, total: 26} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+00:00 +1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/time_first_screenshot_test.dart: a date clarification retains the originally supplied 8:10 time
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 0, total: 2} {route: early, tool: create_reminder, db: ok}
+00:00 +2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/time_first_screenshot_test.dart: morning plus an explicit clock does not require repeating am
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+00:00 +3: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +4: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +4: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/turn_diagnostics_test.dart: semantic route records prompt version and model identity
+turn timing ms: {route: 6, context: 1, execution: 1, total: 15} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok, build: abc1234, selected: qwen3-1.7b}
+00:00 +5: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +5: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/turn_diagnostics_test.dart: invalid model output falls back with a code
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+00:00 +6: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +6: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/turn_diagnostics_test.dart: no model: route is rules and fallback says why
+turn timing ms: {route: 0, execution: 1, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +7: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +7: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_completion_test.dart: the exact screenshot phrase completes buy milk and leaves bring milk
+turn timing ms: {route: 4, context: 2, execution: 2, total: 22} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:00 +7: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/turn_diagnostics_test.dart: a calculation is settled early
+turn timing ms: {route: 0, execution: 0, total: 1} {route: early, tool: respond, db: none}
+00:00 +8: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +9: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +9: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_completion_test.dart: a duplicate completion asks which task and respects the chosen number
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 0} {route: early, tool: complete_task, db: ok}
+00:00 +10: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +10: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_completion_test.dart: a model cannot turn completion questions or hypotheticals into writes
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:00 +11: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +12: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +13: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/app_shell_test.dart: dock switches screens without discarding their state
+00:00 +14: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: proactive messages retain their time and task context
+00:00 +15: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: proactive messages retain their time and task context
+00:00 +16: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: proactive messages retain their time and task context
+00:00 +17: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: proactive messages retain their time and task context
+00:00 +18: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: proactive messages retain their time and task context
+00:00 +19: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: proactive messages retain their time and task context
+00:00 +20: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/chat_view_test.dart: chat composer sends typed text and preserves readable messages
+00:00 +21: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/theme_test.dart: dark theme uses the brand palette and bundled font
+00:00 +22: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:00 +23: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +24: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +25: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +26: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +27: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +27: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: commands work through the rules when the model reply is not a plan
+turn timing ms: {route: 8, context: 1, execution: 2, total: 21} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: list_tasks, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: fallback, route: semantic, tool: respond, db: none}
+00:01 +28: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +28: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: unsupported date phrases are not added as titles or guessed
+turn timing ms: {route: 0, execution: 0, total: 1} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:01 +29: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +29: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: title commands resolve exact titles and ask on duplicates
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: delete_task, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: delete_task, db: error}
+00:01 +30: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +30: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: cancel during generation prevents the tool from running
+turn timing ms: {route: 0, context: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan}
+00:01 +31: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +31: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: close awaits in-flight start/turn, is idempotent and never unloads
+turn timing ms: {route: 0, context: 0, total: 2} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan}
+00:01 +32: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +32: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: explicit remember is saved before the success reply
+turn timing ms: {route: 0, total: 0} {route: explicit_memory}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+00:01 +33: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +34: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +34: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: prompt_too_long asks for shorter input, never falls back
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: called, prompt: plan-v1:8fe00ad5e6c8, route: semantic, tool: respond, db: none}
+00:01 +35: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +35: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: llama_cancelled ends the turn with no reply or action
+turn timing ms: {route: 0, context: 0, total: 0} {model: called, prompt: plan-v1:8fe00ad5e6c8}
+00:01 +36: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +36: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: real model failure falls back and says why; reset next turn
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: failed, prompt: plan-v1:8fe00ad5e6c8, fallback: native_llama_error, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: failed, prompt: plan-v1:8fe00ad5e6c8, fallback: native_llama_error, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 0, execution: 0, total: 0} {route: early, tool: respond, db: none}
+00:01 +37: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +38: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +38: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: plan never mutates on negated or unanchored text
+turn timing ms: {route: 0, execution: 0, total: 0} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 0} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 0} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:01 +39: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +40: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +40: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: widget refresh failure never fails a committed write
+widget refresh failed: Exception: widget
+00:01 +41: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +41: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/backend_test.dart: ensureModel re-checks native residency even when marked loaded
+model load: {build: unknown, selected: qwen3-0.6b, active: none, load: loaded}
+model load: {build: unknown, selected: qwen3-0.6b, active: none, load: loaded}
+model load: {build: unknown, selected: qwen3-0.6b, active: none, load: failed, load_failure: load:native_false:unlisted}
+model load: {build: unknown, selected: qwen3-0.6b, active: none, load: loaded, load_failure: load:native_false:unlisted}
+00:01 +42: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +43: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +44: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +45: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +46: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +47: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +48: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +49: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +50: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:01 +51: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +52: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +52: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: quiet hours default to 22:00-07:00 until the user turns them off
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +53: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +53: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: test notification is honest about permissions and delivery
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +54: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +54: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle multi + follow-up plan, discloses times; done cancels all
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +55: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +56: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +56: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: enabling follow-ups and changing DND notify the scheduler after saving
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +56: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a timed meeting gets alerts and an optional details question that survives detours, restart and chat switch, and replans the follow-up
+turn timing ms: {route: 11, execution: 15, total: 41} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +57: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +57: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle Tasks-style postpone shifts the plan; complete cancels it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +58: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +58: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: context spans chats: only the user's matching words, best first
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +58: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a timed meeting gets alerts and an optional details question that survives detours, restart and chat switch, and replans the follow-up
+turn timing ms: {route: 3, execution: 2, total: 10} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_task, db: ok}
+00:04 +58: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+turn timing ms: {route: 5, context: 4, execution: 9, total: 41} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +58: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a timed meeting gets alerts and an optional details question that survives detours, restart and chat switch, and replans the follow-up
+turn timing ms: {route: 9, execution: 0, total: 11} {route: follow_through, tool: respond, db: none}
+00:04 +59: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +59: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: a duplicate proactive event adds one main-chat message, never replayed
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +60: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+00:04 +60: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a question about meeting details never changes its end time
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +60: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: screenshot: "Okay i am done with buying milk" completes buy milk only
+turn timing ms: {route: 0, context: 2, execution: 0, total: 7} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+00:04 +61: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +62: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +62: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +62: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle turning follow-ups off cancels scheduled follow-ups
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +63: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: completed and deleted tasks lose every alarm with a durable cancel
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle partial schedule failure rolls back everything, honestly
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a question about meeting details never changes its end time
+turn timing ms: {route: 1, execution: 6, total: 13} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+turn timing ms: {route: 0, context: 1, execution: 3, total: 9} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a question about meeting details never changes its end time
+turn timing ms: {route: 2, execution: 0, total: 6} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:04 +65: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +65: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: early completion cancels the follow-up, asks how it went once, and stores the answer
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +65: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+turn timing ms: {route: 1, context: 2, execution: 3, total: 11} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +66: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +66: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: meeting details: open question survives restart; end replaces estimate
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle moving the main reminder moves the whole plan and the task
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+turn timing ms: {route: 0, context: 1, execution: 3, total: 9} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: early completion cancels the follow-up, asks how it went once, and stores the answer
+turn timing ms: {route: 1, execution: 5, total: 13} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+turn timing ms: {route: 0, context: 2, execution: 3, total: 10} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +68: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +68: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: early completion cancels the follow-up, asks how it went once, and stores the answer
+turn timing ms: {route: 3, execution: 6, total: 12} {route: follow_through, tool: complete_task, db: ok}
+00:04 +68: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle edit by title picks the event alert and moves the whole plan
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +69: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +69: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: a known end replaces a quiet estimate and can restore a skipped follow-up
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +69: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+turn timing ms: {route: 0, context: 2, execution: 3, total: 9} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +69: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: early completion cancels the follow-up, asks how it went once, and stores the answer
+turn timing ms: {route: 4, execution: 0, total: 7} {route: follow_through, tool: respond, db: none}
+00:04 +70: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +70: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a completion that already says how it went is acknowledged, not asked again
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +70: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: other natural phrasings
+turn timing ms: {route: 0, context: 1, execution: 3, total: 9} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +71: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +71: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: duplicates ask which; a bare id completes the chosen one
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +72: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +73: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +73: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: reconciliation preserves a future snoozed daily occurrence
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +73: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle rollback whose cancel also fails discloses alerts may remain
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +73: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a completion that already says how it went is acknowledged, not asked again
+turn timing ms: {route: 2, execution: 6, total: 14} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +73: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: duplicates ask which; a bare id completes the chosen one
+turn timing ms: {route: 0, context: 1, execution: 0, total: 8} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+00:04 +74: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +74: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: an outcome closes its question so it is not asked again
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +75: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +75: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle moving a plan drops early alerts that land in quiet hours
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +75: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: duplicates ask which; a bare id completes the chosen one
+turn timing ms: {route: 0, execution: 3, total: 8} {route: early, tool: complete_task, db: ok}
+00:04 +76: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +76: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a completion that already says how it went is acknowledged, not asked again
+turn timing ms: {route: 4, execution: 6, total: 14} {route: follow_through, tool: complete_task, db: ok}
+00:04 +76: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: clear completion with an unknown target asks directly, then completes the pick
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +77: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +77: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: an ordinary errand completion is not treated as a meeting
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +78: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +78: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: nextDaily: today or tomorrow, until is inclusive, months roll over
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +79: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +79: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle follow-up check-in only for tasks with a follow-up
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +80: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +80: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: an ordinary errand completion is not treated as a meeting
+turn timing ms: {route: 1, execution: 3, total: 9} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: complete_task, db: ok}
+00:04 +80: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: daily until deadline: skips missed days, stops at deadline or done
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +80: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: clear completion with an unknown target asks directly, then completes the pick
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+00:04 +81: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +81: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: the arrangement task stays separate from the attendance reminder
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +81: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: clear completion with an unknown target asks directly, then completes the pick
+turn timing ms: {route: 0, execution: 3, total: 6} {route: early, tool: complete_task, db: ok}
+00:04 +82: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +82: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +83: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +83: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle discloses when notifications are off instead of promising
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +84: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +84: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: the arrangement task stays separate from the attendance reminder
+turn timing ms: {route: 1, execution: 4, total: 11} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +84: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_data_test.dart: evening review keeps raising ignored tasks without rescheduling them
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +85: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +86: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +86: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a progress update in another chat links the right task through global context and is discussed, never turned into a task or a change
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +86: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle quiet-hours drop comes back when moved out again; no id reuse clash
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +86: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 2, execution: 0, total: 5} {reply: model, route: follow_through, tool: respond, db: none}
+00:04 +86: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a progress update in another chat links the right task through global context and is discussed, never turned into a task or a change
+turn timing ms: {route: 5, execution: 0, total: 8} {reply: model, route: follow_through, tool: respond, db: none}
+00:04 +86: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +87: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +88: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +88: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: two Adityas: asks which; a model reply claiming an action falls back
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +88: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +89: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +89: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle complete after rebuild cancels all; restore never resurrects
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +89: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+turn timing ms: {route: 0, context: 2, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +89: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: two Adityas: asks which; a model reply claiming an action falls back
+turn timing ms: {route: 2, execution: 0, total: 4} {route: follow_through, tool: respond, db: none}
+00:04 +89: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +89: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: two Adityas: asks which; a model reply claiming an action falls back
+turn timing ms: {route: 1, execution: 0, total: 4} {reply: fallback, route: early, tool: respond, db: none}
+00:04 +90: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +90: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +90: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: negations, questions, and hypotheticals never complete
+turn timing ms: {route: 0, context: 2, execution: 0, total: 7} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +91: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +91: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +92: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +92: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle follow-ups off: a later move does not bring the follow-up back
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +92: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+turn timing ms: {route: 0, context: 0, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes
+turn timing ms: {route: 1, context: 2, execution: 0, total: 19} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: model, route: semantic, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle failed move rolls back the whole prior plan, skipped offsets included
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: model, route: semantic, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: model, route: semantic, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:04 +93: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, route: semantic, tool: list_tasks, db: ok}
+00:04 +94: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +94: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: a model-proposed completion needs an explicit command or statement
+turn timing ms: {route: 0, context: 1, execution: 5, total: 10} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +94: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle replacing a task plan: failure restores due, plan and old alarms
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +95: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +95: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: explicit complete_task by id and title still work
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +95 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +95 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes [E]
+  Expected: empty
+    Actual: WhereIterable<Prompt>:[
+              Instance of 'Prompt',
+              Instance of 'Prompt',
+              Instance of 'Prompt'
+            ]
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/proactive_session_test.dart 251:5              main.<fn>
+  
+00:04 +95 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a daily reminder until a named date confirms the exact date and year
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +96 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +96 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle replacement whose old-alarm cancel fails keeps a durable cancel
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +96 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_completion_test.dart: explicit complete_task by id and title still work
+turn timing ms: {route: 0, context: 0, execution: 2, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 3, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:04 +97 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +98 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +98 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a daily reminder until a named date confirms the exact date and year
+turn timing ms: {route: 1, execution: 3, total: 7} {route: follow_through, tool: create_daily, db: ok}
+00:04 +98 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle a done task cannot get a reminder until restored
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +98 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a daily reminder until a named date confirms the exact date and year
+turn timing ms: {route: 0, execution: 0, total: 2} {route: follow_through, tool: respond, db: none}
+00:04 +99 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +99 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: nudge mode schedules a timed errand without repeating remind me
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +100 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +100 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_plan_test.dart: sqlite lifecycle shopping nudge lists other pending buys, not done ones
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +100 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: nudge mode schedules a timed errand without repeating remind me
+turn timing ms: {route: 1, execution: 2, total: 7} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +101 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +102 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +102 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: an errand uses the evening review rather than an automatic hourly follow-up
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 2, total: 7} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +103 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +103 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a new display chat can answer the global missing-time question
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 6} {model: unavailable, fallback: engine_not_in_use, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 2, total: 6} {route: early, tool: create_reminder, db: ok}
+00:04 +104 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +104 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a full name answers a person clarification naturally
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 4} {route: follow_through, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 0, total: 3} {route: early, tool: respond, db: none}
+00:04 +105 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +105 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: new progress during a clarification replaces the old news
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 4} {route: follow_through, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 0, total: 3} {reply: model, route: follow_through, tool: respond, db: none}
+00:04 +106 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +106 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: an evening review invites conversation even with no outstanding tasks
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +107 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +107 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: a task-specific early alert leaves the saved preferences alone
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 3, total: 8} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:04 +108 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +108 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: briefing groups overdue, today, upcoming and undated work with the next alert
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 4} {route: follow_through, tool: briefing, db: ok}
+00:04 +109 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +109 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: pure readers event titles and completions
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +110 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +110 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: pure readers meeting details resolve against the start
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +111 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +111 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: pure readers model replies must stay grounded prose
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +112 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/reminder_status_test.dart: settings test button shows the result
+00:04 +112 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: pure readers the review text keeps ignored work without moving it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +113 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: pure readers the review text keeps ignored work without moving it
+00:04 +114 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +115 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +116 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +117 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +118 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +119 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +120 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +121 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +122 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +123 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +124 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+turn timing ms: {route: 9, context: 7, execution: 5, total: 40} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:04 +124 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) switch 0.6B → 1.7B loads the new path and persists it
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded}
+00:04 +124 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+turn timing ms: {route: 1, context: 2, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, route: semantic, tool: list_tasks, db: ok}
+00:04 +124 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) switch 0.6B → 1.7B loads the new path and persists it
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded}
+00:04 +125 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+turn timing ms: {route: 1, context: 3, execution: 0, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+00:04 +125 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) switch 0.6B → 1.7B loads the new path and persists it
+model load: {build: unknown, selected: qwen3-1.7b, active: qwen3-1.7b, load: loaded}
+00:04 +126 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+00:04 +126 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) failed 1.7B load recovers to 0.6B and says so
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +126 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: screenshot conversation: model plans, app validates, SQLite answers
+turn timing ms: {route: 1, context: 2, execution: 1, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+turn timing ms: {route: 3, execution: 3, total: 10} {route: early, tool: create_reminder, db: ok}
+00:04 +127 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +127 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: the model may answer a pending question in its own words
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +127 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) failed 1.7B load recovers to 0.6B and says so
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded, load_failure: load:native_false:qwen3-1.7b}
+00:04 +128 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +128 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) SHA mismatch never reaches native load; falls back
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +128 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: the model may answer a pending question in its own words
+turn timing ms: {route: 1, context: 2, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 2, context: 1, execution: 2, total: 11} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: answer_pending, route: semantic, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+00:04 +128 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) SHA mismatch never reaches native load; falls back
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded, load_failure: sha256_mismatch:qwen3-1.7b}
+00:04 +129 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +129 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) default also failing ends on rules (load failed)
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +129 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: the model may answer a pending question in its own words
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: cancel_pending, route: semantic, tool: respond, db: none}
+00:04 +130 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +130 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: model prose about tasks is never shown; reads come from SQLite
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +130 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) default also failing ends on rules (load failed)
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: failed, load_failure: load:native_false:qwen3-0.6b}
+00:04 +131 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +131 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) not-installed choice is saved but nothing reloads
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +131 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: model prose about tasks is never shown; reads come from SQLite
+turn timing ms: {route: 0, context: 1, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: fallback, fallback: rejected_chat, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, route: semantic, tool: list_tasks, db: ok}
+00:04 +132 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +132 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: negations, questions, invented ids and invented dates never write
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +132 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) not-installed choice is saved but nothing reloads
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded}
+00:04 +133 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +133 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) modelState keeps a not-installed selection (download stays offered)
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +133 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: negations, questions, invented ids and invented dates never write
+turn timing ms: {route: 2, context: 2, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: respond, db: none}
+00:04 +134 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +134 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) re-choosing a saved selection after installing it activates it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +134 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: negations, questions, invented ids and invented dates never write
+turn timing ms: {route: 1, context: 1, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, fallback: rejected_complete, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, context: 2, execution: 1, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+00:04 +134 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) re-choosing a saved selection after installing it activates it
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded}
+00:04 +134 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: negations, questions, invented ids and invented dates never write
+turn timing ms: {route: 1, context: 2, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: model_when_unresolved, route: semantic, tool: respond, db: none}
+00:04 +135 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +135 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: ambiguous references ask; a number picks; slang completion matches stems
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:04 +135 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) re-choosing a saved selection after installing it activates it
+model load: {build: unknown, selected: qwen3-1.7b, active: qwen3-1.7b, load: loaded}
+00:04 +136 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:04 +136 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) picker: selected-but-inactive installed row can be tapped
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +136 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: ambiguous references ask; a number picks; slang completion matches stems
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 4, total: 7} {route: early, tool: complete_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 3, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: complete_task, db: ok}
+00:05 +137 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:05 +137 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: semantic contract: strict parser, grammar, compact prompt, native grammar
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +138 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:05 +138 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: "that one" means the last task; after a list it asks which
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 1, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 2, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: complete_task, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, route: semantic, tool: list_tasks, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: respond, db: none}
+00:05 +139 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/startup_test.dart: startup paints while services have not finished opening
+00:05 +139 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: rename and reminder commands are never turned into task changes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 2, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, fallback: rejected_complete, route: rules, tool: edit_task, db: ok}
+00:05 +140 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +140 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: rename and reminder commands are never turned into task changes
+turn timing ms: {route: 0, context: 1, execution: 2, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: delete, fallback: rejected_delete, route: rules, tool: cancel_reminder, db: ok}
+00:05 +140 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) picker: selected-but-inactive installed row can be tapped
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded}
+00:05 +141 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +141 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: the model cannot add words the user never said to a title
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, context: 1, execution: 1, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, fallback: rejected_create_task, route: rules, tool: create_task, db: ok}
+00:05 +142 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +142 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: labelled context: last task and earlier user words, never assistant text
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 1, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: fallback, route: semantic, tool: respond, db: none}
+00:05 +143 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +143 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: trust boundary: extra or incompatible fields and corrupt drafts are rejected
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +144 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +144 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: "that" is the task a reminder is about, never just the newest task
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +144 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_replies_test.dart: screenshot 1: the finished meeting closes its task and is not parroted
+turn timing ms: {route: 8, execution: 5, total: 16} {route: follow_through, tool: complete_task, db: ok, reply: fallback}
+00:05 +145 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +145 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_replies_test.dart: screenshot 2: complaints re-answer the earlier message, not the rules
+turn timing ms: {route: 0, execution: 0, total: 1} {route: follow_through, tool: complete_task, db: ok, reply: fallback}
+00:05 +146 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +146 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_replies_test.dart: screenshot 2: complaints re-answer the earlier message, not the rules
+turn timing ms: {route: 0, execution: 0, total: 2} {route: complaint, reply: fallback, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 1} {route: complaint, reply: fallback, tool: respond, db: none}
+00:05 +147 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +147 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: "that" is the task a reminder is about, never just the newest task
+turn timing ms: {route: 2, context: 1, execution: 3, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:05 +147 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_replies_test.dart: a good model re-answer is used for a complaint
+turn timing ms: {route: 0, execution: 0, total: 1} {route: follow_through, tool: complete_task, db: ok, reply: model}
+turn timing ms: {route: 0, execution: 0, total: 0} {route: complaint, reply: model, tool: respond, db: none}
+00:05 +148 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +148 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: "that" is the task a reminder is about, never just the newest task
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:05 +148 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_replies_test.dart: chat replies see recent turns and drop parroted plan replies
+turn timing ms: {route: 1, context: 0, execution: 0, total: 12} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: model, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: model, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: fallback, route: semantic, tool: respond, db: none}
+00:05 +149 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +149 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: "that" is the task a reminder is about, never just the newest task
+turn timing ms: {route: 1, context: 1, execution: 5, total: 11} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: complete_task, db: ok}
+00:05 +150 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +150 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_replies_test.dart: chat history leaves out task lists and check-ins
+turn timing ms: {route: 0, context: 0, execution: 0, total: 0} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: model, route: semantic, tool: respond, db: none}
+00:05 +151 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +151 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: a standalone reminder leaves no task context
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +152 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +153 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +154 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +155 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +155 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_semantic_test.dart: a standalone reminder leaves no task context
+turn timing ms: {route: 1, context: 1, execution: 1, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, route: semantic, tool: respond, db: none}
+00:05 +156 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +157 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +157 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: reboot catch-up records a recent daily occurrence before advancing it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +158 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +158 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: a late meeting is upcoming at review time, not already overdue
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +159 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +159 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: outcome notification asks the same question as its main-chat message
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +159 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: exact screenshot before 08:10: completes buy milk, then schedules today 08:10
+turn timing ms: {route: 4, context: 4, execution: 6, total: 32} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+00:05 +160 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +160 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: changing quiet hours restores optional alerts previously skipped
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +160 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: exact screenshot before 08:10: completes buy milk, then schedules today 08:10
+turn timing ms: {route: 5, context: 2, execution: 2, total: 17} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+00:05 +161 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +161 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: after 08:10: asks which day, keeps 08:10 and flags across a restart
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +161 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: changing quiet hours restores optional alerts previously skipped
+widget refresh failed: Binding has not yet been initialized.
+The "instance" getter on the ServicesBinding binding mixin is only available once that binding has been initialized.
+Typically, this is done by calling "WidgetsFlutterBinding.ensureInitialized()" or "runApp()" (the latter calls the former). Typically this call is done in the "void main()" method. The "ensureInitialized" method is idempotent; calling it multiple times is not harmful. After calling that method, the "instance" getter will return the binding.
+In a test, one can call "TestWidgetsFlutterBinding.ensureInitialized()" as the first line in the test's "main()" method to initialize the binding.
+If ServicesBinding is a custom binding mixin, there must also be a custom binding class, like WidgetsFlutterBinding, but that mixes in the selected binding, and that is the class that must be constructed before using the "instance" getter.
+00:05 +162 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +162 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: event alarm: one main-chat message and one notification per occurrence
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +162 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: after 08:10: asks which day, keeps 08:10 and flags across a restart
+turn timing ms: {route: 2, context: 1, execution: 0, total: 8} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 3} {route: early, tool: respond, db: none}
+00:05 +163 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +163 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: stale alarms are dropped: moved, done, deleted
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +163 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: after 08:10: asks which day, keeps 08:10 and flags across a restart
+turn timing ms: {route: 2, execution: 4, total: 9} {route: early, tool: create_reminder, db: ok}
+00:05 +164 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +164 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: time-first and time-last variants
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +165 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +165 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: nudge before the start only; follow-up opens the outcome question once
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +165 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: time-first and time-last variants
+turn timing ms: {route: 1, context: 1, execution: 3, total: 10} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 2, total: 10} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+00:05 +166 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +166 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: optional check-ins respect quiet hours; the event alarm does not
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +166 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: time-first and time-last variants
+turn timing ms: {route: 1, context: 1, execution: 2, total: 7} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+00:05 +167 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +167 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: daily: occurrence advances, snooze adds one alert, deadline never moves
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +167 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: time-first and time-last variants
+turn timing ms: {route: 1, context: 1, execution: 2, total: 9} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_reminder, db: ok}
+00:05 +168 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +168 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: time-first recall stays retrieval
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +169 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +169 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: done action checks task identity; a meeting asks its outcome
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +169 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: time-first recall stays retrieval
+turn timing ms: {route: 2, context: 2, execution: 1, total: 10} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: list_tasks, db: ok}
+00:05 +170 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +170 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: invalid, conflicting, unsupported, negated and multiple requests write nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +171 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +171 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: refused notification keeps the saved message and is not retried
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +171 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: invalid, conflicting, unsupported, negated and multiple requests write nothing
+turn timing ms: {route: 1, context: 1, execution: 0, total: 8} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: temporal_conflict, route: rules, tool: respond, db: none}
+00:05 +172 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +172 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: evening review: one combined message, ignored items return, dates untouched
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +172 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: invalid, conflicting, unsupported, negated and multiple requests write nothing
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+00:05 +173 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +173 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: model read tools cannot stand in for a create or completion
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +174 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +174 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: switches: follow-ups gate the review, nudges are independent
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +174 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: model read tools cannot stand in for a create or completion
+turn timing ms: {route: 1, context: 1, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, fallback: rejected_list, route: rule_plan, tool: respond, db: none}
+00:05 +175 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +175 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: catch-up files the latest missed check-in per task, silently, no flood
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +175 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: model read tools cannot stand in for a create or completion
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: recall, fallback: rejected_recall, route: rule_plan, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, route: semantic, tool: list_tasks, db: ok}
+00:05 +176 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +176 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: malformed long time prefixes are rejected (linear check, no backtracking)
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +177 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +177 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_delivery_test.dart: notification targets route to Tasks or the main chat
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +178 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +179 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:05 +179 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_time_order_test.dart: bare HH:MM: the part of day or 24-hour clock gives AM/PM; bad or double times ask
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:05 +180 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+turn timing ms: {route: 77, execution: 36, total: 162} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_task, db: ok, build: unknown, selected: qwen3-0.6b, active: none, load: idle}
+00:06 +181 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +182 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +183 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +184 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +185 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +185 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart: model unavailable: rules alone schedule submission + 10 minutes
+turn timing ms: {route: 9, execution: 2, total: 18} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:06 +186 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +187 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +187 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart: valid Qwen extraction ("within 10 mins") schedules the same
+turn timing ms: {route: 0, context: 1, execution: 0, total: 12} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:06 +188 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +189 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +189 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: screenshot: catch-up typo recalls every pending task, sets no alarm
+turn timing ms: {route: 9, context: 5, execution: 2, total: 38} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: list_tasks, db: ok}
+00:06 +190 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +190 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: screenshot: arithmetic is computed by the app, not saved as a task
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 3} {route: early, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 2} {route: early, tool: respond, db: none}
+00:06 +191 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +191 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: screenshot: general knowledge never searches personal memories
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 2, execution: 0, total: 13} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: recall, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, reply: fallback, route: semantic, tool: respond, db: none}
+00:06 +192 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +192 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: plain-language capture: tasks with disclosed defaults, no alerts, no memories
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, context: 1, execution: 1, total: 11} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 1, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 3, total: 8} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: complete_task, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+00:06 +193 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +193 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: multi-commitment requests save all or nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 2, context: 1, execution: 0, total: 7} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+00:06 +194 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +194 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: missing time: asked, persisted across restart, ambiguous replies do nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 1} {route: early, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 2, total: 4} {route: early, tool: create_reminder, db: ok}
+00:06 +195 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +195 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: pending time survives detours and restart; cancel or a new create ends it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 1} {route: early, tool: respond, db: none}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: list_tasks, db: ok}
+turn timing ms: {route: 1, execution: 1, total: 5} {route: early, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 1, total: 4} {route: early, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 2} {route: early, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:06 +196 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +196 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: a time already passed today is asked about, never moved silently
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 1, total: 3} {route: early, tool: create_reminder, db: ok}
+00:06 +197 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +197 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: postpone by duration, by #id, and duplicates asked then picked by number
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: edit_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 1, total: 6} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: edit_task, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 2, total: 4} {route: early, tool: edit_task, db: ok}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 2} {route: early, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 1, total: 3} {route: early, tool: complete_task, db: ok}
+00:06 +198 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +198 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: notification flags: stripped from titles, disables beat enables, negation stays
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:06 +199 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +199 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: clock parsing rejects invalid times and stays calendar-safe
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:06 +200 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +200 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: model mutations need evidence: verb, matching item, same date
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: delete, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: delete, fallback: rejected_delete, route: rule_plan, tool: respond, db: none}
+00:06 +201 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +201 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: model claims of actions are neither streamed nor shown
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:06 +202 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +202 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: explicit "mark task" keeps its exact title
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:06 +203 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +203 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_routing_test.dart: durable preferences mentioning meetings are saved; plans are not
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, total: 2} {route: explicit_memory}
+turn timing ms: {route: 0, total: 2} {route: explicit_memory}
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:06 +204 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +205 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:06 +205 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_plan_acceptance_test.dart: postponing a late-created multiple reminder restores future lead alerts
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:06 +206 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +207 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +207 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) concurrent switches serialize
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+model load: {build: unknown, selected: qwen3-1.7b, active: qwen3-1.7b, load: loaded}
+00:07 +208 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +208 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/model_selection_test.dart: AppServices switching (mocked native channel) concurrent switches serialize
+model load: {build: unknown, selected: qwen3-0.6b, active: qwen3-0.6b, load: loaded}
+00:07 +209 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +210 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +211 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +212 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +213 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +214 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +215 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +216 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +217 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +218 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +219 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +220 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +220 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: the exact screenshot request
+turn timing ms: {route: 12, execution: 11, total: 34} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +221 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +221 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "Remind me in ten minutes to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +222 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +222 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "Remind me in ten minutes to call Mum"
+turn timing ms: {route: 2, execution: 2, total: 8} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +223 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +223 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "after 10 min remind me to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 3, total: 11} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +224 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +224 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me to call Mum 10 mins later"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 3, total: 8} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +225 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +225 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me in 2 hrs to take my tablets"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 2, total: 7} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +226 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +226 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me in an hour and a half to move the car"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 4, total: 9} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +227 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +227 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "set an alarm for half an hour from now to check the oven"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 2, total: 8} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +228 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +228 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: meeting start versus "5 minutes before"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +229 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +229 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: meeting start versus "5 minutes before"
+turn timing ms: {route: 2, execution: 4, total: 10} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +230 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +230 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: an event length is its end, not its start
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 5, total: 9} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:07 +231 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +231 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: optional meeting details never block creation
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 5, total: 13} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+turn timing ms: {route: 2, execution: 0, total: 7} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:07 +232 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +232 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a deadline for something unnamed creates nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +233 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +233 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a deadline for something unnamed creates nothing
+turn timing ms: {route: 1, execution: 0, total: 4} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:07 +234 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +234 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a named deadline is a task due then, never an alarm
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 1, total: 8} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_task, db: ok}
+00:07 +235 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +235 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "before 5pm" is a deadline: ask when to remind, keep title
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +236 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +237 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +237 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "before 5pm" is a deadline: ask when to remind, keep title
+turn timing ms: {route: 1, execution: 0, total: 7} {model: unavailable, fallback: engine_not_in_use, clarify: deadline_not_alert, route: rules, tool: respond, db: none}
+00:07 +238 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +238 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "before 5pm" is a deadline: ask when to remind, keep title
+turn timing ms: {route: 1, execution: 2, total: 6} {route: early, tool: create_reminder, db: ok}
+00:07 +239 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +239 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: tentative statements stay conversational
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +240 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +240 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: tentative statements stay conversational
+turn timing ms: {route: 1, execution: 0, total: 4} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:07 +241 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +241 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: negation never adds a reminder
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 5, total: 10} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, execution: 0, total: 4} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:07 +242 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +242 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: conflicting times ask which, then the answer completes it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +243 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +244 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +245 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +246 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +247 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +248 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +248 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: conflicting times ask which, then the answer completes it
+turn timing ms: {route: 1, execution: 0, total: 7} {model: unavailable, fallback: engine_not_in_use, clarify: temporal_conflict, route: rules, tool: respond, db: none}
+00:07 +249 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +250 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +250 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: conflicting times ask which, then the answer completes it
+turn timing ms: {route: 1, execution: 5, total: 9} {route: early, tool: create_reminder, db: ok}
+00:07 +251 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +252 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +252 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a statement with two times writes nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:07 +253 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +253 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a repeating interval is not a one-off
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +253 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: semantic slang capture invokes the model and writes SQLite
+turn timing ms: {route: 8, context: 9, execution: 5, total: 47} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+00:07 +254 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +254 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a repeating interval is not a one-off
+turn timing ms: {route: 1, execution: 0, total: 6} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:07 +254 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: tomorrow answer queries stored tasks rather than copying an old reply
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +255 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +255 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a cancelled question saves nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 4} {model: unavailable, fallback: engine_not_in_use, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 0, total: 3} {route: early, tool: respond, db: none}
+00:07 +256 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +256 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: tomorrow answer queries stored tasks rather than copying an old reply
+turn timing ms: {route: 1, context: 2, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, route: semantic, tool: list_tasks, db: ok}
+00:07 +256 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: an answer after restart uses its own submission time
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +257 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +257 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a model must not complete bring milk when the user bought milk
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +257 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: an answer after restart uses its own submission time
+turn timing ms: {route: 2, execution: 0, total: 5} {model: unavailable, fallback: engine_not_in_use, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 3, total: 7} {route: early, tool: create_reminder, db: ok}
+00:07 +258 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +258 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: the exact screenshot request
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +258 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a model must not complete bring milk when the user bought milk
+turn timing ms: {route: 1, context: 1, execution: 7, total: 16} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: complete, fallback: rejected_complete, route: rules, tool: complete_task, db: ok}
+00:07 +259 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +259 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a model cannot create a task from an explanatory question
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +260 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +260 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a model cannot create a task from an explanatory question
+turn timing ms: {route: 1, context: 1, execution: 0, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, fallback: rejected_create_task, route: rule_plan, tool: respond, db: none}
+00:07 +261 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +261 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: an omitted model range cannot remove the user requested tomorrow filter
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +261 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: the exact screenshot request
+turn timing ms: {route: 1, context: 3, execution: 6, total: 27} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:07 +262 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:07 +262 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "Remind me in ten minutes to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:07 +262 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: an omitted model range cannot remove the user requested tomorrow filter
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: list, route: semantic, tool: list_tasks, db: ok}
+00:07 +263 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +263 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: personal task queries cannot be answered by ungrounded chat prose
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +263 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "Remind me in ten minutes to call Mum"
+turn timing ms: {route: 1, context: 1, execution: 2, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +264 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +264 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "after 10 min remind me to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +264 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: personal task queries cannot be answered by ungrounded chat prose
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, route: semantic, tool: list_tasks, db: ok}
+00:08 +265 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +265 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a reassuring chat answer cannot bypass a fresh task query
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +265 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "after 10 min remind me to call Mum"
+turn timing ms: {route: 2, context: 1, execution: 3, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +266 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +266 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me to call Mum 10 mins later"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +266 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a reassuring chat answer cannot bypass a fresh task query
+turn timing ms: {route: 1, context: 1, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, route: semantic, tool: list_tasks, db: ok}
+00:08 +267 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +267 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: an explicit task date is retained even if the model omits when
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +267 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me to call Mum 10 mins later"
+turn timing ms: {route: 1, context: 1, execution: 2, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +268 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +268 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me in 2 hrs to take my tablets"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +268 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: an explicit task date is retained even if the model omits when
+turn timing ms: {route: 1, context: 1, execution: 1, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+00:08 +269 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +269 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a model cannot silently drop a second commitment
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +269 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me in 2 hrs to take my tablets"
+turn timing ms: {route: 1, context: 1, execution: 2, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +269 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: a model cannot silently drop a second commitment
+turn timing ms: {route: 2, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: respond, db: none}
+00:08 +270 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +271 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +271 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me in an hour and a half to move the car"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +271 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: an explicit reminder cannot become a silent task on a wrong model intent
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +272 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +272 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me in an hour and a half to move the car"
+turn timing ms: {route: 1, context: 1, execution: 3, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +273 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +273 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/semantic_acceptance_test.dart: an explicit reminder cannot become a silent task on a wrong model intent
+turn timing ms: {route: 1, context: 1, execution: 3, total: 11} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_reminder, db: ok}
+00:08 +273 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "set an alarm for half an hour from now to check the oven"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +274 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +274 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "set an alarm for half an hour from now to check the oven"
+turn timing ms: {route: 1, context: 1, execution: 2, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +275 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +275 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: meeting start versus "5 minutes before"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 3, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +276 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +276 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: an event length is its end, not its start
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 4, total: 9} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_reminder, db: ok}
+00:08 +277 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +277 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: optional meeting details never block creation
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 2, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, fallback: rejected_create_task, route: rule_plan, tool: respond, db: none}
+00:08 +278 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +278 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a deadline for something unnamed creates nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, clarify: deadline_target, route: semantic, tool: respond, db: none}
+00:08 +279 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +279 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a named deadline is a task due then, never an alarm
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +280 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +281 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +282 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +282 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a named deadline is a task due then, never an alarm
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+00:08 +283 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +284 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +284 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "before 5pm" is a deadline: ask when to remind, keep title
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:08 +285 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +286 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +287 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +288 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +288 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "before 5pm" is a deadline: ask when to remind, keep title
+turn timing ms: {route: 1, context: 0, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: deadline_not_alert, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 1, total: 4} {route: early, tool: create_reminder, db: ok}
+00:08 +289 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +289 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: tentative statements stay conversational
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 1, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: tentative, route: semantic, tool: respond, db: none}
+00:08 +290 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +290 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: negation never adds a reminder
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 2, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: respond, db: none}
+00:08 +291 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +291 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: conflicting times ask which, then the answer completes it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, context: 1, execution: 0, total: 8} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 3, total: 7} {route: early, tool: create_reminder, db: ok}
+00:08 +292 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +292 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a statement with two times writes nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 7} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+00:08 +293 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +293 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a repeating interval is not a one-off
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: model_when_unresolved, route: semantic, tool: respond, db: none}
+00:08 +294 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +294 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a cancelled question saves nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 2} {route: early, tool: respond, db: none}
+00:08 +295 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +295 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: an answer after restart uses its own submission time
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 2, total: 6} {route: early, tool: create_reminder, db: ok}
+00:08 +296 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +296 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: slow model: time resolves against submission, not completion
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 4, total: 12} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +297 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +297 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: cancel during inference writes nothing; the next turn works
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, total: 4} {}
+turn timing ms: {route: 1, context: 1, execution: 3, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:08 +298 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +299 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +300 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +300 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/tasks_page_test.dart: widget refresh failure after a saved create offers no retry
+widget refresh failed: PlatformException(widget_error, null, null, null)
+00:08 +300 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: the screenshot recall request includes undated pending commitments
+turn timing ms: {route: 3, context: 2, execution: 1, total: 17} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: list_tasks, db: ok}
+00:08 +301 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +301 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: the eggs and bread conversation stores tasks and recalls the related errand
+turn timing ms: {route: 1, context: 0, execution: 0, total: 3} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: create_task, db: ok}
+00:08 +302 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +302 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: both screenshot calculations bypass the model and never create tasks
+turn timing ms: {route: 0, execution: 0, total: 1} {route: early, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 0} {route: early, tool: respond, db: none}
+00:08 +303 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +303 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: a reminder draft survives an unrelated arithmetic question
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 0} {route: early, tool: respond, db: none}
+00:08 +303 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/tasks_page_test.dart: widget refresh failure after a saved create offers no retry
+widget refresh failed: PlatformException(widget_error, null, null, null)
+00:08 +303 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: a reminder draft survives an unrelated arithmetic question
+turn timing ms: {route: 2, execution: 1, total: 3} {route: early, tool: create_reminder, db: ok}
+00:08 +304 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +305 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +305 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: an explanation request cannot execute a model-proposed deletion
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rule_plan, tool: respond, db: none}
+00:08 +306 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +307 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +307 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/pa_acceptance_test.dart: relative postponement keeps the selected task and uses a validated time
+turn timing ms: {route: 0, context: 0, execution: 0, total: 1} {model: invalid, prompt: plan-v1:8fe00ad5e6c8, fallback: invalid_plan, route: rules, tool: edit_task, db: ok}
+00:08 +308 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:08 +309 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +310 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +311 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +312 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +313 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +314 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +315 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +316 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +317 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +318 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +319 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:09 +320 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following assertion was thrown running a test:
+The finder "Found 2 widgets with type "ListTile" descending from widgets with type "ChatSidebar": [
+  ListTile(onTap: Closure: () => void, selected: true, dependencies: [Directionality,
+InheritedCupertinoTheme, _InheritedTheme, _LocalizationsScope-[GlobalKey#4d4e5]]),
+  ListTile(onTap: Closure: () => void, dependencies: [Directionality, InheritedCupertinoTheme,
+_InheritedTheme, _LocalizationsScope-[GlobalKey#4d4e5]]),
+]" (used in a call to "tap()") ambiguously found multiple matching widgets. The "tap()" method needs
+a single target.
+
+When the exception was thrown, this was the stack:
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2100:7)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.<anonymous closure> (file:///Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart:121:18)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+The test description was:
+  initial chat, send, new chat, switch with history, delete
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:09 +320 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: add write failure keeps the sheet honest and recoverable
+00:09 +320 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete [E]
+  Test failed. See exception logs above.
+  The test description was: initial chat, send, new chat, switch with history, delete
+  
+00:09 +321 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: add readback failure keeps the sheet honest and recoverable
+00:09 +322 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: add missing row failure keeps the sheet honest and recoverable
+00:09 +323 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: add memory validates content and category then reads saved rows
+00:09 +324 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: refresh token reloads memories and the externally edited profile
+00:10 +325 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: memories load failure shows retry instead of invented data
+00:10 +326 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: profile load failure shows retry instead of invented data
+00:10 +327 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: search and category filters are local and reversible
+00:10 +328 -2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/memories_page_test.dart: renders repository memories and truthful local context
+00:10 +329 -2: Some tests failed.
+
+Failing tests:
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes

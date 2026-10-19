@@ -32,11 +32,30 @@ void main() {
                 activeLabel: model06b.label,
                 fellBack: true,
                 onTap: () {}))));
-    expect(find.text('Using ${model06b.label}'), findsOneWidget);
+    expect(find.text('Loaded · ${model06b.label}'), findsOneWidget);
     expect(
         find.text(
             'Fell back from selected model. RAM/latency not measured on this device.'),
         findsOneWidget);
     expect(find.text('Details'), findsOneWidget);
+  });
+  testWidgets('narrow display distinguishes resident model from last answer',
+      (t) async {
+    t.view.physicalSize = const Size(320, 740);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.resetPhysicalSize);
+    addTearDown(t.view.resetDevicePixelRatio);
+    await t.pumpWidget(MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+            body: ModelStatusView(
+                modelState: ModelState.ready,
+                load: ModelLoad.loaded,
+                activeLabel: model06b.label,
+                lastAnswerSource: 'Built-in assistant logic',
+                onTap: () {}))));
+    expect(find.text('Last answer: Built-in assistant logic'), findsOneWidget);
+    expect(find.text('Loaded · ${model06b.label}'), findsOneWidget);
+    expect(t.takeException(), isNull);
   });
 }

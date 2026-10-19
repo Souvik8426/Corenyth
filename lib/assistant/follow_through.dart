@@ -1,5 +1,6 @@
 import '../data/repos.dart';
 import 'rule_engine.dart';
+import 'temporal.dart';
 import 'tools.dart' show friendlyTime, fullDate;
 
 /// Pure readers for the event lifecycle (meeting details, completion, outcome,
@@ -164,7 +165,7 @@ final _progress = _ci(
     r"\b(?:has(?:n'?t| not)|have(?:n'?t| not)|did(?:n'?t| not)|is(?:n'?t| not)|"
     r'replied|responded|answered|got back|gotten back|confirmed|agreed|declined|refused|said|says|'
     r'told me|waiting (?:on|for)|no (?:reply|response|answer|word)|busy|unavailable|out of office|'
-    r'on leave|sick|cancell?ed|postponed|rescheduled|delayed|still)\b');
+    r"on leave|sick|cancell?ed|postponed|rescheduled|delayed|still|halfway|couldn'?t make it|missed)\b");
 
 /// "Aditya hasn't replied": news about existing work, not a new commitment
 /// and not a question. The session links it to a task or asks which one.
@@ -320,23 +321,25 @@ List<Task> named(Iterable<Task> candidates, String text) {
   ];
 }
 
-final _leadRe = _ci(
-    r'\b(\d{1,4}|an?|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty)'
-    r'\s*(minutes?|mins?|m|hours?|hrs?|h)\s+(?:before(?:hand)?|ahead|early|earlier|prior)\b'
-    r'(?:\s+(?:it|that|the start))?');
-
-/// "remind me 15 minutes before …": a one-item early-alert offset that
-/// never touches the saved preferences. [text] is returned without it.
-({int minutes, String text})? leadOverride(String text) {
+/// "remind me 15 minutes before …", "half an hour before": a one-item
+/// early-alert offset that never touches the saved preferences, as the
+/// shared resolver reads it. [text] is returned without it.
+({int minutes, String text})? leadOverride(String text, DateTime now) {
   if (!_ci(r'\bremind\b').hasMatch(text)) return null;
-  final m = _leadRe.firstMatch(text);
-  if (m == null) return null;
-  final d = RuleEngine.parseDuration('${m.group(1)} ${m.group(2)}');
-  if (d == null || d.inMinutes < 1 || d.inMinutes > 1440) return null;
+  final r = Temporal.read(text, now);
+  final s = r.spans
+      .where((s) => s.relation == TemporalRelation.before && s.amount != null)
+      .firstOrNull;
+  final d = s?.amount;
+  if (s == null || d == null || d.inMinutes < 1 || d.inMinutes > 1440) {
+    return null;
+  }
+  final i = text.indexOf(s.text);
+  if (i < 0) return null;
   final rest = text
-      .replaceRange(m.start, m.end, ' ')
-      .replaceFirst(_ci(r'[\s,]*(?:and\s+)?remind me[\s.!]*$'), '')
+      .replaceRange(i, i + s.text.length, ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'[\s,.!]+$'), '')
       .trim();
   return (minutes: d.inMinutes, text: rest);
 }
@@ -459,6 +462,7 @@ String reviewText(ReviewAgenda a, DateTime now,
 }
 
 final _actionClaim = _ci(
+    r"\b(?:i|we)(?:'ll| will)\s+(?:check|follow up|remind|notify|schedule|book|call|send)\b|"
     r"\bi(?:'ve| have|'ll| will| just| already)?\s+(?:already\s+|just\s+|now\s+|also\s+)?"
     r'(?:set|added|created|scheduled|saved|deleted|removed|completed|marked|cancell?ed|updated|'
     r'reminded|postponed|moved|rescheduled|sent|messaged|emailed|texted|called|contacted|told|'

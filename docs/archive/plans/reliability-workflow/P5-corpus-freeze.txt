@@ -1,0 +1,5 @@
+single-turn: 102 dev + 34 held-out = 136; multi-turn: 23
+by category (all/held-out): scheduling 31/6, updates 19/4, lists 15/4, progress 14/4, memory 14/4, ambiguity 15/4, negation 14/4, chat 14/4
+by source: gap_report 4, plan_matrix 22, synthetic 78, user_history 55
+expected kinds: answer 20, clarify 18, reply 31, write 67
+OK

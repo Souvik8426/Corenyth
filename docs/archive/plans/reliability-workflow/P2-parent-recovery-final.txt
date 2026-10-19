@@ -1,0 +1,298 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart
+00:00 +0: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: production session factory journals and replays an operation
+00:00 +1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: production session factory journals and replays an operation
+00:00 +1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Authorization Audit question marks alone do not suppress explicit polite action requests
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: production session factory journals and replays an operation
+00:00 +2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Authorization Audit informational questions are classified as questions and forbid writes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +3: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: production session factory journals and replays an operation
+00:00 +3: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Authorization Audit hypothetical and tentative inputs forbid writes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +3: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: production session factory journals and replays an operation
+turn timing ms: {route: 7, execution: 7, total: 41} {op: parent-composition-op, interpreter: legacy, auth: request, model: unavailable, fallback: engine_not_in_use, route: rules, route_id: rules, validation: ok, tool: create_task, db: ok, receipt: committed, model_calls: 0p0r, build: unknown, selected: qwen3-0.6b, active: none, load: idle}
+turn timing ms: {total: 0} {op: parent-composition-op, route: retry_replay, model_calls: 0p0r, build: unknown, selected: qwen3-0.6b, active: none, load: idle}
+00:00 +4: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart: startup recovery preserves the committed reminder time after clock advances
+00:00 +4: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: session journal and replay persists across AppServices and session reconstruction
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +5: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart: startup recovery preserves the committed reminder time after clock advances
+00:00 +5: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Authorization Audit negations forbid writes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +5: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart: startup recovery preserves the committed reminder time after clock advances
+turn timing ms: {route: 11, execution: 4, total: 28} {op: restart-committed-time, interpreter: unified, auth: request, model: unavailable, fallback: engine_not_in_use, route: rules, route_id: rules, validation: ok, tool: create_reminder, db: ok, receipt: replayed, alarm: scheduled, model_calls: 0p0r}
+00:00 +5 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: session journal and replay persists across AppServices and session reconstruction
+00:00 +6 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: session journal and replay persists across AppServices and session reconstruction
+00:00 +6 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Authorization Audit statements and factual reports permit writes/reports appropriately
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +6 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart: startup recovery preserves the committed reminder time after clock advances [E]
+  Expected: DateTime:<2099-10-19 10:10:00.000>
+    Actual: DateTime:<2099-10-19 10:15:00.000>
+  the receipt must report the saved time, not submission + a fresh duration: Okay, I'll remind you today (Mon 19 Oct) at 10:15 AM: take medicine.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/p2_restart_time_regression_test.dart 56:5      main.<fn>
+  
+00:00 +6 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: session journal and replay persists across AppServices and session reconstruction
+turn timing ms: {route: 1, execution: 2, total: 11} {op: cross-reconstruction-op, interpreter: legacy, auth: request, model: unavailable, fallback: engine_not_in_use, route: rules, route_id: rules, validation: ok, tool: create_task, db: ok, receipt: committed, model_calls: 0p0r, build: unknown, selected: qwen3-0.6b, active: none, load: idle}
+turn timing ms: {total: 0} {op: cross-reconstruction-op, route: retry_replay, model_calls: 0p0r, build: unknown, selected: qwen3-0.6b, active: none, load: idle}
+00:00 +7 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Authorization Audit statements and factual reports permit writes/reports appropriately
+00:00 +8 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: crashed executing operation recovers across service reconstruction without duplicates
+00:00 +8 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Validation Gate & No Unintended Writes validatePlan rejects write actions when authorization is question, hypothetical, or negated
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +8 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: crashed executing operation recovers across service reconstruction without duplicates
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +9 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: crashed executing operation recovers across service reconstruction without duplicates
+00:00 +9 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Validation Gate & No Unintended Writes validatePlan rejects create actions missing title or time evidence
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +9 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: crashed executing operation recovers across service reconstruction without duplicates
+turn timing ms: {route: 0, execution: 1, total: 3} {op: crashed-recon-op, interpreter: legacy, auth: request, route: retry_recover, validation: ok, tool: create_task, db: ok, receipt: replayed, model_calls: 0p0r, build: unknown, selected: qwen3-0.6b, active: none, load: idle}
+00:00 +10 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Validation Gate & No Unintended Writes validatePlan rejects create actions missing title or time evidence
+00:00 +10 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: startup crash reconciliation does not abandon operations active in another engine or within timeout
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +11 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: startup crash reconciliation does not abandon operations active in another engine or within timeout
+00:00 +11 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Validation Gate & No Unintended Writes validatePlan rejects change actions missing target evidence
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +12 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: startup crash reconciliation does not abandon operations active in another engine or within timeout
+00:00 +12 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Validation Gate & No Unintended Writes end-to-end: ungrounded model write proposal on question input never mutates database
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +13 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Validation Gate & No Unintended Writes end-to-end: ungrounded model write proposal on question input never mutates database
+turn timing ms: {route: 3, context: 3, execution: 1, total: 25} {op: 14bxndwmtc0-1jnkmxf, interpreter: legacy, auth: question, model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, fallback: rejected_create_task, route: rule_plan, route_id: rulePlan, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 1p0r}
+00:00 +14 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Rollout / Rollback Contract: Dual Interpreters & Read-Only Comparison internal interpreter switch configures legacy and unified routes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +15 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Rollout / Rollback Contract: Dual Interpreters & Read-Only Comparison compareInterpreters runs both interpreters read-only on fixtures without writes or model reply calls
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +16 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Rollout / Rollback Contract: Dual Interpreters & Read-Only Comparison exactly one executor writes: running a turn under unified interpreter executes writes only via ToolExecutor
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 4, total: 11} {op: 14bxndwmtc0-ixeh6a, interpreter: unified, auth: request, model: called, prompt: plan-v2:06f3ccc3a9f7, intent: chat, fallback: rejected_chat, route: rules, route_id: rules, validation: ok, tool: create_reminder, db: ok, receipt: committed, alarm: scheduled, model_calls: 1p0r}
+00:00 +17 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Receipts & Operation Identity each accepted action has exactly one route, validated evidence and one receipt
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 1, total: 7} {op: 14bxndwmtc0-qykn9n, interpreter: unified, auth: request, model: called, prompt: plan-v2:06f3ccc3a9f7, intent: chat, fallback: rejected_chat, route: rules, route_id: rules, validation: ok, tool: create_reminder, db: ok, receipt: committed, alarm: scheduled, model_calls: 1p0r}
+00:00 +18 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Receipts & Operation Identity receipt statuses: committed, replayed, readOnly, noWrite
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 6} {op: 14bxndwmtc0-1gjq993, interpreter: unified, auth: request, model: called, prompt: plan-v2:06f3ccc3a9f7, intent: chat, fallback: rejected_chat, route: rules, route_id: rules, validation: ok, tool: create_task, db: ok, receipt: committed, model_calls: 1p0r}
+turn timing ms: {route: 0, execution: 0, total: 3} {op: 14bxndwmtc0-w0m9h6, interpreter: unified, auth: request, route: follow_through, route_id: briefing, validation: ok, tool: briefing, db: ok, receipt: readOnly, model_calls: 0p0r}
+turn timing ms: {route: 0, execution: 0, total: 1} {op: 14bxndwmtc0-149mz0c, interpreter: unified, auth: question, route: early, route_id: calculator, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 0p0r}
+00:00 +19 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Retry, Crash Recovery & Idempotency retry of a completed turn replays reply without duplicating tasks or alarms
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 2, total: 7} {op: 14bxndwmtc0-16att4x, interpreter: unified, auth: request, model: called, prompt: plan-v2:06f3ccc3a9f7, intent: chat, fallback: rejected_chat, route: rules, route_id: rules, validation: ok, tool: create_reminder, db: ok, receipt: committed, alarm: scheduled, model_calls: 1p0r}
+turn timing ms: {total: 0} {op: 14bxndwmtc0-16att4x, route: retry_replay, model_calls: 0p0r}
+00:00 +20 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Retry, Crash Recovery & Idempotency recovering a turn after execution crash finishes journaled action and marks replayed on committed rows
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {op: crashed-op-123, interpreter: unified, auth: request, route: retry_recover, validation: ok, tool: create_task, db: ok, receipt: replayed, model_calls: 0p0r}
+00:00 +21 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Retry, Crash Recovery & Idempotency retrying with a different message for the same operationId throws ArgumentError
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 2, total: 8} {op: 14bxndwmtc0-3prouh, interpreter: legacy, auth: request, model: called, prompt: plan-v1:8fe00ad5e6c8, intent: chat, fallback: rejected_chat, route: rules, route_id: rules, validation: ok, tool: create_reminder, db: ok, receipt: committed, alarm: scheduled, model_calls: 1p0r}
+turn timing ms: {total: 0} {model_calls: 0p0r}
+00:00 +22 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Bounded Model Calls & Deduplication identical greedy output is not retried within a turn
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {op: 14bxndwmtc0-1iwp83n, interpreter: unified, auth: statement, model: called, prompt: plan-v2:06f3ccc3a9f7, intent: chat, reply: fallback, route: semantic, route_id: semantic, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 1p1r}
+00:00 +23 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Inventoried Route Priority & Parity calculator route takes precedence over rules and model
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {op: 14bxndwmtc0-6gxx4k, interpreter: unified, auth: statement, route: early, route_id: calculator, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 0p0r}
+00:00 +24 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Inventoried Route Priority & Parity explicit memory route takes highest priority and stores memory
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {op: 14bxndwmtc0-uhvwyq, interpreter: unified, auth: request, route: explicit_memory, route_id: explicitMemory, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 0p0r}
+00:00 +25 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Inventoried Route Priority & Parity daily schedule route creates daily recurring task with exact confirmation
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 2, total: 6} {op: 14bxndwmtc0-44cv6x, interpreter: unified, auth: request, route: follow_through, route_id: dailySchedule, validation: ok, tool: create_daily, db: ok, receipt: committed, alarm: scheduled, model_calls: 0p0r}
+00:00 +26 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 Inventoried Route Priority & Parity complaint route re-answers previous turn without writing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 4} {op: 14bxndwmtc0-1b1pqkk, interpreter: unified, auth: question, model: called, prompt: plan-v2:06f3ccc3a9f7, intent: chat, reply: fallback, route: semantic, route_id: semantic, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 1p1r}
+turn timing ms: {route: 1, execution: 0, total: 2} {op: 14bxndwmtc0-1tibg1q, interpreter: unified, auth: statement, reply: fallback, route: complaint, route_id: complaint, validation: ok, tool: respond, db: none, receipt: noWrite, model_calls: 0p1r}
+00:00 +27 -1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_architecture_test.dart: P2 v7 Database Migration & Backward Compatibility v7 migration preserves legacy tasks and reminders with null op_id
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +28 -1: Some tests failed.
+
+Failing tests:
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart: startup recovery preserves the committed reminder time after clock advances

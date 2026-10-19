@@ -44,3 +44,10 @@ flutter_launcher_icons:
   adaptive_icon_foreground: branding/corenyth-logo.png
   adaptive_icon_foreground_inset: 20
   min_sdk_android: 24
+
+hooks:
+  user_defines:
+    sqlite3:
+      source:
+        macos: system
+        default: sqlite3

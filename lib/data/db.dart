@@ -5,11 +5,18 @@ import 'package:sqflite/sqflite.dart';
 /// (see WidgetProvider.kt), so keep the file name and the tasks columns stable.
 const dbFileName = 'assistant.db';
 
-Future<Database> openAppDb({String? path, bool singleInstance = false}) async {
+/// Current schema version. Every upgrade is additive (see each `_create…`).
+const dbVersion = 8;
+
+/// [version] below [dbVersion] only for migration tests (e.g. a v6 file).
+Future<Database> openAppDb(
+    {String? path,
+    bool singleInstance = false,
+    int version = dbVersion}) async {
   path ??= p.join(await getDatabasesPath(), dbFileName);
   // Each Flutter engine needs its own connection; recovering another engine's
   // single-instance connection can roll back an in-flight transaction.
-  return openDatabase(path, version: 6, singleInstance: singleInstance,
+  return openDatabase(path, version: version, singleInstance: singleInstance,
       onConfigure: (db) async {
     await db.execute('PRAGMA foreign_keys = ON');
   }, onCreate: (db, _) async {
@@ -37,7 +44,9 @@ Future<Database> openAppDb({String? path, bool singleInstance = false}) async {
       content TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'fact',
       importance REAL NOT NULL DEFAULT 0.5,
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-      last_accessed_at INTEGER, embedding BLOB)''');
+      last_accessed_at INTEGER, embedding BLOB,
+      op_id TEXT, source TEXT, status TEXT NOT NULL DEFAULT 'active',
+      superseded_by INTEGER)''');
     // FTS4 (not FTS5): guaranteed in every Android SQLite build.
     await db.execute(
         'CREATE VIRTUAL TABLE memories_fts USING fts4(content, tokenize=unicode61)');
@@ -53,6 +62,8 @@ Future<Database> openAppDb({String? path, bool singleInstance = false}) async {
     await _createAssistantPreferences(db);
     await _createPending(db);
     await _createFollowThrough(db);
+    await _createOperations(db);
+    await _createMemoryProvenance(db);
   }, onUpgrade: (db, oldVersion, newVersion) async {
     if (oldVersion < 2) await _createProfileTable(db);
     if (oldVersion < 3) {
@@ -61,8 +72,46 @@ Future<Database> openAppDb({String? path, bool singleInstance = false}) async {
     }
     if (oldVersion < 4) await _createAssistantPreferences(db);
     if (oldVersion < 5) await _createPending(db);
-    if (oldVersion < 6) await _createFollowThrough(db);
+    if (oldVersion < 6 && newVersion >= 6) await _createFollowThrough(db);
+    if (oldVersion < 7 && newVersion >= 7) await _createOperations(db);
+    if (oldVersion < 8 && newVersion >= 8) await _createMemoryProvenance(db);
   });
+}
+
+/// v8 memory provenance, status, and superseding support. Additive columns.
+Future<void> _createMemoryProvenance(DatabaseExecutor db) async {
+  final columns = (await db.rawQuery('PRAGMA table_info(memories)'))
+      .map((row) => row['name'])
+      .toSet();
+  for (final entry in {
+    'op_id': 'TEXT',
+    'source': 'TEXT',
+    'status': "TEXT NOT NULL DEFAULT 'active'",
+    'superseded_by': 'INTEGER',
+  }.entries) {
+    if (!columns.contains(entry.key)) {
+      await db.execute(
+          'ALTER TABLE memories ADD COLUMN ${entry.key} ${entry.value}');
+    }
+  }
+}
+
+/// v7 durable operation identity (see OperationJournal). Additive only:
+/// `tasks.op_id` / `reminders.op_id` name the submitted turn whose write
+/// created the row, in the same insert, so a retry after a crash finds the
+/// committed rows instead of writing them again. `operations` journals each
+/// submitted turn (status, the validated action for crash recovery, and its
+/// receipt); `text_hash` is a SHA-256 prefix, never the message. Old rows keep
+/// null op ids; the widget's `tasks(title,status,due_at)` read is unchanged.
+Future<void> _createOperations(DatabaseExecutor db) async {
+  await db.execute('ALTER TABLE tasks ADD COLUMN op_id TEXT');
+  await db.execute('ALTER TABLE reminders ADD COLUMN op_id TEXT');
+  await db.execute('CREATE INDEX tasks_op ON tasks(op_id)');
+  await db.execute('CREATE INDEX reminders_op ON reminders(op_id)');
+  await db.execute('CREATE TABLE operations(op_id TEXT PRIMARY KEY, '
+      'chat_id TEXT NOT NULL, text_hash TEXT NOT NULL, status TEXT NOT NULL, '
+      'action TEXT, receipt TEXT, '
+      'created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)');
 }
 
 /// v6 follow-through. Only nullable columns and new tables, so old rows and

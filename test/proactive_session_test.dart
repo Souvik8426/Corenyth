@@ -21,6 +21,7 @@ class _Qwen extends LlmEngine {
   final prompts = <Prompt>[];
   String reply = '{"type":"respond","text":"Sounds like Aditya is busy. '
       'Want a reminder to nudge him, or should we move the client meeting?"}';
+  String plan = '{"intent":"chat","reply":"Okay!"}';
   @override
   String get name => 'qwen-standin';
   @override
@@ -30,9 +31,7 @@ class _Qwen extends LlmEngine {
   @override
   Future<String> complete(Prompt p) async {
     prompts.add(p);
-    return p.kind == PromptKind.reply
-        ? reply
-        : '{"intent":"chat","reply":"Okay!"}';
+    return p.kind == PromptKind.reply ? reply : plan;
   }
 }
 
@@ -245,10 +244,52 @@ void main() {
       'Should I remind myself daily at 8am?',
     ]) {
       await s.handle(t);
+      // Strengthened: verify every turn produces no-write receipts.
+      expect(s.lastTurn?.receipts.any((r) => r.wrote) ?? false, isFalse,
+          reason: 'turn "$t" must not write');
+    }
+    // Baseline state assertions preserved:
+    expect((await tasks.list()).map((t) => t.title), ['call Aditya Rao']);
+    expect(await reminders.upcoming(), isEmpty);
+    expect(await PendingRepo(db).get('a'), isNull,
+        reason: 'no pending clarification or pick created');
+
+    // Investigation of baseline obligation:
+    // The previous assertion `expect(model.prompts.where((p) => p.kind == PromptKind.reply), isEmpty)`
+    // was a stale implementation-coupled expectation assuming non-actions avoid the reply model.
+    // However, conversational queries (e.g. "Has Aditya replied?") legitimately route through chat
+    // to generate conversational prose via PromptKind.reply without mutating state.
+    //
+    // Strengthened behavioral coverage: Even if the model proposes an explicit write action
+    // (e.g. create_reminder) for a question, hypothetical, or negation, validation must block it.
+    final maliciousQwen = _Qwen();
+    maliciousQwen.plan =
+        '{"intent":"create_reminder","title":"stretch","when":"tomorrow at 8am"}';
+    final s2 = AssistantSession(
+      engine: maliciousQwen,
+      tools: tools(),
+      memory: FakeMemory(),
+      profile: ProfileRepo(db),
+      taskRepo: tasks,
+      conversations: ConversationRepo(db),
+      pending: PendingRepo(db),
+      conversationId: 'malicious-test',
+      clock: () => _now,
+    );
+    await s2.start();
+    for (final t in [
+      "Don't remind me tomorrow at 8am to stretch",
+      "What if I need a reminder tomorrow at 8am to stretch?",
+      "Should I set a reminder tomorrow at 8am to stretch?",
+    ]) {
+      final reply = await s2.handle(t);
+      expect(reply, isNotEmpty);
+      expect(s2.lastTurn?.receipts.any((r) => r.wrote) ?? false, isFalse,
+          reason: 'model proposal must not write for non-authorized input "$t"');
     }
     expect((await tasks.list()).map((t) => t.title), ['call Aditya Rao']);
     expect(await reminders.upcoming(), isEmpty);
-    expect(model.prompts.where((p) => p.kind == PromptKind.reply), isEmpty);
+    await s2.close();
   });
 
   test('a daily reminder until a named date confirms the exact date and year',

@@ -1,0 +1,723 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart
+00:00 +0: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart: model unavailable: rules alone schedule submission + 10 minutes
+turn timing ms: {route: 9, execution: 2, total: 18} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: duration forms, short units, word numbers and word order agree
+00:00 +1: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart: valid Qwen extraction ("within 10 mins") schedules the same
+turn timing ms: {route: 0, context: 1, execution: 0, total: 12} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +2: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: duration forms, short units, word numbers and word order agree
+00:00 +3: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: calendar forms and disclosed defaults are unchanged
+00:00 +4: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: "within" is the event being that close, unless it is a deadline
+00:00 +5: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: lead time, event length and recurrence keep their own roles
+00:00 +6: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: conflicting times are reported, never first-match
+00:00 +7: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: whole-message problems outrank any valid part
+00:00 +8: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: non-durations stay text
+00:00 +9: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: parseDuration keeps postpone/lead amounts and adds natural forms
+00:00 +10: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_test.dart: the rules route the screenshot and word-order variants identically
+00:00 +11: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: the exact screenshot request
+00:00 +11: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 2 weeks at 5pm to call Mum
+turn timing ms: {route: 7, execution: 0, total: 18} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +12: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: the exact screenshot request
+00:00 +12: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me every 2 hours at 5pm to drink water
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +12: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: the exact screenshot request
+turn timing ms: {route: 10, execution: 8, total: 26} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +12: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me every 2 hours at 5pm to drink water
+turn timing ms: {route: 3, execution: 0, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +13: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: the exact screenshot request
+00:00 +13: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 10 minutes on 30 February to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +14: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 10 minutes on 30 February to call Mum
+00:00 +14: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "Remind me in ten minutes to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +14: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 10 minutes on 30 February to call Mum
+turn timing ms: {route: 2, execution: 0, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +15: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "Remind me in ten minutes to call Mum"
+00:00 +15: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 1 hour and 2 hours to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +15: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "Remind me in ten minutes to call Mum"
+turn timing ms: {route: 1, execution: 1, total: 6} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +16: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 1 hour and 2 hours to call Mum
+00:00 +16: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "after 10 min remind me to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +16: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 1 hour and 2 hours to call Mum
+turn timing ms: {route: 2, execution: 0, total: 6} {model: unavailable, fallback: engine_not_in_use, clarify: temporal_conflict, route: rules, tool: respond, db: none}
+00:00 +17: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "after 10 min remind me to call Mum"
+00:00 +17: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me tomorrow Friday at 5pm to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +17: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "after 10 min remind me to call Mum"
+turn timing ms: {route: 2, execution: 1, total: 6} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +18: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me tomorrow Friday at 5pm to call Mum
+00:00 +18: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me to call Mum 10 mins later"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +18: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me tomorrow Friday at 5pm to call Mum
+turn timing ms: {route: 1, execution: 0, total: 4} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +19: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me to call Mum 10 mins later"
+00:00 +19: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 2 weeks at 5pm to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +19: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me to call Mum 10 mins later"
+turn timing ms: {route: 1, execution: 1, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +20: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 2 weeks at 5pm to call Mum
+00:00 +20: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me in 2 hrs to take my tablets"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 1, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +21: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 2 weeks at 5pm to call Mum
+00:00 +21: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me in an hour and a half to move the car"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +21: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 2 weeks at 5pm to call Mum
+turn timing ms: {route: 1, context: 3, execution: 0, total: 15} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +22: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me in an hour and a half to move the car"
+00:00 +22: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me every 2 hours at 5pm to drink water
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +22: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "remind me in an hour and a half to move the car"
+turn timing ms: {route: 0, execution: 1, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +23: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me every 2 hours at 5pm to drink water
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +23: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "set an alarm for half an hour from now to check the oven"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +24: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "set an alarm for half an hour from now to check the oven"
+00:00 +24: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 10 minutes on 30 February to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +24: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "set an alarm for half an hour from now to check the oven"
+turn timing ms: {route: 1, execution: 1, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +24: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 10 minutes on 30 February to call Mum
+turn timing ms: {route: 1, context: 0, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +25: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 10 minutes on 30 February to call Mum
+00:00 +26: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: meeting start versus "5 minutes before"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +26: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 1 hour and 2 hours to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+00:00 +27: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: meeting start versus "5 minutes before"
+turn timing ms: {route: 1, execution: 3, total: 7} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +27: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me tomorrow Friday at 5pm to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +28: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me tomorrow Friday at 5pm to call Mum
+00:00 +28: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "half an hour before" is the lead the resolver read
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +28: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me tomorrow Friday at 5pm to call Mum
+turn timing ms: {route: 1, context: 0, execution: 0, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+00:00 +29: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "half an hour before" is the lead the resolver read
+turn timing ms: {route: 1, execution: 2, total: 6} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +30: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me in a week to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +31: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me in 30 seconds to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +32: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me every week at 5pm to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +33: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me weekly at 5pm to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +34: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me at 5pm next week to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +35: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me in 10 minutes and 20 minutes to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 4} {model: unavailable, fallback: engine_not_in_use, clarify: temporal_conflict, route: rules, tool: respond, db: none}
+00:00 +36: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: no partial schedule: "remind me today Friday at 5pm to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +37: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: an event length is its end, not its start
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 2, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +38: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: optional meeting details never block creation
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 2, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +39: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a deadline for something unnamed creates nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +40: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a named deadline is a task due then, never an alarm
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 1, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_task, db: ok}
+00:00 +41: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: "before 5pm" is a deadline: ask when to remind, keep title
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, clarify: deadline_not_alert, route: rules, tool: respond, db: none}
+turn timing ms: {route: 2, execution: 1, total: 5} {route: early, tool: create_reminder, db: ok}
+00:00 +42: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: tentative statements stay conversational
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +43: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: negation never adds a reminder
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 1, total: 4} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +44: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: conflicting times ask which, then the answer completes it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, clarify: temporal_conflict, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 2, total: 3} {route: early, tool: create_reminder, db: ok}
+00:00 +45: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a statement with two times writes nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +46: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a repeating interval is not a one-off
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +47: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: a cancelled question saves nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 1} {route: early, tool: respond, db: none}
+00:00 +48: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: Qwen unavailable: an answer after restart uses its own submission time
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {model: unavailable, fallback: engine_not_in_use, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 1, total: 3} {route: early, tool: create_reminder, db: ok}
+00:00 +49: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: the exact screenshot request
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 2, execution: 2, total: 15} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +50: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "Remind me in ten minutes to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 1, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +51: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "after 10 min remind me to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +52: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me to call Mum 10 mins later"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +53: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me in 2 hrs to take my tablets"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +54: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "remind me in an hour and a half to move the car"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +55: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "set an alarm for half an hour from now to check the oven"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 1, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +56: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: meeting start versus "5 minutes before"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 2, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +57: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "half an hour before" is the lead the resolver read
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 2, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +58: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me in a week to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +59: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me in 30 seconds to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +60: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me every week at 5pm to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +61: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me weekly at 5pm to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +62: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me at 5pm next week to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +63: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me in 10 minutes and 20 minutes to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+00:00 +64: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: no partial schedule: "remind me today Friday at 5pm to call Mum"
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+00:00 +65: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: an event length is its end, not its start
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 2, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_reminder, db: ok}
+00:00 +66: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: optional meeting details never block creation
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, context: 1, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, fallback: rejected_create_task, route: rule_plan, tool: respond, db: none}
+00:00 +67: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a deadline for something unnamed creates nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, clarify: deadline_target, route: semantic, tool: respond, db: none}
+00:00 +68: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a named deadline is a task due then, never an alarm
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, route: semantic, tool: create_task, db: ok}
+00:00 +69: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: "before 5pm" is a deadline: ask when to remind, keep title
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: deadline_not_alert, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 1, total: 2} {route: early, tool: create_reminder, db: ok}
+00:00 +70: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: tentative statements stay conversational
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: tentative, route: semantic, tool: respond, db: none}
+00:00 +71: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: negation never adds a reminder
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 2} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: respond, db: none}
+00:00 +72: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: conflicting times ask which, then the answer completes it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 0, execution: 0, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 1, total: 3} {route: early, tool: create_reminder, db: ok}
+00:00 +73: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a statement with two times writes nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_task, clarify: temporal_conflict, route: semantic, tool: respond, db: none}
+00:00 +74: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a repeating interval is not a one-off
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: unsupported_date, route: semantic, tool: respond, db: none}
+00:00 +75: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: a cancelled question saves nothing
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 1} {route: early, tool: respond, db: none}
+00:00 +76: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: valid Qwen extraction: an answer after restart uses its own submission time
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: no_time_found, route: semantic, tool: respond, db: none}
+turn timing ms: {route: 0, execution: 2, total: 3} {route: early, tool: create_reminder, db: ok}
+00:00 +77: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: slow model: time resolves against submission, not completion
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +78: /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_session_test.dart: cancel during inference writes nothing; the next turn works
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, total: 2} {}
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +79: All tests passed!

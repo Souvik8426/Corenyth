@@ -1,3 +1,4 @@
+import 'ui/model_loading_indicator.dart';
 import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
@@ -767,6 +768,7 @@ class _ChatPageState extends State<ChatPage> {
           _scrollToEnd();
         }
       });
+      widget.services.recordTurn(current);
       if (mounted) {
         // '' = cancelled before any reply: drop the streamed draft, add nothing.
         setState(() {
@@ -1043,15 +1045,19 @@ class _ModelSetupCardState extends State<ModelSetupCard>
           ]));
     if (widget.compact)
       return ListenableBuilder(
-          listenable: Listenable.merge(
-              [widget.services.modelLoad, widget.services.modelNote]),
+          listenable: Listenable.merge([
+            widget.services.modelLoad,
+            widget.services.modelNote,
+            widget.services.lastAnswerSource
+          ]),
           builder: (context, _) => ModelStatusView(
               modelState: s,
               load: widget.services.modelLoad.value,
               onTap: _showDetails,
               selectedLabel: widget.services.selectedModel.label,
               activeLabel: widget.services.activeModel?.label,
-              fellBack: widget.services.modelNote.value != null));
+              fellBack: widget.services.modelNote.value != null,
+              lastAnswerSource: widget.services.lastAnswerSource.value));
     if (s == null) return const SizedBox.shrink();
     final sv = widget.services;
     final want = sv.selectedModel;
@@ -1070,6 +1076,11 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                               style: Theme.of(context).textTheme.headlineSmall),
                           const SizedBox(height: 12),
                           Text('Selected: ${want.label}'),
+                          if (sv.lastAnswerSource.value != null)
+                            Text('Last answer: ${sv.lastAnswerSource.value}'),
+                          if (sv.modelFailure != null)
+                            Text(
+                                'Load issue: ${sv.modelFailure}. Retry loading; if it persists, check the model file and available memory.'),
                           Text(
                               'Active: ${load == ModelLoad.loaded ? sv.activeModel?.label ?? 'local model' : 'built-in rules'}'),
                           if (sv.modelNote.value != null)
@@ -1174,13 +1185,7 @@ class ModelLoadDialog extends StatelessWidget {
             canPop: !busy,
             child: AlertDialog(
               icon: busy
-                  ? const Center(
-                      heightFactor: 1,
-                      child: SizedBox.square(
-                          dimension: 40,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 3,
-                              semanticsLabel: 'Loading local model')))
+                  ? const ModelLoadingIndicator()
                   : v == ModelLoad.loaded
                       ? const Icon(Icons.check_circle,
                           color: AppColors.success, size: 40)

@@ -18,7 +18,10 @@ class _Memory extends MemoryRepo {
   _Memory(super.db);
   @override
   Future<int> add(String content,
-          {String category = 'fact', double importance = 0.5}) async =>
+          {String category = 'fact',
+          double importance = 0.5,
+          String? opId,
+          String? source}) async =>
       1;
   @override
   Future<List<Memory>> search(String query, {int limit = 3}) async => [];
@@ -203,7 +206,7 @@ void main() {
     expect(await s.handle("don't remind me to call Bob tomorrow"),
         contains("won't save"));
     expect(
-        await s.handle('Am I done with buy milk?'), contains("didn't change"));
+        await s.handle('Am I done with buy milk?'), allOf(contains('buy milk'), contains('still pending')));
     await s.handle('I finished it');
     expect((await tasks.list()).length, 2,
         reason: 'no completion from an invented id');

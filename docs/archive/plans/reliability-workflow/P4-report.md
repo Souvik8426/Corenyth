@@ -1,0 +1,15 @@
+# P4 — response and health repairs
+
+The baseline already constrained the model loader to 40×40. The new `ModelLoadingIndicator` keeps that geometry but replaces the changing indeterminate arc with a constant arc rotating linearly, adds round caps and a subtle track, honors reduced-motion settings, and exposes a loading label without pretending the decorative arc is measured progress. Its widget test checks the geometry across animation frames, then success, failure and retry. The status banner says Loaded and separately labels the last answer's source. Details retain selected/resident labels and a load-failure code with recovery guidance. A narrow 320px display test checks source visibility and overflow.
+
+Confirmations remain tied to executor receipts, scheduler permission/retry state, and persisted rows. Only the final validated response reaches the chat stream. Complaints remain read-only; operation replay cannot create duplicate reminders. Error logging no longer prints follow-through exceptions that may contain SQL arguments. The main-chat test now selects its exact keyed row and still exercises send, switching, deletion, preserved tasks and notification navigation.
+
+A real Qwen reference run exposed a grammar/parser mismatch: both v1 and v2 grammars allowed arbitrary optional fields for every intent while the parser rejected irrelevant fields. Both grammars now have one branch per intent, with only that intent's allowed fields. Parser strictness and app-side authorization checks remain intact. Prompt fingerprints change with this grammar repair. This corrects the implementation against the existing plan; it does not promote the unified interpreter before its rollout gates.
+
+The final P5 report records full-suite and native output results. The reference evaluator uses the same tokenization, GBNF and greedy sampler as Android, without an additional chat template.
+
+
+Development evaluation follow-up: deterministic grounding now covers completion-state queries, checking whether an older task exists, same-clock calendar moves, explicit discarded-obligation confirmation, unresolved “get rid of” targets, vague scheduling windows and third-party completion/cancellation reports. A “no need to…” prefix is preserved by authorization instead of being stripped as conversational filler. No ungrounded model day filter or action title can replace user evidence. The added regressions exercise hostile model plans and actual persisted state. Final full-suite count is recorded in P5.
+
+
+Final wording review found and repaired three missed conversational routes: partial work (“halfway”), a missed activity, and a hypothetical cancellation misread as memory recall. These routes now acknowledge the named task or possibility without changing its date/status. Confirmation questions for remove/cancel/complete preserve their intended action through typed pending picks. The final candidate is frozen after these development fixes; held-out inputs and expectations remain uninspected during tuning.

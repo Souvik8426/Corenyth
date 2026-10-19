@@ -1,0 +1,30 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart
+00:00 +0: model unavailable: rules alone schedule submission + 10 minutes
+turn timing ms: {route: 5, execution: 0, total: 9} {model: unavailable, fallback: engine_not_in_use, clarify: rules_missing_time, route: rules, tool: respond, db: none}
+00:00 +0 -1: model unavailable: rules alone schedule submission + 10 minutes [E]
+  Expected: an object with length of <1>
+    Actual: []
+     Which: has length of <0>
+  reply was: When should I remind you about "meeting within 10 mins"? I understand today, tomorrow, tonight, weekdays like Monday, dates like 5 November or 2026-11-05, morning/afternoon/evening (9 AM / 3 PM / 7 PM), noon, "in 20 minutes", and times like 5pm.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/screenshot_within_test.dart 45:5               main.expectOneCleanReminder
+  
+00:00 +0 -1: valid Qwen extraction ("within 10 mins") schedules the same
+turn timing ms: {route: 0, context: 1, execution: 0, total: 10} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, clarify: model_when_unresolved, route: semantic, tool: respond, db: none}
+00:00 +0 -2: valid Qwen extraction ("within 10 mins") schedules the same [E]
+  Expected: an object with length of <1>
+    Actual: []
+     Which: has length of <0>
+  reply was: I couldn't read "within 10 mins" as a time. When should I remind you about "meeting"? I understand today, tomorrow, tonight, weekdays like Monday, dates like 5 November or 2026-11-05, morning/afternoon/evening (9 AM / 3 PM / 7 PM), noon, "in 20 minutes", and times like 5pm.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/screenshot_within_test.dart 45:5               main.expectOneCleanReminder
+  
+00:00 +0 -2: Some tests failed.
+
+Failing tests:
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart: model unavailable: rules alone schedule submission + 10 minutes
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/screenshot_within_test.dart: valid Qwen extraction ("within 10 mins") schedules the same

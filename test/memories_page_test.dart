@@ -36,7 +36,7 @@ class _Memories extends MemoryRepo {
 
   @override
   Future<int> add(String content,
-      {String category = 'fact', double importance = 0.5}) async {
+      {String category = 'fact', double importance = 0.5, String? opId, String? source}) async {
     if (failAdd) throw StateError('Write unavailable');
     final id = rows.isEmpty ? 1 : rows.last.id + 1;
     if (!ignoreAdd) rows.add(_memory(id, content, category));

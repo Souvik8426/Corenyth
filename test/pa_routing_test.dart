@@ -21,7 +21,10 @@ class _Memory extends MemoryRepo {
   _Memory(super.db);
   @override
   Future<int> add(String content,
-      {String category = 'fact', double importance = 0.5}) async {
+      {String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source}) async {
     items.add(content);
     return items.length;
   }

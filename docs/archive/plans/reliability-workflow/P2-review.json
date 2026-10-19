@@ -1,0 +1,17 @@
+{
+  "stage": "P2",
+  "decision": "accept",
+  "required_software_checks_passed": true,
+  "evidence": [
+    "docs/plans/reliability-workflow/P2-parent-review.md",
+    "docs/plans/reliability-workflow/P2-parent-final-targeted.txt",
+    "docs/plans/reliability-workflow/P2-accepted-analyze.txt",
+    "docs/plans/reliability-workflow/P2-accepted-legacy.txt",
+    "docs/plans/reliability-workflow/P2-accepted-unified.txt"
+  ],
+  "deferred_device_checks": [
+    "real native model accuracy and latency",
+    "actual alarm delivery and reboot/process lifecycle",
+    "multiple Flutter engine recovery beyond host tests"
+  ]
+}

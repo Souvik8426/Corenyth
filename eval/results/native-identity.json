@@ -1,0 +1,12 @@
+{
+  "model": "Qwen3-0.6B-Q4_0.gguf",
+  "sha256": "24ccc1cc08429fadd236268f920e965a376603479ca70f499be8930169c2159b",
+  "bytes": 382156160,
+  "source": "read-only copy of shared Documents/localmodels; no app database access",
+  "llama_commit": "f2918cabbffe8abf8e2a90c1c089085fa116c2cf",
+  "sampler": "GBNF then greedy; parse_special=true; context4096; threads4; CPU",
+  "limitations": [
+    "fresh context/load per invocation; no warm-prefix reuse",
+    "host CPU accuracy reference; no Android latency or notification delivery proof"
+  ]
+}

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../data/repos.dart';
 import '../services/reminder_scheduler.dart';
 import 'follow_through.dart' show briefingText;
+import 'turn_contract.dart';
 
 class ToolError implements Exception {
   final String message;
@@ -250,12 +251,18 @@ Map<String, Object?> _validate(String tool, Map<String, Object?> args) {
 }
 
 /// Executes validated tool calls against the local repos. This is the only
-/// place the assistant mutates app state ("model interprets, code acts").
+/// place the assistant mutates app state ("model interprets, code acts"):
+/// tasks, reminders, alarms, memories and the follow-through facts kept on
+/// tasks (details, outcomes, open questions, review participation). Each
+/// call reports what it did as an [ExecutionReceipt] ([run]).
 class ToolExecutor {
   final TaskRepo tasks;
   final ReminderRepo reminders;
   final MemoryRepo memory;
   final ReminderScheduler scheduler;
+
+  /// Evening-review participation (`review_answered`); null = not tracked.
+  final ReviewRepo? review;
 
   /// When set (the app), a reminder is saved as a task with a notification
   /// plan per these preferences; null keeps one standalone reminder.
@@ -267,20 +274,52 @@ class ToolExecutor {
   final DateTime Function() clock;
 
   ToolExecutor(this.tasks, this.reminders, this.memory, this.scheduler,
-      {this.onTasksChanged, DateTime Function()? clock, this.preferences})
+      {this.onTasksChanged,
+      DateTime Function()? clock,
+      this.preferences,
+      this.review})
       : clock = clock ?? DateTime.now;
 
-  Future<String> execute(ToolCall c) async {
+  /// [run]'s reply text.
+  Future<String> execute(ToolCall c) async => (await run(c)).reply;
+
+  /// Executes [c] and reports what it actually did. [operationId] (the
+  /// submitted turn, see OperationJournal) is stamped on created rows in the
+  /// same insert; a create already committed under it is found and reported
+  /// ([ReceiptStatus.replayed]) instead of being written again. [recovering]
+  /// finishes a journaled action after a crash: a completion, deletion or
+  /// cancellation that already took effect counts as done. Throws
+  /// [ToolError] when nothing (or a rolled-back attempt) was written.
+  Future<ExecutionReceipt> run(ToolCall c,
+      {String? operationId, bool recovering = false}) async {
+    final r = _Receipt(c.tool, operationId);
+    final reply = await _execute(c, r, recovering);
+    return r.build(reply);
+  }
+
+  Future<String> _execute(ToolCall c, _Receipt rec, bool recovering) async {
     final a = c.args;
+    final op = rec.op;
     switch (c.tool) {
       case 'respond':
         return a['text'] as String;
       case 'create_task':
-        final t = await tasks.create(a['title'] as String,
-            notes: a['notes'] as String?,
-            due: a['due'] as DateTime?,
-            priority: (a['priority'] as int?) ?? 1);
-        _changed();
+        final prior = op == null ? const <Task>[] : await tasks.byOperation(op);
+        final Task t;
+        if (prior.isNotEmpty) {
+          t = prior.first;
+          rec.status = ReceiptStatus.replayed;
+        } else {
+          t = await tasks.create(a['title'] as String,
+              notes: a['notes'] as String?,
+              due: a['due'] as DateTime?,
+              priority: (a['priority'] as int?) ?? 1,
+              opId: op);
+          _changed();
+        }
+        rec
+          ..taskIds = [t.id]
+          ..at = t.dueAt;
         return 'Added task ${t.title}'
             '${t.dueAt == null ? "" : ", due ${_when(t.dueAt!)}"}.'
             '${await _shoppingNudge(t)}';
@@ -300,30 +339,70 @@ class ToolExecutor {
         final t = (await tasks.get(id))!;
         final moved =
             alerts.isNotEmpty && (a['due'] != null || a['title'] != null);
+        final sync = await _sync();
+        rec
+          ..taskIds = [id]
+          ..reminderIds = [for (final r in await _alertsFor(id)) r.id]
+          ..at = t.dueAt
+          ..alarm = sync.isNotEmpty
+              ? AlarmStatus.pendingRetry
+              : moved
+                  ? AlarmStatus.scheduled
+                  : AlarmStatus.none;
         return 'Updated task #$id ${t.title}'
             '${a['due'] == null ? "" : ", now due ${_when(t.dueAt!)}"}.'
             '${moved ? " Its reminders moved with it." : ""}'
-            '${await _sync()}';
+            '$sync';
       case 'complete_task':
         final id = await _taskId(a);
         final t = await tasks.get(id);
+        if (recovering && t != null && t.done) {
+          rec
+            ..status = ReceiptStatus.replayed
+            ..taskIds = [id];
+          return 'Marked #$id ${t.title} done.';
+        }
         final alerts = await _alertsFor(id);
         if (t == null || !await tasks.complete(id))
           throw ToolError('No task #$id.');
         _changed();
+        final sync = await _sync();
+        rec
+          ..taskIds = [id]
+          ..reminderIds = [for (final r in alerts) r.id]
+          ..alarm = sync.isNotEmpty
+              ? AlarmStatus.pendingRetry
+              : alerts.isEmpty
+                  ? AlarmStatus.none
+                  : AlarmStatus.cancelled;
         return 'Nice, marked #$id ${t.title} done.'
             '${alerts.isEmpty ? "" : " I cancelled its remaining reminders."}'
-            '${await _sync()}';
+            '$sync';
       case 'delete_task':
         final id = await _taskId(a);
         final t = await tasks.get(id);
+        if (recovering && t == null) {
+          rec
+            ..status = ReceiptStatus.replayed
+            ..taskIds = [id];
+          return 'Deleted task #$id.';
+        }
         final alerts = await _alertsFor(id);
         if (t == null || !await tasks.delete(id))
           throw ToolError('No task #$id.');
         _changed();
+        final sync = await _sync();
+        rec
+          ..taskIds = [id]
+          ..reminderIds = [for (final r in alerts) r.id]
+          ..alarm = sync.isNotEmpty
+              ? AlarmStatus.pendingRetry
+              : alerts.isEmpty
+                  ? AlarmStatus.none
+                  : AlarmStatus.cancelled;
         return 'Deleted task #$id ${t.title}.'
             '${alerts.isEmpty ? "" : " Its reminders are cancelled too."}'
-            '${await _sync()}';
+            '$sync';
       case 'list_tasks':
         final l = await tasks.list(
             from: a['from'] as DateTime?,
@@ -348,7 +427,7 @@ class ToolExecutor {
                     }}')
                 .join('\n');
       case 'create_reminder':
-        return _createReminder(a);
+        return _createReminder(a, rec);
       case 'edit_reminder':
         final id = await _reminderId(a, 'target_title');
         final old = await reminders.get(id);
@@ -361,10 +440,17 @@ class ToolExecutor {
           throw ToolError('edit_reminder: nothing to change');
         }
         final task = old.taskId == null ? null : await tasks.get(old.taskId!);
+        rec
+          ..reminderIds = [id]
+          ..taskIds = [if (old.taskId != null) old.taskId!];
         if (task != null &&
             old.kind == 'reminder' &&
             task.dueAt == old.triggerAt) {
-          return _editPlan(id, task, a['title'] as String?, at);
+          final reply = await _editPlan(id, task, a['title'] as String?, at);
+          rec
+            ..at = at ?? task.dueAt
+            ..alarm = AlarmStatus.scheduled;
+          return reply;
         }
         final v = <String, Object?>{
           if (a['title'] != null) 'title': a['title'],
@@ -390,10 +476,20 @@ class ToolExecutor {
         }
         await reminders.synced(id);
         final r = (await reminders.get(id))!;
+        rec
+          ..at = r.triggerAt
+          ..alarm = AlarmStatus.scheduled;
         return 'Updated reminder #$id: ${r.title}, ${_when(r.triggerAt)}.';
       case 'cancel_reminder':
         final id = await _reminderId(a);
         final r = await reminders.get(id);
+        if (recovering && r != null && !r.enabled) {
+          rec
+            ..status = ReceiptStatus.replayed
+            ..reminderIds = [id]
+            ..alarm = AlarmStatus.cancelled;
+          return 'Cancelled reminder #$id ${r.title}.';
+        }
         if (r == null || !r.enabled) throw ToolError('No reminder #$id.');
         // Intent first: once disabled it is never re-armed, even if the
         // platform cancel below fails or the app dies (startup retries it).
@@ -405,6 +501,10 @@ class ToolExecutor {
         } else {
           ids = await reminders.cancelGroup(r);
         }
+        rec
+          ..reminderIds = ids
+          ..taskIds = [if (r.taskId != null) r.taskId!]
+          ..alarm = AlarmStatus.cancelled;
         try {
           for (final x in ids) {
             await scheduler.cancel(x);
@@ -425,36 +525,152 @@ class ToolExecutor {
         return briefingText(
             await tasks.list(), await reminders.upcoming(), clock());
       case 'create_daily':
-        return _createDaily(
-            a['title'] as String, a['minute'] as int, a['until'] as DateTime?);
+        return _createDaily(a['title'] as String, a['minute'] as int,
+            a['until'] as DateTime?, rec);
+      // Report writes (app-built, after validation): facts about existing
+      // work. Only the session's follow-through handlers build these.
+      case 'set_event_details':
+        return _setDetails(a, rec);
+      case 'record_outcome':
+        final id = a['id'] as int;
+        if (!await tasks.setOutcome(id, a['outcome'] as String)) {
+          throw ToolError(
+              'That task no longer exists, so I left everything as it was.');
+        }
+        await review?.answered(id);
+        rec.taskIds = [id];
+        return '';
+      case 'set_awaiting':
+        final id = a['id'] as int;
+        final q = a['question'] as String?;
+        if (q != null &&
+            q != TaskRepo.details &&
+            q != TaskRepo.outcomeQuestion) {
+          throw ToolError('set_awaiting: unknown question');
+        }
+        await tasks.setAwaiting(id, q);
+        rec.taskIds = [id];
+        return '';
+      case 'review_answered':
+        final id = a['id'] as int;
+        await review?.answered(id);
+        rec.taskIds = [id];
+        return '';
+      case 'save_memory':
+        final content = a['content'] as String;
+        if (recovering) {
+          try {
+            if ((await memory.all()).any((m) => m.content == content)) {
+              rec.status = ReceiptStatus.replayed;
+              return '';
+            }
+          } catch (_) {}
+        }
+        await memory.add(content,
+            category: a['category'] as String? ?? 'fact',
+            opId: rec.op,
+            source: a['source'] as String? ?? 'chat');
+        return '';
+      case 'delete_memory':
+        final id = a['id'];
+        if (id is int) {
+          await memory.delete(id);
+          return 'Deleted that memory.';
+        }
+        final query = a['query'] as String?;
+        if (query != null) {
+          final hits = await memory.search(query);
+          for (final h in hits) {
+            await memory.delete(h.id);
+          }
+          return 'Deleted memory.';
+        }
+        return '';
     }
     throw ToolError('unknown tool ${c.tool}');
+  }
+
+  /// Optional meeting end/subject ([TaskRepo.setEventDetails]); a known end
+  /// replaces the follow-up estimate. The reply says when the check-in is.
+  Future<String> _setDetails(Map<String, Object?> a, _Receipt rec) async {
+    final id = a['id'] as int;
+    final t = await tasks.get(id);
+    final start = t?.dueAt;
+    final end = a['ends_at'] as DateTime?, subject = a['subject'] as String?;
+    try {
+      if (t == null ||
+          !await tasks.setEventDetails(id, endsAt: end, subject: subject)) {
+        throw ToolError(
+            'That task no longer exists, so I left everything as it was.');
+      }
+    } on ArgumentError {
+      throw ToolError("That end time isn't after ${t!.title} starts "
+          '(${_when(start!)}). When does it end?');
+    }
+    await review?.answered(id);
+    final sync = await _sync();
+    final follow = (await reminders.upcoming())
+        .where((r) => r.taskId == id && r.kind == 'follow_up')
+        .firstOrNull;
+    rec
+      ..taskIds = [id]
+      ..at = end
+      ..alarm = sync.isNotEmpty
+          ? AlarmStatus.pendingRetry
+          : follow == null
+              ? AlarmStatus.none
+              : AlarmStatus.scheduled;
+    return [
+      'Got it: ${t.title}'
+          '${end == null ? '' : ' ends ${_when(end)}'}'
+          '${subject == null ? '' : '${end == null ? ' is' : ','} about $subject'}.',
+      if (a['note'] is String) a['note'] as String,
+      if (follow != null)
+        "I'll check in ${_when(follow.triggerAt)} to ask how it went.",
+      if (sync.isNotEmpty) sync.trim(),
+    ].join(' ');
   }
 
   /// A pending task reminded every day at [minute] (after midnight) until
   /// [until] (inclusive; null = until done). All or nothing: if its alarm
   /// can't be set, the task is removed again.
-  Future<String> _createDaily(String title, int minute, DateTime? until) async {
+  Future<String> _createDaily(
+      String title, int minute, DateTime? until, _Receipt rec) async {
     final now = clock();
+    String confirm(DateTime first) =>
+        "Okay, I'll remind you every day at ${_clock(first)}, starting ${_when(first)}, "
+        '${until == null ? 'until you mark it done' : 'until ${fullDate(until)}'}: $title.';
+    final op = rec.op;
+    final prior = op == null ? const <Task>[] : await tasks.byOperation(op);
+    if (prior.isNotEmpty && prior.first.dueAt != null) {
+      // Committed under this operation before a crash: report, don't repeat.
+      final t = prior.first;
+      await _sync();
+      rec
+        ..status = ReceiptStatus.replayed
+        ..taskIds = [t.id]
+        ..reminderIds = [for (final r in await reminders.forTask(t.id)) r.id]
+        ..at = t.dueAt
+        ..alarm = AlarmStatus.scheduled;
+      return confirm(t.dueAt!);
+    }
     for (final t in await tasks.byTitle(title)) {
       if (t.dailyMinute == minute) {
+        rec
+          ..status = ReceiptStatus.noWrite
+          ..taskIds = [t.id];
         return 'You already have that daily reminder: ${t.title}, every day at '
             '${_clock(DateTime(2000, 1, 1, minute ~/ 60, minute % 60))}.';
       }
     }
-    final t = await tasks.create(title);
-    final DateTime? first;
-    try {
-      first = await tasks.setDaily(t.id, minute, deadline: until, now: now);
-    } catch (_) {
-      await tasks.delete(t.id);
-      rethrow;
-    }
-    if (first == null) {
-      await tasks.delete(t.id);
+    // Task and alert in one transaction: no half-made daily task.
+    final made = await tasks.createDaily(title, minute,
+        deadline: until, now: now, opId: op);
+    if (made == null) {
       throw ToolError(
           'That end date leaves no day for a reminder, so I saved nothing.');
     }
+    final t = made.task, first = made.first;
     final mine = {for (final r in await reminders.forTask(t.id)) r.id};
     bool stuck;
     try {
@@ -471,13 +687,55 @@ class ToolExecutor {
           "I couldn't schedule that daily reminder, so it was not saved. Check notification and alarm permissions.");
     }
     _changed();
-    return "Okay, I'll remind you every day at ${_clock(first)}, starting ${_when(first)}, "
-        '${until == null ? 'until you mark it done' : 'until ${fullDate(until)}'}: $title.';
+    rec
+      ..taskIds = [t.id]
+      ..reminderIds = mine.toList()
+      ..at = first
+      ..alarm = await _alarm();
+    return confirm(first);
   }
 
-  Future<String> _createReminder(Map<String, Object?> a) async {
+  /// Scheduled, or saved but the phone won't deliver as asked.
+  Future<AlarmStatus> _alarm() async {
+    try {
+      if (await scheduler.deliveryIssue() != null) {
+        return AlarmStatus.permissionRequired;
+      }
+    } catch (_) {}
+    return AlarmStatus.scheduled;
+  }
+
+  Future<String> _createReminder(Map<String, Object?> a, _Receipt rec) async {
     final title = a['title'] as String, at = a['at'] as DateTime;
     final now = clock();
+    final op = rec.op;
+    final stamped =
+        op == null ? const <Reminder>[] : await reminders.byOperation(op);
+    if (stamped.isNotEmpty) {
+      // Committed under this operation before a crash: arm whatever is still
+      // pending and report it; nothing is written twice.
+      final primary = stamped.firstWhere((r) => r.kind == 'reminder',
+          orElse: () => stamped.first);
+      final sync = await _sync();
+      final inFuture = primary.triggerAt.isAfter(now);
+      rec
+        ..status = ReceiptStatus.replayed
+        ..taskIds = {
+          for (final r in stamped)
+            if (r.taskId != null) r.taskId!
+        }.toList()
+        ..reminderIds = [for (final r in stamped) r.id]
+        ..at = primary.triggerAt
+        ..alarm = sync.isNotEmpty
+            ? AlarmStatus.pendingRetry
+            : inFuture
+                ? await _alarm()
+                : AlarmStatus.none;
+      if (!inFuture) {
+        return 'That reminder was already saved for ${_when(primary.triggerAt)}: ${primary.title}.';
+      }
+      return await _confirm(primary.triggerAt, primary.title);
+    }
     if (!at.isAfter(now)) throw ToolError('Reminder time is in the past.');
     // App-built only: this item's own early-alert offsets (the saved
     // preferences stay as they are).
@@ -502,6 +760,11 @@ class ToolExecutor {
       if (r.kind == 'reminder' &&
           r.triggerAt == at &&
           normTitle(r.title) == want) {
+        rec
+          ..status = ReceiptStatus.noWrite
+          ..reminderIds = [r.id]
+          ..taskIds = [if (r.taskId != null) r.taskId!]
+          ..at = at;
         return 'You already have that reminder: ${r.title}, ${_when(at)}.';
       }
     }
@@ -511,7 +774,7 @@ class ToolExecutor {
     if (prefsRepo == null) {
       // Saved with a pending 'schedule' intent first, so an interrupted
       // schedule is retried at startup instead of silently lost.
-      final r = await reminders.create(title, at, taskId: tid);
+      final r = await reminders.create(title, at, taskId: tid, opId: op);
       try {
         await scheduler.schedule(r);
       } catch (_) {
@@ -519,6 +782,11 @@ class ToolExecutor {
         throw ToolError(failure);
       }
       await reminders.synced(r.id);
+      rec
+        ..reminderIds = [r.id]
+        ..taskIds = [if (tid != null) tid]
+        ..at = at
+        ..alarm = await _alarm();
       return '${await _confirm(at, r.title)}'
           '${lead == null ? '' : ' (Early alerts need a task-linked reminder, so this is a single alert.)'}';
     }
@@ -533,11 +801,13 @@ class ToolExecutor {
     final prior = tid == null
         ? const <int>[]
         : [for (final r in await reminders.forTask(tid)) r.id];
-    final saved =
-        await reminders.createPlan(title, at, plan, taskId: tid, intent: (
-      lead: multiple ? prefs.leadMinutes : const <int>[],
-      follow: followUp ? prefs.followUpMinutes : null,
-    ));
+    final saved = await reminders.createPlan(title, at, plan,
+        taskId: tid,
+        intent: (
+          lead: multiple ? prefs.leadMinutes : const <int>[],
+          follow: followUp ? prefs.followUpMinutes : null,
+        ),
+        opId: op);
     try {
       for (final r in saved) {
         await scheduler.schedule(r);
@@ -575,6 +845,11 @@ class ToolExecutor {
       throw ToolError(failure);
     }
     _changed();
+    rec
+      ..taskIds = [saved.first.taskId!]
+      ..reminderIds = [for (final r in saved) r.id]
+      ..at = at
+      ..alarm = await _alarm();
     final alerts = saved.where((r) => r.kind != 'follow_up').toList();
     final follow = saved.where((r) => r.kind == 'follow_up').firstOrNull;
     final expected = (multiple ? prefs.leadMinutes.length : 0) + 1;
@@ -712,6 +987,33 @@ class ToolExecutor {
         ? x.join()
         : '${x.take(x.length - 1).join(', ')} and ${x.last}';
   }
+}
+
+/// Filled in while a call runs; [build] freezes it.
+class _Receipt {
+  final String tool;
+  final String? op;
+  ReceiptStatus? status;
+  List<int> taskIds = const [], reminderIds = const [];
+  DateTime? at;
+  AlarmStatus alarm = AlarmStatus.none;
+  _Receipt(this.tool, this.op);
+
+  ExecutionReceipt build(String reply) => ExecutionReceipt(
+        tool: tool,
+        status: status ??
+            switch (familyOf(tool)) {
+              ActionFamily.reply => ReceiptStatus.noWrite,
+              ActionFamily.read => ReceiptStatus.readOnly,
+              _ => ReceiptStatus.committed,
+            },
+        operationId: op,
+        taskIds: taskIds,
+        reminderIds: reminderIds,
+        at: at,
+        alarm: alarm,
+        reply: reply,
+      );
 }
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:assistant/data/db.dart';
 import 'package:assistant/data/repos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,7 +30,29 @@ void main() {
       });
     });
     {
-      expect(await migrated.getVersion(), 6);
+      expect(await migrated.getVersion(), 8);
+      // v7 durable operation identity & data preservation:
+      final legacyTask =
+          (await migrated.query('tasks', where: "title = 'legacy'")).single;
+      expect(legacyTask['op_id'], isNull);
+      final legacyReminder =
+          (await migrated.query('reminders', where: "title = 'old'")).single;
+      expect(legacyReminder['op_id'], isNull);
+
+      // Home-screen widget tasks query preserves compatibility:
+      final widgetRows =
+          await migrated.query('tasks', columns: ['title', 'status', 'due_at']);
+      expect(widgetRows, isNotEmpty);
+
+      // Operations table and OperationJournal work correctly:
+      final journal = OperationJournal(migrated);
+      await journal.begin('op-v7', 'chat-v7', 'hash-v7');
+      final op = await journal.get('op-v7');
+      expect(op, isNotNull);
+      expect(op!.status, OperationJournal.started);
+      expect(op.chatId, 'chat-v7');
+      expect(op.textHash, 'hash-v7');
+
       final repo = ConversationRepo(migrated);
       final chats = await repo.listChats();
       expect(chats.single.id, 'old-chat');
@@ -64,5 +89,31 @@ void main() {
       expect(await reminders.upcoming(), isEmpty, reason: 'never re-armed');
     }
   });
-  // Fresh onCreate is not run here: the host FFI SQLite lacks FTS4 (Android has it).
+  test('fresh openAppDb onCreate and FTS probe', () async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    final dir = await Directory.systemTemp.createTemp('corenyth-probe-db');
+    final path = '${dir.path}/assistant.db';
+    try {
+      final db = await openAppDb(path: path);
+      final memRepo = MemoryRepo(db);
+      final id1 = await memRepo.add('User prefers short direct answers');
+      final id2 = await memRepo.add('User lives in Bangalore');
+      expect(id2, greaterThan(id1));
+      final hits = await memRepo.search('answers');
+      expect(hits.map((m) => m.content),
+          contains('User prefers short direct answers'));
+      await db.update('memories', {'content': 'User prefers concise answers'},
+          where: 'id = ?', whereArgs: [id1]);
+      final hits2 = await memRepo.search('concise');
+      expect(hits2.map((m) => m.content),
+          contains('User prefers concise answers'));
+      await memRepo.delete(id1);
+      final hits3 = await memRepo.search('concise');
+      expect(hits3, isEmpty);
+      await db.close();
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
 }

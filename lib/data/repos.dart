@@ -70,17 +70,26 @@ class TaskRepo {
   Future<void> Function()? onRemindersChanged;
   TaskRepo(this.db);
 
+  /// [opId]: the submitted turn creating it (see OperationJournal), stamped
+  /// in the same insert so a retry finds it ([byOperation]).
   Future<Task> create(String title,
-      {String? notes, DateTime? due, int priority = 1}) async {
+      {String? notes, DateTime? due, int priority = 1, String? opId}) async {
     final id = await db.insert('tasks', {
       'title': title,
       'notes': notes,
       'created_at': _now(),
       'due_at': due?.millisecondsSinceEpoch,
       'priority': priority,
+      if (opId != null) 'op_id': opId,
     });
     return (await get(id))!;
   }
+
+  /// Tasks created by operation [opId] (a committed write of that turn).
+  Future<List<Task>> byOperation(String opId) async => (await db.query('tasks',
+          where: 'op_id = ?', whereArgs: [opId], orderBy: 'id'))
+      .map(Task.new)
+      .toList();
 
   Future<Task?> get(int id) async {
     final r = await db.query('tasks', where: 'id = ?', whereArgs: [id]);
@@ -105,6 +114,61 @@ class TaskRepo {
         whereArgs: a,
         orderBy: 'due_at IS NULL, due_at, priority DESC, id');
     return r.map(Task.new).toList();
+  }
+
+  /// Retrieves tasks relevant to [text] before applying caps, including
+  /// explicitly referenced older or completed items. Bounded to [cap].
+  Future<List<Task>> relevantTasks(String text, {int cap = 10}) async {
+    final results = <int, Task>{};
+    // 1. Explicit ID references (e.g. #15, task 15)
+    final idMatches =
+        RegExp(r'(?:#|task\s+|id\s+)(\d+)\b', caseSensitive: false)
+            .allMatches(text);
+    for (final m in idMatches) {
+      final id = int.tryParse(m.group(1)!);
+      if (id != null) {
+        final t = await get(id);
+        if (t != null) results[t.id] = t;
+      }
+    }
+    final bare = RegExp(r'^\s*#?(\d+)\s*$').firstMatch(text.trim());
+    if (bare != null) {
+      final id = int.tryParse(bare.group(1)!);
+      if (id != null) {
+        final t = await get(id);
+        if (t != null) results[t.id] = t;
+      }
+    }
+
+    // 2. Keyword/term matches across all pending tasks
+    final allPending = await list();
+    final words = MemoryRepo.terms(text);
+    if (words.isNotEmpty) {
+      final scored = <Task, int>{};
+      for (final t in allPending) {
+        if (results.containsKey(t.id)) continue;
+        final tTerms = MemoryRepo.terms(t.title);
+        final hits = words.where(tTerms.contains).length;
+        if (hits > 0) scored[t] = hits;
+      }
+      final sortedScored = scored.keys.toList()
+        ..sort((a, b) => scored[b]!.compareTo(scored[a]!));
+      for (final t in sortedScored) {
+        results[t.id] = t;
+        if (results.length >= cap) break;
+      }
+    }
+
+    // 3. Fill remaining slots with upcoming pending tasks
+    if (results.length < cap) {
+      for (final t in allPending) {
+        if (!results.containsKey(t.id)) {
+          results[t.id] = t;
+          if (results.length >= cap) break;
+        }
+      }
+    }
+    return results.values.take(cap).toList();
   }
 
   /// Linked alerts follow the task in the same transaction (every caller:
@@ -319,36 +383,64 @@ class TaskRepo {
       throw ArgumentError('Invalid daily time.');
     final next = nextDaily(minute, now, deadline);
     if (next == null) return null;
-    final ok = await db.transaction((tx) async {
-      final t = await tx.query('tasks',
-          where: "id = ? AND status = 'pending'", whereArgs: [id]);
-      if (t.isEmpty) return false;
-      await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
-          where: 'task_id = ? AND enabled = 1', whereArgs: [id]);
-      await tx.update(
-          'tasks',
-          {
-            'recurrence': 'daily',
-            'daily_minute': minute,
-            'deadline_at': deadline?.millisecondsSinceEpoch,
-            'due_at': next.millisecondsSinceEpoch,
-            'alert_plan': (lead: const <int>[], follow: null).encode(),
-          },
-          where: 'id = ?',
-          whereArgs: [id]);
-      await tx.insert('reminders', {
-        'task_id': id,
-        'kind': 'reminder',
-        'title': t.first['title'],
-        'trigger_at': next.millisecondsSinceEpoch,
-        'enabled': 1,
-        'sync': 'schedule',
-      });
-      return true;
-    });
+    final ok = await db
+        .transaction((tx) => _daily(tx, id, minute, deadline, next, null));
     if (!ok) return null;
     await _synced();
     return next;
+  }
+
+  /// A new pending task [title] that is a daily reminder (see [setDaily]),
+  /// created with its alert in one transaction: no half-made daily task
+  /// survives a crash. Null = no occurrence before [deadline]; nothing saved.
+  Future<({Task task, DateTime first})?> createDaily(String title, int minute,
+      {DateTime? deadline, required DateTime now, String? opId}) async {
+    if (minute < 0 || minute >= 1440)
+      throw ArgumentError('Invalid daily time.');
+    final next = nextDaily(minute, now, deadline);
+    if (next == null) return null;
+    final id = await db.transaction((tx) async {
+      final id = await tx.insert('tasks', {
+        'title': title,
+        'created_at': _now(),
+        'priority': 1,
+        if (opId != null) 'op_id': opId,
+      });
+      await _daily(tx, id, minute, deadline, next, opId);
+      return id;
+    });
+    await _synced();
+    return (task: (await get(id))!, first: next);
+  }
+
+  Future<bool> _daily(Transaction tx, int id, int minute, DateTime? deadline,
+      DateTime next, String? opId) async {
+    final t = await tx.query('tasks',
+        where: "id = ? AND status = 'pending'", whereArgs: [id]);
+    if (t.isEmpty) return false;
+    await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
+        where: 'task_id = ? AND enabled = 1', whereArgs: [id]);
+    await tx.update(
+        'tasks',
+        {
+          'recurrence': 'daily',
+          'daily_minute': minute,
+          'deadline_at': deadline?.millisecondsSinceEpoch,
+          'due_at': next.millisecondsSinceEpoch,
+          'alert_plan': (lead: const <int>[], follow: null).encode(),
+        },
+        where: 'id = ?',
+        whereArgs: [id]);
+    await tx.insert('reminders', {
+      'task_id': id,
+      'kind': 'reminder',
+      'title': t.first['title'],
+      'trigger_at': next.millisecondsSinceEpoch,
+      'enabled': 1,
+      'sync': 'schedule',
+      if (opId != null) 'op_id': opId,
+    });
+    return true;
   }
 
   /// Moves a pending daily task to its next occurrence after [now]; missed
@@ -408,15 +500,20 @@ class ReminderRepo {
   /// With [taskId] this replaces the task's plan: its enabled alerts get a
   /// cancel intent and its due time becomes [at], in the same transaction.
   /// Undo with [restorePlan].
+  /// [opId] stamps the new task (or, with [taskId], the new alerts) with the
+  /// submitted turn in the same transaction (see [TaskRepo.byOperation]).
   Future<List<Reminder>> createPlan(
           String title, DateTime at, List<PlannedAlert> plan,
-          {int? taskId, AlertIntent intent = (lead: const [], follow: null)}) =>
+          {int? taskId,
+          AlertIntent intent = (lead: const [], follow: null),
+          String? opId}) =>
       db.transaction((tx) async {
         final id = taskId ??
             await tx.insert('tasks', {
               'title': title,
               'created_at': _now(),
               'due_at': at.millisecondsSinceEpoch,
+              if (opId != null) 'op_id': opId,
             });
         if (taskId != null) {
           await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
@@ -440,6 +537,7 @@ class ReminderRepo {
                 'trigger_at': p.at.millisecondsSinceEpoch,
                 'enabled': 1,
                 'sync': 'schedule',
+                if (opId != null) 'op_id': opId,
               };
               return Reminder(
                   {...values, 'id': await tx.insert('reminders', values)});
@@ -512,15 +610,31 @@ class ReminderRepo {
       };
 
   /// The row is saved with a pending 'schedule' intent; clear it with [synced].
-  Future<Reminder> create(String title, DateTime at, {int? taskId}) async {
+  Future<Reminder> create(String title, DateTime at,
+      {int? taskId, String? opId}) async {
     final id = await db.insert('reminders', {
       'title': title,
       'trigger_at': at.millisecondsSinceEpoch,
       'task_id': taskId,
       'sync': 'schedule',
+      if (opId != null) 'op_id': opId,
     });
     return (await get(id))!;
   }
+
+  /// Alerts (any state) created by operation [opId], earliest first.
+  Future<List<Reminder>> byOperation(String opId) async =>
+      (await db.query('reminders',
+              where: 'op_id = ?', whereArgs: [opId], orderBy: 'trigger_at'))
+          .map(Reminder.new)
+          .toList();
+
+  /// Every alert of task [taskId] in any state (receipts, recovery).
+  Future<List<Reminder>> allForTask(int taskId) async =>
+      (await db.query('reminders',
+              where: 'task_id = ?', whereArgs: [taskId], orderBy: 'trigger_at'))
+          .map(Reminder.new)
+          .toList();
 
   Future<Reminder?> get(int id) async {
     final r = await db.query('reminders', where: 'id = ?', whereArgs: [id]);
@@ -759,13 +873,22 @@ class ConversationRepo {
   /// The user's own messages from every chat sharing a word with [query],
   /// most shared words first, then newest: context is global, chats only
   /// organize display. The caller drops its current turn if already saved.
-  Future<List<Message>> relevant(String query, {int limit = 5}) async {
+  Future<List<Message>> relevant(String query,
+      {int limit = 5, int? excludeId}) async {
     final ts = MemoryRepo.terms(query);
     if (ts.isEmpty) return [];
+    final where = <String>[
+      "role = 'user'",
+      "(${ts.map((_) => 'content LIKE ?').join(' OR ')})",
+    ];
+    final args = <Object?>[for (final t in ts) '%$t%'];
+    if (excludeId != null) {
+      where.add('id != ?');
+      args.add(excludeId);
+    }
     final rows = await db.query('conversations',
-        where:
-            "role = 'user' AND (${ts.map((_) => 'content LIKE ?').join(' OR ')})",
-        whereArgs: [for (final t in ts) '%$t%'],
+        where: where.join(' AND '),
+        whereArgs: args,
         orderBy: 'id DESC',
         limit:
             200); // shortcut: scan the newest 200 hits; add FTS when chat search becomes slow.
@@ -790,14 +913,14 @@ class ConversationRepo {
   }
 
   /// Adds a message and creates/touches its chat row (title = first user message).
-  Future<void> add(String session, String role, String content) =>
+  Future<int> add(String session, String role, String content) =>
       db.transaction((tx) => _insert(tx, session, role, content));
 
-  static Future<void> _insert(
+  static Future<int> _insert(
       Transaction tx, String session, String role, String content,
       {int? taskId, String? kind}) async {
     final t = _now();
-    await tx.insert('conversations', {
+    final id = await tx.insert('conversations', {
       'session_id': session,
       'role': role,
       'content': content,
@@ -812,6 +935,7 @@ class ConversationRepo {
         "UPDATE chats SET updated_at = ?, title = CASE WHEN title = '' AND ? = 'user' "
         'THEN substr(?, 1, 60) ELSE title END WHERE id = ?',
         [t, role, content, session]);
+    return id;
   }
 
   /// Newest first.
@@ -838,10 +962,17 @@ class ConversationRepo {
       });
 
   /// Last [n] messages of the session, oldest first.
-  Future<List<Message>> recent(String session, {int n = 8}) async {
+  Future<List<Message>> recent(String session,
+      {int n = 8, int? excludeId}) async {
+    final where = <String>['session_id = ?'];
+    final args = <Object?>[session];
+    if (excludeId != null) {
+      where.add('id != ?');
+      args.add(excludeId);
+    }
     final r = await db.query('conversations',
-        where: 'session_id = ?',
-        whereArgs: [session],
+        where: where.join(' AND '),
+        whereArgs: args,
         orderBy: 'id DESC',
         limit: n);
     return r.reversed.map(Message._row).toList();
@@ -852,17 +983,127 @@ class Memory {
   final int id;
   final String content, category;
   final double importance;
+  final DateTime? createdAt, updatedAt, lastAccessedAt;
+  final String? opId, source, status;
+  final int? supersededBy;
+
   Memory(Map<String, Object?> r)
       : id = r['id'] as int,
         content = r['content'] as String,
         category = r['category'] as String,
-        importance = (r['importance'] as num).toDouble();
+        importance = (r['importance'] as num).toDouble(),
+        createdAt = _dt(r['created_at']),
+        updatedAt = _dt(r['updated_at']),
+        lastAccessedAt = _dt(r['last_accessed_at']),
+        opId = r['op_id'] as String?,
+        source = r['source'] as String?,
+        status = r['status'] as String? ?? 'active',
+        supersededBy = r['superseded_by'] as int?;
+
+  bool get isActive => status == 'active';
+
   @override
   String toString() => content;
 }
 
+class MemorySlot {
+  final String subject;
+  final String slot;
+  const MemorySlot(this.subject, this.slot);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MemorySlot &&
+          other.subject.toLowerCase() == subject.toLowerCase() &&
+          other.slot.toLowerCase() == slot.toLowerCase();
+
+  @override
+  int get hashCode => Object.hash(subject.toLowerCase(), slot.toLowerCase());
+
+  @override
+  String toString() => '$subject:$slot';
+}
+
+String _drinkAttribute(String value) {
+  if (value.contains('sugar') || value.contains('sweet')) return 'sugar';
+  if (value.contains('milk')) return 'milk';
+  if (RegExp(r'\b(?:hot|cold|iced)\b').hasMatch(value)) return 'temperature';
+  return 'kind';
+}
+
+MemorySlot? extractMemorySlot(String content) {
+  final c = content.trim().toLowerCase();
+  String subject = 'user';
+  String rest = c;
+
+  if (c.startsWith('user ')) {
+    subject = 'user';
+    rest = c.substring(5).trim();
+  } else if (c.startsWith("user's ")) {
+    subject = 'user';
+    rest = c.substring(7).trim();
+  } else if (c.startsWith('i ')) {
+    subject = 'user';
+    rest = c.substring(2).trim();
+  } else if (c.startsWith('my ')) {
+    subject = 'user';
+    rest = c.substring(3).trim();
+  } else {
+    final m = RegExp(
+            r'^([a-z]+)\s+(?:prefers?|likes?|loves?|hates?|dislikes?|lives?|works?)\b')
+        .firstMatch(c);
+    if (m != null) {
+      subject = m.group(1)!;
+      rest = c.substring(subject.length).trim();
+    } else {
+      return null;
+    }
+  }
+
+  // Answer/reply length or tone style (e.g. short answers, concise answers, detailed answers)
+  if (RegExp(r'\b(?:answers?|replies|responses?)\b').hasMatch(rest) &&
+      RegExp(r'\b(?:short|concise|brief|detailed|long|bullet)\b')
+          .hasMatch(rest)) {
+    return MemorySlot(subject, 'pref:answer_style');
+  }
+
+  // Tea preference
+  if (RegExp(r'\btea\b').hasMatch(rest) &&
+      RegExp(r'\b(?:prefers?|likes?|loves?|hates?|dislikes?|drinks?)\b')
+          .hasMatch(rest)) {
+    return MemorySlot(subject, 'pref:tea:${_drinkAttribute(rest)}');
+  }
+
+  // Coffee preference
+  if (RegExp(r'\bcoffee\b').hasMatch(rest) &&
+      RegExp(r'\b(?:prefers?|likes?|loves?|hates?|dislikes?|drinks?)\b')
+          .hasMatch(rest)) {
+    return MemorySlot(subject, 'pref:coffee:${_drinkAttribute(rest)}');
+  }
+
+  // Meeting time preference
+  if (RegExp(r'\bmeetings?\b').hasMatch(rest) &&
+      RegExp(r'\b(?:morning|afternoon|evening)\b').hasMatch(rest)) {
+    return MemorySlot(subject, 'pref:meeting_time');
+  }
+
+  // Residence
+  if (RegExp(r'\blives?\s+in\b').hasMatch(rest)) {
+    return MemorySlot(subject, 'location:residence');
+  }
+
+  // Occupation
+  if (RegExp(r'\bworks?\s+as\b').hasMatch(rest) ||
+      RegExp(r'\bjob\s+is\b').hasMatch(rest)) {
+    return MemorySlot(subject, 'profile:occupation');
+  }
+
+  return null;
+}
+
 class MemoryRepo {
-  final Database db;
+  final DatabaseExecutor db;
   MemoryRepo(this.db);
 
   static final _word = RegExp(r'[\p{L}\p{N}]{2,}', unicode: true);
@@ -896,37 +1137,99 @@ class MemoryRepo {
       .toSet()
       .toList();
 
-  /// Stores a memory; a same-terms duplicate just bumps importance.
+  /// Stores a memory; an explicit new preference supersedes its prior value;
+  /// an exact same-terms duplicate bumps importance.
   Future<int> add(String content,
-      {String category = 'fact', double importance = 0.5}) async {
+      {String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source}) async {
+    if (db is Database) {
+      return (db as Database).transaction((tx) => MemoryRepo(tx).add(content,
+          category: category,
+          importance: importance,
+          opId: opId,
+          source: source));
+    }
     content = content.trim();
-    final norm = (terms(content)..sort()).join(' ');
-    for (final r in await db
-        .query('memories', columns: ['id', 'content', 'importance'])) {
-      if ((terms(r['content'] as String)..sort()).join(' ') == norm) {
+    String normalized(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[.!?]+$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final norm = normalized(content);
+    // Deduplication check
+    for (final r in await db.query('memories',
+        columns: ['id', 'content', 'importance'], where: "status = 'active'")) {
+      if (normalized(r['content'] as String) == norm) {
         final imp = ((r['importance'] as num) + 0.1).clamp(0.0, 1.0);
-        await db.update('memories', {'importance': imp, 'updated_at': _now()},
-            where: 'id = ?', whereArgs: [r['id']]);
+        await db.update(
+            'memories',
+            {
+              'importance': imp,
+              'updated_at': _now(),
+              if (opId != null) 'op_id': opId,
+              if (source != null) 'source': source,
+            },
+            where: 'id = ?',
+            whereArgs: [r['id']]);
         return r['id'] as int;
       }
-    } // ponytail: O(n) dedupe scan, fine for thousands; use an FTS/embedding probe beyond that.
+    }
+
+    // Slot superseding check: new preference supersedes prior value for same subject & slot
+    final newSlot = extractMemorySlot(content);
+    final toSupersede = <int>[];
+    if (newSlot != null) {
+      for (final r in await db.query('memories',
+          columns: ['id', 'content'], where: "status = 'active'")) {
+        final existingContent = r['content'] as String;
+        final existingSlot = extractMemorySlot(existingContent);
+        if (existingSlot != null && existingSlot == newSlot) {
+          toSupersede.add(r['id'] as int);
+        }
+      }
+    }
+
     final t = _now();
-    return db.insert('memories', {
+    final newId = await db.insert('memories', {
       'content': content,
       'category': category,
       'importance': importance,
       'created_at': t,
       'updated_at': t,
+      'status': 'active',
+      if (opId != null) 'op_id': opId,
+      if (source != null) 'source': source,
     });
+    for (final oldId in toSupersede) {
+      await supersede(oldId, newId);
+    }
+    return newId;
   }
 
-  /// FTS match, re-ranked by term hits + importance + recency (30-day decay).
+  /// Supersedes a prior memory with [newId]: marks it superseded and removes
+  /// it from FTS so it leaves all retrieval and prompt contexts.
+  Future<void> supersede(int oldId, int newId) async {
+    await db.update(
+        'memories',
+        {
+          'status': 'superseded',
+          'superseded_by': newId,
+          'updated_at': _now(),
+        },
+        where: 'id = ?',
+        whereArgs: [oldId]);
+    await db.delete('memories_fts', where: 'docid = ?', whereArgs: [oldId]);
+  }
+
+  /// FTS match on active memories, re-ranked by term hits + importance + recency (30-day decay).
   Future<List<Memory>> search(String query, {int limit = 3}) async {
     final ts = terms(query);
     if (ts.isEmpty) return [];
     final rows = (await db.rawQuery(
             'SELECT m.* FROM memories m JOIN memories_fts f ON f.docid = m.id '
-            'WHERE memories_fts MATCH ?',
+            'WHERE memories_fts MATCH ? AND m.status = \'active\'',
             [ts.map((t) => '"$t"').join(' OR ')]))
         .toList();
     final now = _now();
@@ -946,20 +1249,52 @@ class MemoryRepo {
     return top.map(Memory.new).toList();
   }
 
-  Future<bool> delete(int id) async =>
-      await db.delete('memories', where: 'id = ?', whereArgs: [id]) > 0;
+  Future<bool> delete(int id) async {
+    await db.delete('memories_fts', where: 'docid = ?', whereArgs: [id]);
+    return await db.delete('memories', where: 'id = ?', whereArgs: [id]) > 0;
+  }
 
-  Future<List<Memory>> all() async =>
-      (await db.query('memories', orderBy: 'id DESC')).map(Memory.new).toList();
+  Future<List<Memory>> all() async => (await db.query('memories',
+          where: "status = 'active'", orderBy: 'id DESC'))
+      .map(Memory.new)
+      .toList();
 
   Future<List<Memory>> important({int limit = 3}) async {
-    final rows =
-        await db.query('memories', orderBy: 'importance DESC, updated_at DESC');
+    final rows = await db.query('memories',
+        where: "status = 'active'",
+        orderBy: 'importance DESC, updated_at DESC');
     return rows
         .map(Memory.new)
         .where((memory) => isUsefulPersonalMemory(memory.content))
         .take(limit)
         .toList();
+  }
+
+  /// Retrieves relevant active durable memories for injecting into planning
+  /// and conversation prompts (bounded, never all rows or static top-3).
+  Future<List<Memory>> relevantForContext(String query, {int limit = 3}) async {
+    final results = <int, Memory>{};
+    for (final m in await search(query, limit: limit)) {
+      if (m.isActive && isUsefulPersonalMemory(m.content)) {
+        results[m.id] = m;
+      }
+    }
+    if (results.length < limit) {
+      final prefs = (await db.query('memories',
+              where:
+                  "status = 'active' AND (category = 'preference' OR content LIKE '%prefer%')",
+              orderBy: 'importance DESC, updated_at DESC',
+              limit: limit))
+          .map(Memory.new)
+          .where((m) => m.isActive && isUsefulPersonalMemory(m.content));
+      for (final p in prefs) {
+        if (!results.containsKey(p.id)) {
+          results[p.id] = p;
+          if (results.length >= limit) break;
+        }
+      }
+    }
+    return results.values.take(limit).toList();
   }
 }
 
@@ -980,6 +1315,9 @@ class UserProfile {
 
 bool isUsefulPersonalMemory(String content) {
   final value = content.trim().toLowerCase();
+  if (RegExp(
+          r"\b(?:done with|finished|never replied|hasn't replied|tired|exhausted|got back|couldn't make|meeting is over)\b")
+      .hasMatch(value)) return false;
   if (value.contains('language model') ||
       value.contains('assistant that helps') ||
       value.contains('various tasks') ||
@@ -989,7 +1327,7 @@ bool isUsefulPersonalMemory(String content) {
   return RegExp(
     r'^(?:user\s+(?:is|works|lives|prefers|likes|loves|hates|dislikes|studies|uses|has|usually|normally|always|never)\b|'
     r"i\s+(?:(?:usually|normally|always|never)\s+)?(?:am|'m|work|live|prefer|like|love|hate|dislike|study|use)\b|"
-    r'i\s+have\s+(?:a|an|one|two|three|four|five)\b|my\s+(?:name|job|role|goal|preference)\s+is\b)',
+    r"i\s+have\s+(?:a|an|one|two|three|four|five)\b|my\s+(?:name|job|role|goal|preference|sister|brother|mother|father)\b|[a-z]+\s+(?:prefers?|likes?|loves?|hates?|dislikes?|lives?|works?)\b)",
   ).hasMatch(value);
 }
 
@@ -1191,6 +1529,129 @@ class PendingRepo {
 
   Future<void> clear(String chatId) => db.delete('pending_clarifications',
       where: 'chat_id = ?', whereArgs: [chatId]);
+
+  /// All open clarifications and picks across every chat, newest first.
+  Future<List<({String chatId, String draft, DateTime updatedAt})>>
+      allOpen() async {
+    final rows =
+        await db.query('pending_clarifications', orderBy: 'updated_at DESC');
+    return [
+      for (final r in rows)
+        (
+          chatId: r['chat_id'] as String,
+          draft: r['draft'] as String,
+          updatedAt:
+              DateTime.fromMillisecondsSinceEpoch(r['updated_at'] as int),
+        )
+    ];
+  }
+}
+
+/// One submitted assistant turn's durable identity (v7 `operations`).
+/// Statuses: started (message received; nothing written yet), executing (a
+/// validated write is about to run; [action] holds it), committed (the write
+/// finished; [receipt] holds its facts), replied / no_write (the turn's reply
+/// is final and stored in [receipt]), failed, abandoned (cancelled or
+/// interrupted before any write). No message text is stored, only a hash.
+class Operation {
+  final String id, chatId, textHash, status;
+  final String? action, receipt;
+  final DateTime createdAt, updatedAt;
+  Operation(Map<String, Object?> r)
+      : id = r['op_id'] as String,
+        chatId = r['chat_id'] as String,
+        textHash = r['text_hash'] as String,
+        status = r['status'] as String,
+        action = r['action'] as String?,
+        receipt = r['receipt'] as String?,
+        createdAt = _dt(r['created_at'])!,
+        updatedAt = _dt(r['updated_at'])!;
+}
+
+class OperationJournal {
+  final Database db;
+  final Set<String> _activeOps = {};
+
+  OperationJournal(this.db);
+
+  void registerActive(String id) => _activeOps.add(id);
+  void unregisterActive(String id) => _activeOps.remove(id);
+  bool isLocallyActive(String id) => _activeOps.contains(id);
+
+  static const started = 'started',
+      executing = 'executing',
+      committed = 'committed',
+      replied = 'replied',
+      noWrite = 'no_write',
+      failed = 'failed',
+      abandoned = 'abandoned';
+
+  Future<Operation?> get(String id) async {
+    final r = await db.query('operations', where: 'op_id = ?', whereArgs: [id]);
+    return r.isEmpty ? null : Operation(r.first);
+  }
+
+  /// Records a new submitted turn; an existing id is left as it is.
+  Future<void> begin(String id, String chatId, String textHash) => db.insert(
+      'operations',
+      {
+        'op_id': id,
+        'chat_id': chatId,
+        'text_hash': textHash,
+        'status': started,
+        'created_at': _now(),
+        'updated_at': _now(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore);
+
+  Future<void> mark(String id, String status,
+          {String? action, String? receipt}) =>
+      db.update(
+          'operations',
+          {
+            'status': status,
+            if (action != null) 'action': action,
+            if (receipt != null) 'receipt': receipt,
+            'updated_at': _now(),
+          },
+          where: 'op_id = ?',
+          whereArgs: [id]);
+
+  /// Startup: turns left `started`/`executing` by a crash are settled without
+  /// running anything. A write whose rows exist (stamped `op_id`) is
+  /// committed; anything else is abandoned only if it is not currently active
+  /// in memory or recently updated within [olderThan] (defaulting to 2 minutes
+  /// to avoid abandoning turns still computing in an engine).
+  /// Returns the ids settled.
+  Future<List<String>> recoverStale({
+    Duration olderThan = const Duration(minutes: 2),
+    Set<String>? activeOpIds,
+  }) async {
+    final cutoff =
+        olderThan == Duration.zero ? null : _now() - olderThan.inMilliseconds;
+    final out = <String>[];
+    for (final r in await db.query('operations',
+        where: 'status IN (?, ?)', whereArgs: [started, executing])) {
+      final id = r['op_id'] as String;
+      if (_activeOps.contains(id) ||
+          (activeOpIds != null && activeOpIds.contains(id))) {
+        continue;
+      }
+      final updated = r['updated_at'] as int;
+      if (cutoff != null && updated > cutoff) {
+        continue;
+      }
+      final rows = (await db.query('tasks',
+                  columns: ['id'], where: 'op_id = ?', whereArgs: [id]))
+              .length +
+          (await db.query('reminders',
+                  columns: ['id'], where: 'op_id = ?', whereArgs: [id]))
+              .length;
+      await mark(id, rows > 0 ? committed : abandoned);
+      out.add(id);
+    }
+    return out;
+  }
 }
 
 typedef ReviewAgenda = ({

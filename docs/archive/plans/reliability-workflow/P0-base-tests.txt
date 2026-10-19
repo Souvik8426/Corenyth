@@ -1,0 +1,292 @@
+00:00 +0: loading /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart
+00:00 +0: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a timed meeting gets alerts and an optional details question that survives detours, restart and chat switch, and replans the follow-up
+turn timing ms: {route: 9, execution: 9, total: 26} {model: unavailable, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, execution: 1, total: 5} {model: unavailable, tool: create_task, db: ok}
+turn timing ms: {route: 5, execution: 0, total: 6} {tool: respond, db: none}
+00:00 +1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a question about meeting details never changes its end time
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 3, total: 7} {model: unavailable, tool: create_reminder, db: ok}
+turn timing ms: {route: 0, execution: 0, total: 3} {model: unavailable, tool: respond, db: none}
+00:00 +2: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +2: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: early completion cancels the follow-up, asks how it went once, and stores the answer
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 3, total: 6} {model: unavailable, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, execution: 3, total: 6} {tool: complete_task, db: ok}
+turn timing ms: {route: 2, execution: 0, total: 4} {tool: respond, db: none}
+00:00 +3: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +3: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a completion that already says how it went is acknowledged, not asked again
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 2, total: 5} {model: unavailable, tool: create_reminder, db: ok}
+turn timing ms: {route: 1, execution: 2, total: 5} {tool: complete_task, db: ok}
+00:00 +4: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +4: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: an ordinary errand completion is not treated as a meeting
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 1, total: 5} {model: unavailable, tool: complete_task, db: ok}
+00:00 +5: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +5: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: the arrangement task stays separate from the attendance reminder
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 3, total: 7} {model: unavailable, tool: create_reminder, db: ok}
+00:00 +6: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +6: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a progress update in another chat links the right task through global context and is discussed, never turned into a task or a change
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 3, execution: 0, total: 4} {reply: model, tool: respond, db: none}
+00:00 +7: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +7: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: two Adityas: asks which; a model reply claiming an action falls back
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 2} {tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 2} {reply: fallback, tool: respond, db: none}
+00:00 +8: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +8: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 0, total: 4} {model: called, intent: chat, reply: model, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, intent: chat, reply: model, tool: respond, db: none}
+turn timing ms: {route: 1, context: 0, execution: 0, total: 3} {model: called, intent: chat, reply: model, tool: respond, db: none}
+turn timing ms: {route: 0, context: 0, execution: 0, total: 3} {model: called, intent: chat, tool: list_tasks, db: ok}
+00:00 +8 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +8 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes [E]
+  Expected: empty
+    Actual: WhereIterable<Prompt>:[
+              Instance of 'Prompt',
+              Instance of 'Prompt',
+              Instance of 'Prompt'
+            ]
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/proactive_session_test.dart 251:5              main.<fn>
+  
+00:00 +8 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a daily reminder until a named date confirms the exact date and year
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 2, total: 5} {tool: create_daily, db: ok}
+turn timing ms: {route: 0, execution: 0, total: 2} {tool: respond, db: none}
+00:00 +9 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +9 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: nudge mode schedules a timed errand without repeating remind me
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 2, total: 5} {model: unavailable, tool: create_reminder, db: ok}
+00:00 +10 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +10 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: an errand uses the evening review rather than an automatic hourly follow-up
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 1, total: 4} {model: unavailable, tool: create_reminder, db: ok}
+00:00 +11 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +11 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a new display chat can answer the global missing-time question
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 3} {model: unavailable, tool: respond, db: none}
+turn timing ms: {route: 1, execution: 1, total: 4} {tool: create_reminder, db: ok}
+00:00 +12 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +12 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a full name answers a person clarification naturally
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 2} {tool: respond, db: none}
+turn timing ms: {route: 0, execution: 0, total: 2} {tool: respond, db: none}
+00:00 +13 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +13 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: new progress during a clarification replaces the old news
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {tool: respond, db: none}
+turn timing ms: {route: 1, execution: 0, total: 3} {reply: model, tool: respond, db: none}
+00:00 +14 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +14 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: an evening review invites conversation even with no outstanding tasks
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +15 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +15 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: a task-specific early alert leaves the saved preferences alone
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 1, total: 4} {model: unavailable, tool: create_reminder, db: ok}
+00:00 +16 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +16 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: briefing groups overdue, today, upcoming and undated work with the next alert
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, execution: 0, total: 2} {tool: briefing, db: ok}
+00:00 +17 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +17 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: pure readers event titles and completions
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +18 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +18 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: pure readers meeting details resolve against the start
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +19 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +19 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: pure readers model replies must stay grounded prose
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +20 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+00:00 +20 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: pure readers the review text keeps ignored work without moving it
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+00:00 +21 -1: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+turn timing ms: {route: 43, execution: 28, total: 129} {model: unavailable, tool: create_task, db: ok}
+══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞════════════════════════════════════════════════════
+The following assertion was thrown running a test:
+The finder "Found 2 widgets with type "ListTile" descending from widgets with type "ChatSidebar": [
+  ListTile(onTap: Closure: () => void, selected: true, dependencies: [Directionality,
+InheritedCupertinoTheme, _InheritedTheme, _LocalizationsScope-[GlobalKey#89562]]),
+  ListTile(onTap: Closure: () => void, dependencies: [Directionality, InheritedCupertinoTheme,
+_InheritedTheme, _LocalizationsScope-[GlobalKey#89562]]),
+]" (used in a call to "tap()") ambiguously found multiple matching widgets. The "tap()" method needs
+a single target.
+
+When the exception was thrown, this was the stack:
+#0      WidgetController._getElementPoint (package:flutter_test/src/controller.dart:2100:7)
+#1      WidgetController.getCenter (package:flutter_test/src/controller.dart:1947:12)
+#2      WidgetController.tap (package:flutter_test/src/controller.dart:1080:7)
+#3      main.<anonymous closure> (file:///private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart:121:18)
+<asynchronous suspension>
+#4      testWidgets.<anonymous closure>.<anonymous closure> (package:flutter_test/src/widget_tester.dart:192:15)
+<asynchronous suspension>
+#5      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)
+<asynchronous suspension>
+<asynchronous suspension>
+(elided one frame from package:stack_trace)
+
+The test description was:
+  initial chat, send, new chat, switch with history, delete
+════════════════════════════════════════════════════════════════════════════════════════════════════
+00:05 +21 -2: /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete [E]
+  Test failed. See exception logs above.
+  The test description was: initial chat, send, new chat, switch with history, delete
+  
+00:05 +21 -2: Some tests failed.
+
+Failing tests:
+  /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/assistant_home_test.dart: initial chat, send, new chat, switch with history, delete
+  /private/var/folders/0y/8bj6ywhx5435lj6bcqbl4_th0000gn/T/wf_corenyth_baseline_3d9vh2tg/test/proactive_session_test.dart: questions, negations and hypotheticals never become updates or writes

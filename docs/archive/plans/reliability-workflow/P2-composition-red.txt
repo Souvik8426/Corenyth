@@ -1,0 +1,15 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart
+00:00 +0: production session factory journals and replays an operation
+00:00 +0 -1: production session factory journals and replays an operation [E]
+  Expected: not null
+    Actual: <null>
+  the operation journal must be wired in the real app factory
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/p2_composition_regression_test.dart 16:5       main.<fn>
+  
+00:00 +0 -1: Some tests failed.
+
+Failing tests:
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_composition_regression_test.dart: production session factory journals and replays an operation

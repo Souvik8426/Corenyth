@@ -1,0 +1,16 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart
+00:00 +0: startup recovery preserves the committed reminder time after clock advances
+turn timing ms: {route: 9, execution: 2, total: 21} {op: restart-committed-time, interpreter: unified, auth: request, model: unavailable, fallback: engine_not_in_use, route: rules, route_id: rules, validation: ok, tool: create_reminder, db: ok, receipt: replayed, alarm: scheduled, model_calls: 0p0r}
+00:00 +0 -1: startup recovery preserves the committed reminder time after clock advances [E]
+  Expected: DateTime:<2099-10-19 10:10:00.000>
+    Actual: DateTime:<2099-10-19 10:15:00.000>
+  the receipt must report the saved time, not submission + a fresh duration: Okay, I'll remind you today (Mon 19 Oct) at 10:15 AM: take medicine.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/p2_restart_time_regression_test.dart 56:5      main.<fn>
+  
+00:00 +0 -1: Some tests failed.
+
+Failing tests:
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/p2_restart_time_regression_test.dart: startup recovery preserves the committed reminder time after clock advances

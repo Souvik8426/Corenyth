@@ -118,6 +118,7 @@ class ChatSidebar extends StatelessWidget {
                         final isSelected = chat.id == selectedId;
 
                         return ListTile(
+                          key: ValueKey('chat-${chat.id}'),
                           selected: isSelected,
                           title: Text(
                             chat.id == ConversationRepo.mainChatId
@@ -149,7 +150,8 @@ class ChatSidebar extends StatelessWidget {
             if (onAddWidget != null) ...[
               const Divider(height: 1),
               ListTile(
-                leading: Icon(Icons.widgets_outlined, color: colorScheme.primary),
+                leading:
+                    Icon(Icons.widgets_outlined, color: colorScheme.primary),
                 title: const Text('Add home screen widget'),
                 subtitle: const Text('Your tasks at a glance, one tap to chat'),
                 onTap: onAddWidget,

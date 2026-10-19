@@ -1,0 +1,16 @@
+{
+  "stage": "P1",
+  "decision": "accept",
+  "required_software_checks_passed": true,
+  "evidence": [
+    "docs/plans/reliability-workflow/P1-parent-review.md",
+    "docs/plans/reliability-workflow/P1-parent-final-tests.txt",
+    "docs/plans/reliability-workflow/P1-parent-analyze.txt",
+    "docs/plans/reliability-workflow/P1-attempt2-tests-full.txt"
+  ],
+  "deferred_device_checks": [
+    "real Qwen temporal extraction",
+    "physical screenshot request and actual alert timing",
+    "timezone/DST mid-turn behavior"
+  ]
+}

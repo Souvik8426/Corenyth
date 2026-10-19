@@ -118,8 +118,7 @@ void main() {
         of: find.byType(NavigationRail), matching: find.text('Tasks')));
     await settle(tester);
     expect(find.byKey(const ValueKey('chat-composer')), findsNothing);
-    await tester.tap(find.descendant(
-        of: find.byType(ChatSidebar), matching: find.byType(ListTile)));
+    await tester.tap(find.byKey(ValueKey('chat-$main')));
     await settle(tester);
     expect(find.byKey(const ValueKey('chat-composer')), findsOneWidget);
 

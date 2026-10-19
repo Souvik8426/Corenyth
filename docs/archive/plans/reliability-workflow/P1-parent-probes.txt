@@ -1,0 +1,155 @@
+00:00 +0: loading /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart
+00:00 +0: P1 parent: no partial time write (false): remind me in 2 weeks at 5pm to call Mum
+turn timing ms: {route: 9, execution: 1, total: 23} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +1: P1 parent: no partial time write (false): remind me every 2 hours at 5pm to drink water
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 2, execution: 0, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +2: P1 parent: no partial time write (false): remind me in 10 minutes on 30 February to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 5} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +3: P1 parent: no partial time write (false): remind me in 1 hour and 2 hours to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 5, total: 11} {model: unavailable, fallback: engine_not_in_use, route: rules, tool: create_reminder, db: ok}
+00:00 +3 -1: P1 parent: no partial time write (false): remind me in 1 hour and 2 hours to call Mum [E]
+  Expected: empty
+    Actual: [Task:#1 and 2 hours to call Mum (due 2026-10-19T08:41:00.000)]
+  Okay, I'll remind you today (Mon 19 Oct) at 8:41 AM: and 2 hours to call Mum.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/temporal_parent_regression_test.dart 49:9      main.<fn>
+  
+00:00 +3 -1: P1 parent: no partial time write (false): remind me tomorrow Friday at 5pm to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, execution: 0, total: 3} {model: unavailable, fallback: engine_not_in_use, route: rule_plan, tool: respond, db: none}
+00:00 +4 -1: P1 parent: no partial time write (true): remind me in 2 weeks at 5pm to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 2, execution: 1, total: 14} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +4 -2: P1 parent: no partial time write (true): remind me in 2 weeks at 5pm to call Mum [E]
+  Expected: empty
+    Actual: [Task:#1 call Mum (due 2026-10-19T17:00:00.000)]
+  Okay, I'll remind you today (Mon 19 Oct) at 5:00 PM: call Mum.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/temporal_parent_regression_test.dart 49:9      main.<fn>
+  
+00:00 +4 -2: P1 parent: no partial time write (true): remind me every 2 hours at 5pm to drink water
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 1, execution: 1, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +4 -3: P1 parent: no partial time write (true): remind me every 2 hours at 5pm to drink water [E]
+  Expected: empty
+    Actual: [Task:#1 drink water (due 2026-10-19T17:00:00.000)]
+  Okay, I'll remind you today (Mon 19 Oct) at 5:00 PM: drink water.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/temporal_parent_regression_test.dart 49:9      main.<fn>
+  
+00:00 +4 -3: P1 parent: no partial time write (true): remind me in 10 minutes on 30 February to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 5} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +4 -4: P1 parent: no partial time write (true): remind me in 10 minutes on 30 February to call Mum [E]
+  Expected: empty
+    Actual: [Task:#1 call Mum (due 2026-10-19T07:51:00.000)]
+  Okay, I'll remind you today (Mon 19 Oct) at 7:51 AM: call Mum.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/temporal_parent_regression_test.dart 49:9      main.<fn>
+  
+00:00 +4 -4: P1 parent: no partial time write (true): remind me in 1 hour and 2 hours to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 1, context: 1, execution: 1, total: 6} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +4 -5: P1 parent: no partial time write (true): remind me in 1 hour and 2 hours to call Mum [E]
+  Expected: empty
+    Actual: [Task:#1 call Mum (due 2026-10-19T08:41:00.000)]
+  Okay, I'll remind you today (Mon 19 Oct) at 8:41 AM: call Mum.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/temporal_parent_regression_test.dart 49:9      main.<fn>
+  
+00:00 +4 -5: P1 parent: no partial time write (true): remind me tomorrow Friday at 5pm to call Mum
+*** sqflite warning ***
+
+You are changing sqflite default factory.
+Be aware of the potential side effects. Any library using sqflite
+will have this factory as the default for all operations.
+
+*** sqflite warning ***
+
+turn timing ms: {route: 0, context: 0, execution: 1, total: 4} {model: called, prompt: plan-v1:8fe00ad5e6c8, intent: create_reminder, route: semantic, tool: create_reminder, db: ok}
+00:00 +4 -6: P1 parent: no partial time write (true): remind me tomorrow Friday at 5pm to call Mum [E]
+  Expected: empty
+    Actual: [Task:#1 call Mum (due 2026-10-20T17:00:00.000)]
+  Okay, I'll remind you tomorrow (Tue 20 Oct) at 5:00 PM: call Mum.
+  
+  package:matcher                                     expect
+  package:flutter_test/src/widget_tester.dart 473:18  expect
+  test/temporal_parent_regression_test.dart 49:9      main.<fn>
+  
+00:00 +4 -6: Some tests failed.
+
+Failing tests:
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (false): remind me in 1 hour and 2 hours to call Mum
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me every 2 hours at 5pm to drink water
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 1 hour and 2 hours to call Mum
+  /Users/kawaiii_neko/Documents/GitHub/Corenyth/test/temporal_parent_regression_test.dart: P1 parent: no partial time write (true): remind me in 10 minutes on 30 February to call Mum
+  ... and 2 more

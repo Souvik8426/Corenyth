@@ -1,0 +1,804 @@
+{
+  "mode": "Qwen3-0.6B-Q4_0 host CPU (not Android latency)",
+  "split": "dev",
+  "counts": {
+    "pass": 86,
+    "fail": 11,
+    "incomplete": 5
+  },
+  "categories": {
+    "ambiguity": {
+      "pass": 9,
+      "fail": 2
+    },
+    "chat": {
+      "pass": 10
+    },
+    "lists": {
+      "pass": 10,
+      "fail": 1
+    },
+    "memory": {
+      "pass": 10
+    },
+    "negation": {
+      "pass": 6,
+      "fail": 3,
+      "incomplete": 1
+    },
+    "progress": {
+      "incomplete": 4,
+      "pass": 4,
+      "fail": 2
+    },
+    "scheduling": {
+      "pass": 24,
+      "fail": 1
+    },
+    "updates": {
+      "pass": 13,
+      "fail": 2
+    }
+  },
+  "cases": [
+    {
+      "id": "S-001",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-002",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-003",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-004",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-005",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-006",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-007",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-008",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-009",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-010",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-011",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-012",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-013",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-014",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-015",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-016",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-017",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-018",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-019",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-020",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-021",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-022",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-023",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-024",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "S-025",
+      "category": "scheduling",
+      "status": "fail",
+      "errors": [
+        "dirty pending title"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "U-001",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-002",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-003",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-004",
+      "category": "updates",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "task unchanged",
+        "wrong moved time"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "U-005",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-006",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-007",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-008",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-009",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-010",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-011",
+      "category": "updates",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "task unchanged",
+        "wrong moved time"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "U-012",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-013",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-014",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "U-015",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-001",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-002",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-003",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-004",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-005",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-006",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-007",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-008",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-009",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-010",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "L-011",
+      "category": "lists",
+      "status": "fail",
+      "errors": [
+        "missing answer t12"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "P-001",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "P-002",
+      "category": "progress",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "P-003",
+      "category": "progress",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "P-004",
+      "category": "progress",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "P-005",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "P-006",
+      "category": "progress",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "P-007",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "P-008",
+      "category": "progress",
+      "status": "fail",
+      "errors": [
+        "missing clarification question"
+      ],
+      "unscored": [
+        "clarification semantic field confirm_complete"
+      ]
+    },
+    {
+      "id": "P-009",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "P-010",
+      "category": "progress",
+      "status": "fail",
+      "errors": [
+        "missing clarification question"
+      ],
+      "unscored": [
+        "clarification semantic field action"
+      ]
+    },
+    {
+      "id": "Y-001",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-002",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-003",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-004",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-005",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-006",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-007",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-008",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-009",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "Y-010",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-001",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-002",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-003",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-004",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-005",
+      "category": "ambiguity",
+      "status": "fail",
+      "errors": [
+        "missing write",
+        "missing/ambiguous create_task"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "A-006",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-007",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-008",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-009",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-010",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "A-011",
+      "category": "ambiguity",
+      "status": "fail",
+      "errors": [
+        "missing clarification question"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "N-001",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "N-002",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "N-003",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "N-004",
+      "category": "negation",
+      "status": "fail",
+      "errors": [
+        "missing answer t1"
+      ],
+      "unscored": []
+    },
+    {
+      "id": "N-005",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "N-006",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "N-007",
+      "category": "negation",
+      "status": "fail",
+      "errors": [
+        "missing clarification question"
+      ],
+      "unscored": [
+        "clarification semantic field confirm_remove"
+      ]
+    },
+    {
+      "id": "N-008",
+      "category": "negation",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ]
+    },
+    {
+      "id": "N-009",
+      "category": "negation",
+      "status": "fail",
+      "errors": [
+        "missing clarification question"
+      ],
+      "unscored": [
+        "clarification semantic field confirm_cancel"
+      ]
+    },
+    {
+      "id": "N-010",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-001",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-002",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-003",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-004",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-005",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-006",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-007",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-008",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-009",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    },
+    {
+      "id": "C-010",
+      "category": "chat",
+      "status": "pass",
+      "errors": [],
+      "unscored": []
+    }
+  ]
+}

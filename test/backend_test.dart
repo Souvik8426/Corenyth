@@ -29,7 +29,7 @@ class FakeTasks extends TaskRepo {
   FakeTasks() : super(_db);
   @override
   Future<Task> create(String title,
-      {String? notes, DateTime? due, int priority = 1}) async {
+      {String? notes, DateTime? due, int priority = 1, String? opId}) async {
     final id = ++_id;
     rows[id] = {
       'id': id,
@@ -114,7 +114,8 @@ class FakeReminders extends ReminderRepo {
   var _id = 0;
   FakeReminders() : super(_db);
   @override
-  Future<Reminder> create(String title, DateTime at, {int? taskId}) async {
+  Future<Reminder> create(String title, DateTime at,
+      {int? taskId, String? opId}) async {
     final id = ++_id;
     rows[id] = {
       'id': id,
@@ -152,7 +153,10 @@ class FakeMemory extends MemoryRepo {
   FakeMemory() : super(_db);
   @override
   Future<int> add(String content,
-      {String category = 'fact', double importance = 0.5}) async {
+      {String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source}) async {
     log.add('memory:$content');
     items.add(content);
     return items.length;
@@ -174,18 +178,21 @@ class FakeConversations extends ConversationRepo {
   final msgs = <Message>[];
   FakeConversations() : super(_db);
   @override
-  Future<void> add(String session, String role, String content) async {
+  Future<int> add(String session, String role, String content) async {
     log.add('$role:$content');
     msgs.add(Message(role, content));
+    return msgs.length;
   }
 
   @override
-  Future<List<Message>> recent(String session, {int n = 8}) async =>
+  Future<List<Message>> recent(String session,
+          {int n = 8, int? excludeId}) async =>
       msgs.reversed.take(n).toList().reversed.toList();
 
   /// Like the SQLite version: the user's messages sharing a term, newest first.
   @override
-  Future<List<Message>> relevant(String query, {int limit = 5}) async {
+  Future<List<Message>> relevant(String query,
+      {int limit = 5, int? excludeId}) async {
     final ts = MemoryRepo.terms(query);
     return msgs.reversed
         .where(
@@ -287,7 +294,8 @@ void main() {
     e.output = '{"intent":"chat","reply":"Doing great, thanks for asking!"}';
     expect(await s.handle('hey, how is it going'),
         'Doing great, thanks for asking!');
-    expect(e.calls, 5, reason: 'chat: the plan, then a reply with recent turns');
+    expect(e.calls, 5,
+        reason: 'chat: the plan, then a reply with recent turns');
     await s.close();
     expect(e.unloads, 0, reason: 'sessions never unload the shared model');
   });

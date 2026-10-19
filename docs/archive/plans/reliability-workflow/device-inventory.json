@@ -1,0 +1,39 @@
+{
+  "device_model": {
+    "exit_code": 0,
+    "value": "23049PCD8I",
+    "error": ""
+  },
+  "android_version": {
+    "exit_code": 0,
+    "value": "16",
+    "error": ""
+  },
+  "android_sdk": {
+    "exit_code": 0,
+    "value": "36",
+    "error": ""
+  },
+  "ram": {
+    "exit_code": 0,
+    "value": "MemTotal:        7354428 kB",
+    "error": ""
+  },
+  "installed_package": {
+    "exit_code": 0,
+    "version_fields": [
+      "versionCode=1 minSdk=24 targetSdk=36",
+      "versionName=0.1.0",
+      "lastUpdateTime=2026-10-19 07:39:31",
+      "firstInstallTime=2026-10-19 07:39:31"
+    ]
+  },
+  "installed_apk_hashes": [
+    {
+      "sha256": "9bc36a7506066e0f6b4cab4574ac23b429da48dc681d0fe34b3d4b90d2df21e3",
+      "exit_code": 0,
+      "error": ""
+    }
+  ],
+  "matches_pre_P0_apk": true
+}

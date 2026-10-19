@@ -43,6 +43,7 @@ class AppServices {
   final ReminderPreferencesRepo preferences;
   final PendingRepo pending;
   final ReviewRepo review;
+  final OperationJournal operations;
   final ReminderScheduler scheduler;
 
   /// Bumped after each proactive job (alarm, notification action, boot) so
@@ -59,9 +60,31 @@ class AppServices {
 
   /// True while a chat reply is being generated; the model picker waits.
   final chatBusy = ValueNotifier(false);
+  final lastAnswerSource = ValueNotifier<String?>(null);
+
+  void recordTurn(AssistantSession session) {
+    final d = session.lastDiagnostics;
+    lastAnswerSource.value = d['reply'] == 'model' || d['route'] == 'semantic'
+        ? 'Local model with app checks'
+        : 'Built-in assistant logic';
+  }
 
   /// Why the active model differs from what the user picked, for the UI.
   final modelNote = ValueNotifier<String?>(null);
+
+  /// Machine-readable reason behind the last model fallback/failure, or null:
+  /// `crashed_last_run:<id>`, `not_installed:<id>`, `not_allowlisted`,
+  /// `sha256_mismatch:<id>`, `load:<engine code>:<id>`. Diagnostics only.
+  String? modelFailure;
+
+  /// Model ids, load state and failure code for turn diagnostics; no text.
+  Map<String, String> modelDiagnostics() => {
+        'build': buildRevision,
+        'selected': selectedModel.id,
+        'active': activeModel?.id ?? 'none',
+        'load': modelLoad.value.name,
+        if (modelFailure != null) 'load_failure': modelFailure!,
+      };
 
   /// Public for tests; the app uses [open].
   AppServices(this.db, this.scheduler, String modelPath)
@@ -73,7 +96,8 @@ class AppServices {
         conversations = ConversationRepo(db),
         preferences = _Preferences(db),
         pending = PendingRepo(db),
-        review = ReviewRepo(db) {
+        review = ReviewRepo(db),
+        operations = OperationJournal(db) {
     // Every task/preference write (chat, Tasks page) syncs linked alarms.
     tasks.onRemindersChanged =
         preferences.onRemindersChanged = () => syncReminders();
@@ -187,7 +211,8 @@ class AppServices {
 
     final sel = await ModelSelection.open();
     final crashed = await sel.crashedAttempt();
-    String? note;
+    String? note, failure;
+    if (crashed != null) failure = 'crashed_last_run:${crashed.id}';
     if (crashed != null && crashed.id != defaultModelId) {
       await sel.writeId(defaultModelId);
       note = '${crashed.label} did not finish loading last time (the phone may '
@@ -197,13 +222,16 @@ class AppServices {
     final use = sel.resolveLoadable(models.path) ?? want;
     if (use.id != want.id) {
       note ??= '${want.label} is not installed; using ${use.label}.';
+      failure ??= 'not_installed:${want.id}';
     }
     final s = AppServices(db, sched, sel.pathIn(models.path, use))
       ..selection = sel;
     s.modelNote.value = note;
+    s.modelFailure = failure;
+    debugPrint('model boot: ${s.modelDiagnostics()}');
     try {
       await s.conversations.ensureMainChat();
-
+      await s.operations.recoverStale();
       await s
           .catchUp(); // before re-arming: missed occurrences are filed once, never replayed
     } catch (_) {}
@@ -277,6 +305,7 @@ class AppServices {
       } finally {
         modelLoad.value = ok ? ModelLoad.loaded : ModelLoad.failed;
         _loading = null;
+        debugPrint('model load: ${modelDiagnostics()}');
       }
       return ok;
     }();
@@ -289,16 +318,26 @@ class AppServices {
     final sel = selection;
     final spec = modelByFileName(p.basename(_path));
     if (sel != null) {
-      if (spec == null) return false; // only allowlisted ChatML files
+      if (spec == null) {
+        modelFailure = 'not_allowlisted';
+        return false; // only allowlisted ChatML files
+      }
       if (!await sel.verify(spec, _path)) {
+        modelFailure = 'sha256_mismatch:${spec.id}';
         modelNote.value = '${spec.fileName} does not match the published file '
             '(SHA-256 check failed). Download it again.';
         return false;
       }
       await sel.markAttempt(spec.id);
     }
+    final engine = _llama = LlamaChannelEngine(_path);
     try {
-      return await (_llama = LlamaChannelEngine(_path)).load();
+      final ok = await engine.load();
+      if (!ok) {
+        modelFailure =
+            'load:${engine.lastLoadError ?? 'unknown'}:${spec?.id ?? 'unlisted'}';
+      }
+      return ok;
     } finally {
       await sel?.clearAttempt();
     }
@@ -403,6 +442,8 @@ class AppServices {
       loadEngine: engine is LlamaChannelEngine ? ensureModel : null,
       pending: pending,
       review: review,
+      modelDiagnostics: modelDiagnostics,
+      operations: operations,
     );
   }
 }
