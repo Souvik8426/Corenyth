@@ -1,79 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Home-screen widget in the app's look: logo + name, what's pending, and a
-     "Message Corenyth…" pill. Any tap opens the app (see WidgetProvider). -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="14dp"
-    android:background="@drawable/widget_bg">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <ImageView
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/widget_logo"/>
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:paddingStart="8dp"
-            android:text="Corenyth"
-            android:textColor="@color/corenyth_ivory"
-            android:textSize="15sp"
-            android:textStyle="bold"/>
-
-        <TextView
-            android:id="@+id/widget_count"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/corenyth_muted"
-            android:textSize="12sp"/>
+<?xml version="1.0" ?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:background="@drawable/widget_bg">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:layout_width="30dp" android:layout_height="30dp" android:src="@mipmap/ic_launcher" android:importantForAccessibility="no"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:paddingStart="10dp" android:text="My tasks" android:textSize="20sp" android:textStyle="bold" android:textColor="@color/corenyth_ivory"/>
+        <TextView android:id="@+id/widget_add" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center" android:text="+" android:textSize="30sp" android:textColor="@color/corenyth_lavender" android:contentDescription="Add task" android:background="@drawable/widget_pill"/>
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/widget_list"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:ellipsize="end"
-        android:lineSpacingExtra="3dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp"
-        android:textColor="@color/corenyth_ivory"
-        android:textSize="13sp"/>
-
-    <LinearLayout
-        android:id="@+id/widget_message"
-        android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:background="@drawable/widget_pill"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingEnd="6dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:text="Message Corenyth…"
-            android:textColor="@color/corenyth_muted"
-            android:textSize="14sp"/>
-
-        <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:contentDescription="Open Corenyth"
-            android:src="@drawable/widget_send"/>
-    </LinearLayout>
+    <TextView android:id="@+id/widget_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:paddingBottom="8dp" android:textSize="12sp" android:textColor="@color/corenyth_muted"/>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ListView android:id="@+id/widget_list" android:layout_width="match_parent" android:layout_height="match_parent" android:divider="@color/corenyth_outline" android:dividerHeight="1dp"/>
+        <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="You're all caught up." android:textColor="@color/corenyth_muted" android:textSize="14sp"/>
+    </FrameLayout>
 </LinearLayout>

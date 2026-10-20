@@ -6,21 +6,62 @@
 |---|---|---|
 | `MainActivity` | `android/app/src/main/kotlin/com/corenyth/assistant/MainActivity.kt` | Flutter host. Registers `assistant/native` and `assistant/llm`. |
 | `VoiceSessionActivity` | `VoiceSessionActivity.kt` | Translucent window (`VoiceTheme`, `singleTask`, excluded from recents). Starts Dart on route `/voice`. |
-| `WidgetProvider` | `WidgetProvider.kt` | Home-screen widget. Reads pending tasks from `assistant.db` directly. No Flutter engine, no model. |
+| `WidgetProvider` / `CompactWidgetProvider` | `WidgetProvider.kt` | Task-list and companion widgets. Display reads SQLite without starting Flutter or the model. |
+| `WidgetTaskService` | `WidgetTaskService.kt` | RemoteViews list adapter for all pending tasks. |
+| `WidgetMascot` | `WidgetMascot.kt` | Generates floating/blinking frames for the compact widget's launcher-owned ViewFlipper. |
+| `WidgetAddActivity` | `WidgetAddActivity.kt` | Translucent Flutter host for widget prompts; starts `/voice`, without opening the main home screen. |
 | `LlamaBridge` | `LlamaBridge.kt` | The `assistant/llm` handler. See [llm-engine.md](llm-engine.md). |
 | `ProactiveReceiver` | `Proactive.kt` | AlarmManager delivery, Done/Snooze actions, boot/time reconciliation; starts a headless Flutter engine when needed. |
 | Notification permissions | `flutter_local_notifications` | Permission checks and test notification; old plugin schedules are cancelled during initialization. |
 
-## Widget
+## Widgets
 
-- Layout `assistant_widget.xml`, metadata `assistant_widget_info.xml`.
-- Styled like the app (logo, dark surface, lavender accents): the count of pending tasks ("All clear" when none),
-  the first three titles ordered by due date, then id, and a "Message Corenyth…" pill.
-- Any tap opens `MainActivity` (the full app).
-- "Add home screen widget" in the chat sidebar calls `pinWidget` (`AppWidgetManager.requestPinAppWidget`, Android 8+
-  with a supporting launcher); otherwise a snackbar explains adding it from the home screen's widget picker.
-- `refreshWidget` is called after every task change (`ToolExecutor._changed`).
-- If the database file is missing or unreadable, the widget shows zero tasks.
+The sidebar's **Add home screen widget** action offers two choices. It calls `pinWidget` with
+`compact: false` or `true` and asks the launcher to pin the corresponding provider (Android 8+
+with a supporting launcher). Otherwise, add a widget from the launcher's widget picker.
+Both layouts can be resized; actual cell dimensions depend on the launcher.
+
+| Choice | Layout / metadata | Behavior |
+|---|---|---|
+| My tasks · 4 × 2 | `assistant_widget.xml` / `assistant_widget_info.xml` | Current launcher logo, remaining count, scrollable task list, completion circles, and “+”. |
+| Companion · 2 × 2 | `compact_widget.xml` / `compact_widget_info.xml` | Larger animated mascot, top-right “+”, and bottom remaining count. No separate top-left logo. |
+
+`WidgetTasks.read` queries every pending task, ordered by due date (undated last), priority descending,
+and id. Rows show the title and an optional localized due date/time. Empty data displays “All clear”;
+a missing or unreadable database displays a setup message instead of reporting zero tasks.
+
+The compact mascot uses twelve cached bitmap frames in a `ViewFlipper`, at 160 ms intervals.
+The launcher owns playback; there is no animation service, background polling loop, or model inference
+for display. It is a native floating/blinking rendition of the companion, not the full Flutter emotion system.
+Animation and sizing still need launcher-specific device verification.
+
+### Prompt panel
+
+“+” in either widget opens `WidgetAddActivity`, a translucent, recents-excluded activity using
+`VoiceTheme` and the `/voice` Dart route. The route name is historical: this is **typed chat**, not speech.
+It starts Flutter services and shows `ChatPage` directly, with an autofocus composer and an “Ask Corenyth”
+header. The main app home screen is not opened. Android hosts the text input in this activity;
+the launcher widget itself does not contain an editable field.
+
+Input goes through `AppServices.newSession` → `AssistantSession.handle` → the shared interpreter,
+validation, and tools. It is **not inserted directly as a task title**. For example, “Remind me to buy
+groceries tomorrow at 6 pm” is interpreted as a request, with any required clarification and the final
+reply shown in the same panel. Subsequent messages use the same session while the panel remains open.
+The session uses the installed model when available and the app's existing rules fallback otherwise;
+normal language-reliability limitations still apply. Conversation messages are persisted, and opening
+a new panel creates a new chat. Close ends the session and dismisses the activity.
+
+### Completion and refresh
+
+A task's completion circle sends its id to `WidgetProvider`, which dispatches `widgetDone` through
+`Proactive.run`. Dart calls `TaskRepo.complete` only for an existing pending task, so task-linked reminder
+cancellation uses the repository's existing synchronization logic. This action may start a headless
+Flutter engine, but does not invoke the model.
+
+Assistant tool changes call `NativeBridge.refreshWidget`. `refreshAll` updates both providers and
+invalidates the task-list adapter; completion also refreshes widgets through `Proactive.run`.
+The metadata additionally requests periodic updates every 30 minutes. See the
+[phone verification checklist](../guides/build-and-run.md#widget-verification-on-a-phone).
 
 ## Reminders
 
@@ -55,4 +96,6 @@ debug and profile builds so hot reload works. Release builds have no network per
 ## Activity routing
 
 `main.dart` reads `PlatformDispatcher.instance.defaultRouteName`. When it is `/voice`, the app shows only the chat in a
-bottom sheet (55% height). Otherwise it shows the three-tab home screen.
+bottom panel (85% of the available height, resizing above the keyboard). Widget startup bypasses the
+full-screen profile questionnaire and opens this chat directly. Otherwise it shows the normal app startup
+and home screen.

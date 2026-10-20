@@ -303,6 +303,9 @@ extension ProactiveDelivery on AppServices {
         }
       case 'reconcile':
         await reconcile();
+      case 'widgetDone':
+        final task = await tasks.get(n(1));
+        if (task != null && !task.done) await tasks.complete(task.id);
       case 'done' || 'snooze':
         await act(a.first as String, n(1), n(2));
     }

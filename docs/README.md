@@ -27,14 +27,14 @@ docs/
 | [llm-engine.md](architecture/llm-engine.md) | llama.cpp native build, JNI bridge, prompt layout, grammar, fallback |
 | [tools-and-validation.md](architecture/tools-and-validation.md) | Tool schemas, validation rules and the tool executor |
 | [data-model.md](architecture/data-model.md) | SQLite schema and migrations, repositories, memory search |
-| [android-platform.md](architecture/android-platform.md) | Permissions, home-screen widget, voice window, reminders, boot recovery |
+| [android-platform.md](architecture/android-platform.md) | Permissions, task/companion widgets, assistant prompt panel, reminders, boot recovery |
 
 ## guides/
 
 | Doc | Covers |
 |---|---|
 | [build-and-run.md](guides/build-and-run.md) | Requirements, llama.cpp checkout, test, build, run, debug logs, release verification |
-| [model-install.md](guides/model-install.md) | Installing, verifying and selecting the allowlisted Qwen3 models |
+| [model-install.md](guides/model-install.md) | Side-loading and verifying the fine-tuned Qwen3-0.6B (the only allowlisted model) |
 
 ## development/
 
@@ -47,6 +47,7 @@ docs/
 | [follow-through-device-checklist.md](development/follow-through-device-checklist.md) | Phone scenarios for contextual replies, proactive delivery and recovery |
 
 The evaluation corpus and its runner are documented next to the code in [../eval/README.md](../eval/README.md).
+Fine-tuning data, the Colab training cells and the first run's results are in [../training/README.md](../training/README.md).
 
 ## decisions/
 
@@ -65,6 +66,7 @@ history and evidence (the P5 verification report is cited by the status docs). N
 
 - [`../README.md`](../README.md): project overview.
 - [`../eval/README.md`](../eval/README.md): frozen evaluation corpus, scoring and native host reference.
+- [`../training/README.md`](../training/README.md): Qwen3-0.6B fine-tune data (MASSIVE + generated) and Colab training.
 - [`../branding/DESIGN.md`](../branding/DESIGN.md): "Ethereal Arcana" design system (colors, type, components). Left in
   place next to the logo it describes.
 

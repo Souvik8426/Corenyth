@@ -2,6 +2,26 @@
 
 **Broad reliability acceptance was rejected.** The repairs below are implemented, but unseen phrasing still fails. This is a review candidate, not a claim that the assistant is fully fixed. The candidate was not installed on the phone.
 
+## Update — 20 October 2026: model-driven replies and a fine-tuned 0.6B
+
+Goal: the model, not code special cases, should understand messages and speak in the user's tone. Changes (uncommitted on the `claude/app-testing-scrcpy-5ea08c` worktree):
+
+- One model call per turn. The plan carries a required toned `reply`; the app appends it after its exact confirmation, or uses it as the chat answer ([request flow](../architecture/request-flow.md#validation-execution-and-replies)).
+- Plans are rejected only when unsafe or impossible: model-picked `#id`s, `#id title` refs and reworded durations are accepted; add/remind messages can never complete or delete.
+- Day-only events ask their time instead of a silent 9 AM, and a "3pm, it's about X" answer stores the topic.
+- Prompt: tone guide, five examples, per-message memories moved to the user turn, tasks listed by id, `Reply tone:` line. Prompt identity changed from `plan-v1:c2a43ba929ea` to `plan-v1:ecd2c474158f`, so **the corpus scores below were recorded with the old prompt and have not been rerun.**
+- A Qwen3-0.6B LoRA fine-tune on 4,821 plan examples (MASSIVE en-US + generated; [training](../../training/README.md)) is now the **only** allowlisted model (`corenyth-0.6b-tuned`); the stock 0.6B/1.7B entries were removed.
+
+| Check | Result |
+|---|---|
+| Legacy and unified unit/widget suites | 441 passed, 1 skipped, 2 failed in both (model-switching tests were replaced by single-model tests) — the mascot drawing and markdown styling tests, which also fail on the unmodified `36e8bbf` |
+| Static analysis | No issues |
+| Fine-tune validation (150 of 241 rows, same generator as training) | intent 85 → 148, task `#id` 116 → 149 (base vs tuned) |
+| Phone, stock 0.6B with the new prompt (manual script) | Intents mostly right with the examples; tone setting had **no** effect (example replies copied) |
+| Phone, fine-tuned 0.6B (manual script, 12 model turns) | All 12 read correctly, including "hi how are you", "thanks, that helps a lot", "Add a task to clean my room", "I've called Kabir"; tone followed only loosely; warm turns 3.3–4.3 s, 6.5–8 s after task list changes, ~17 s first turn |
+
+The phone runs are short manual scripts, not an acceptance measurement. The held-out gate below still stands until the corpus is rerun with the new prompt and model.
+
 ## Implemented repairs
 
 - Shared typed temporal resolution for relative/calendar times, conflicts, unsupported forms, deadlines and alert leads. The screenshot request “Can u remind me i have a meeting within 10 mins” resolves to a meeting reminder ten minutes later in regression tests.

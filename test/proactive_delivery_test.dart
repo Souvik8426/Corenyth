@@ -46,6 +46,26 @@ void main() {
           String title, DateTime at, List<PlannedAlert> alerts) =>
       app.reminders.createPlan(title, at, alerts);
 
+  test('widget completion works without a reminder and refreshes listeners', () async {
+    final task = await app.tasks.create('A task from the widget');
+    final before = app.proactiveChanged.value;
+    await app.runProactive(['widgetDone', task.id]);
+    expect((await app.tasks.get(task.id))!.done, isTrue);
+    expect(app.proactiveChanged.value, before + 1);
+    await app.runProactive(['widgetDone', task.id]);
+    await app.runProactive(['widgetDone', -1]);
+    expect((await app.tasks.get(task.id))!.done, isTrue);
+  });
+
+  test('widget completion cancels the task reminder plan', () async {
+    final reminders = await plan('Widget completion', tomorrow3pm,
+        [(kind: 'reminder', at: tomorrow3pm)]);
+    final taskId = reminders.single.taskId!;
+    await app.runProactive(['widgetDone', taskId]);
+    expect((await app.tasks.get(taskId))!.done, isTrue);
+    expect((await app.reminders.get(reminders.single.id))!.enabled, isFalse);
+  });
+
   test('an empty-day review still invites a conversation about tomorrow',
       () async {
     await app.preferences.save(const ReminderPreferences(followUp: true));

@@ -50,6 +50,7 @@ class ChatView extends StatefulWidget {
   // Retained for caller compatibility; paging owns history scrolling now.
   final ScrollController scroll;
   final bool busy, ready;
+  final bool autofocus;
   final VoidCallback onSend;
   final Widget? status;
   final VoidCallback? onStop;
@@ -64,6 +65,7 @@ class ChatView extends StatefulWidget {
       required this.ready,
       required this.onSend,
       this.status,
+      this.autofocus = false,
       this.onStop,
       this.streamingText,
       this.onEmotionChanged,
@@ -296,6 +298,7 @@ class _ChatViewState extends State<ChatView> {
             valueListenable: widget.input,
             builder: (context, value, _) => TextField(
                   key: const ValueKey('chat-composer'),
+                  autofocus: widget.autofocus,
                   controller: widget.input,
                   minLines: 1,
                   maxLines: 3,

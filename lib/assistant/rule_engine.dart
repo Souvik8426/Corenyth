@@ -4,7 +4,7 @@ import '../data/repos.dart' show normTitle;
 import 'calculator.dart';
 import 'engine.dart';
 import 'temporal.dart';
-import 'tools.dart' show friendlyTime;
+import 'tools.dart' show friendlyTime, shortDate;
 
 /// A create request still missing a usable time, persisted per chat as JSON
 /// (PendingRepo) until answered, cancelled or replaced.
@@ -17,12 +17,17 @@ class ClarifyDraft {
   /// Explicit clock time the user gave ("8:10 AM") whose day still needs
   /// asking; a day-only reply ("tomorrow") is combined with it.
   final String? time;
+
+  /// Day the user gave without a clock time ("a meeting tomorrow"), as
+  /// yyyy-mm-dd; a clock-only reply ("3pm") is put on this day.
+  final String? day;
   const ClarifyDraft(
       {required this.tool,
       required this.title,
       this.multiple,
       this.followUp,
-      this.time});
+      this.time,
+      this.day});
 
   String get prompt {
     final flags = [
@@ -30,6 +35,9 @@ class ClarifyDraft {
       if (multiple != null) multiple! ? 'multiple alerts' : 'one alert',
       if (followUp != null) followUp! ? 'follow-up' : 'no follow-up',
     ];
+    if (day != null) {
+      return 'What time is "$title" on ${shortDate(DateTime.parse(day!))}?';
+    }
     final what = tool == 'create_reminder'
         ? 'remind you about "$title"'
         : 'schedule "$title"';
@@ -42,12 +50,13 @@ class ClarifyDraft {
         if (multiple != null) 'multiple': multiple,
         if (followUp != null) 'follow_up': followUp,
         if (time != null) 'time': time,
+        if (day != null) 'day': day,
       };
 
   /// Null for anything that isn't a well-typed draft (old/corrupt rows).
   static ClarifyDraft? fromJson(Map<String, Object?> j) {
     final tool = j['tool'], title = j['title'];
-    final m = j['multiple'], f = j['follow_up'], t = j['time'];
+    final m = j['multiple'], f = j['follow_up'], t = j['time'], d = j['day'];
     if ((tool != 'create_task' && tool != 'create_reminder') ||
         title is! String ||
         title.trim().isEmpty ||
@@ -55,7 +64,9 @@ class ClarifyDraft {
         (f != null && f is! bool) ||
         (t != null &&
             (t is! String ||
-                !RegExp(r'^\d{1,2}(?::\d{2})? [AP]M$').hasMatch(t)))) {
+                !RegExp(r'^\d{1,2}(?::\d{2})? [AP]M$').hasMatch(t))) ||
+        (d != null &&
+            (d is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(d)))) {
       return null;
     }
     return ClarifyDraft(
@@ -63,7 +74,8 @@ class ClarifyDraft {
         title: title,
         multiple: m as bool?,
         followUp: f as bool?,
-        time: t as String?);
+        time: t as String?,
+        day: d as String?);
   }
 }
 
@@ -639,8 +651,16 @@ class RuleEngine extends LlmEngine {
             : _clock(c.at!.hour, c.at!.minute));
   }
 
-  /// A day-only reply ("tomorrow") takes the draft's explicit clock time.
-  String _withTime(ClarifyDraft d, String t) => d.time == null ||
+  /// A day-only reply ("tomorrow") takes the draft's explicit clock time;
+  /// a clock-only reply ("3pm") takes the draft's day.
+  String _withTime(ClarifyDraft d, String t) {
+    if (d.day != null && _clockRe.hasMatch(t) && !readWhen(t).dated) {
+      return '$t on ${d.day}';
+    }
+    return _withTimeOnly(d, t);
+  }
+
+  String _withTimeOnly(ClarifyDraft d, String t) => d.time == null ||
           _clockRe.hasMatch(t) ||
           readWhen(t).spans.any((s) => s.amount != null) ||
           _when(t).$1 == null

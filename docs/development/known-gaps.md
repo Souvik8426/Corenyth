@@ -6,14 +6,23 @@ The current candidate is **not accepted for broad language reliability**. Actual
 
 The release APK was built and checked for absence of INTERNET permission, but was not installed on the phone. Real phone delivery, latency/RAM and the multi-turn corpus remain open gates.
 
+## Model-driven replies (20 October 2026)
+
+- **Tone is followed only loosely.** The stock 0.6B ignores the tone setting and copies the prompt's example replies. The fine-tuned 0.6B picks replies of the right kind but often from another tone's set (Professional gave "That's alright, I'm listening."; Playful gave no emoji). Next step: larger, mutually exclusive tone banks and a tone-accuracy metric.
+- **The app needs the fine-tuned file.** With no stock model allowed and no download URL, a fresh install has no model until the GGUF is side-loaded (`adb push`); until then the rule engine answers.
+- **Fine-tuned model validation is optimistic.** Its validation rows come from the same generator as training; the frozen corpus has not been rerun with it. Phone checks so far are a short manual script.
+- **"I have a call on Sunday"** still gets the 9 AM default: "call" does not count as an event, so only meetings/appointments etc. ask for their time.
+- **Model ids for tasks that are not pending** are refused by the safety check, and the rules' fallback message can be clumsy ("How long should I postpone it?").
+- **Latency.** One model call per turn now. On the test phone a warm turn took about 3–4 s, 6–8 s when the task list changed, about 15–17 s for the first message after load. The ≤4 s target needs a shorter prompt (after fine-tuning) and faster kernels.
+
 ## Not built yet
 
 - **Speech input and output.** sherpa-onnx VAD and streaming ASR into `AssistantSession.handle`. The `speak` callback
   exists in the session, but nothing calls TTS. `RECORD_AUDIO` is declared but never requested.
 - **Voice barge-in.** Typed chat has Stop (per-session cancel); nothing interrupts by voice yet.
-- **Optional 1.7B on real hardware.** Selection, SHA-256 check and fallback are implemented and tested with a mocked
-  native channel only; RAM and latency are **not** measured. A native out-of-memory kill is detected only at the next
-  start (a leftover load marker), which then re-selects 0.6B.
+- **Larger models.** Only the fine-tuned 0.6B is allowlisted; the stock 0.6B and 1.7B were removed. A fine-tuned
+  1.7B would need its own training run, allowlist entry and RAM/latency check. A native out-of-memory kill is
+  detected only at the next start (a leftover load marker).
 - **Unsupported dates.** "Next Friday", "next week", ambiguous numeric dates such as "12/03", "midnight" and "in 2 weeks"
   are not parsed. Weekdays, named month dates and ISO dates are supported. The app asks or lists the supported forms;
   it never guesses. Also supported: today/tonight/tomorrow,
@@ -28,6 +37,8 @@ The release APK was built and checked for absence of INTERNET permission, but wa
 - **32-bit phones.** No native library, so they use the rule engine only.
 
 ## Rough edges
+
+- Widget assistant prompts now use the shared chat session, but cold/warm panel startup, keyboard focus, launcher animation, resizing, and model-backed multi-turn actions still need end-to-end phone verification. Widget display is native; prompt handling starts Flutter and may load the model. See the [widget checklist](../guides/build-and-run.md#widget-verification-on-a-phone).
 
 - Model-first understanding has now been measured with the actual Qwen file on host CPU and still fails held-out language checks. This does not measure phone performance. Invalid or rejected plans use the rules fallback.
 - Daily schedule start dates and deadlines with their own independent clock time still require clarification.

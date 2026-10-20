@@ -110,13 +110,20 @@ void main() {
     expect(reply, startsWith('Sorry about that!'));
   });
 
-  test('chat replies see recent turns and drop parroted plan replies',
+  test('chat answers from the plan; a parroted plan reply gets a reply call with recent turns',
       () async {
     model.outputs[PromptKind.plan] =
-        jsonEncode({'intent': 'chat', 'reply': 'Hello there, nice to see you.'});
+        jsonEncode({'intent': 'chat', 'reply': 'Welcome back! Goa sounds lovely.'});
+    model.outputs[PromptKind.reply] = respond('unused');
+    expect(await session.handle('hey, just got back from a trip to goa'),
+        'Welcome back! Goa sounds lovely.');
+    expect(model.prompts.last.kind, PromptKind.plan,
+        reason: 'one model call per chat turn');
+
+    model.outputs[PromptKind.plan] =
+        jsonEncode({'intent': 'chat', 'reply': 'it was so relaxing honestly'});
     model.outputs[PromptKind.reply] =
         respond('Glad the trip went well! Anything you want to plan next?');
-    await session.handle('hey, just got back from a trip to goa');
     final reply = await session.handle('it was so relaxing honestly');
     expect(reply, 'Glad the trip went well! Anything you want to plan next?');
     final p = model.prompts.last;
@@ -124,11 +131,6 @@ void main() {
     expect(p.history.map((m) => m.content),
         contains('hey, just got back from a trip to goa'));
     expect(p.render(), contains('trip to goa'));
-
-    // A parroted reply falls back to the plan's own sentence.
-    model.outputs[PromptKind.reply] = respond('it was so relaxing honestly');
-    expect(await session.handle('it was so relaxing honestly'),
-        'Hello there, nice to see you.');
   });
 
   test('chat history leaves out task lists and check-ins', () async {

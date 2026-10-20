@@ -21,9 +21,9 @@ class NativeBridge {
   /// Asks the launcher to place the Corenyth widget on the home screen.
   /// False when it can't (older Android, some launchers, not on Android):
   /// the user then adds it from the home screen's widget picker.
-  static Future<bool> pinWidget() async {
+  static Future<bool> pinWidget({bool compact = false}) async {
     try {
-      return await _ch.invokeMethod<bool>('pinWidget') ?? false;
+      return await _ch.invokeMethod<bool>('pinWidget', {'compact': compact}) ?? false;
     } on MissingPluginException {
       return false;
     } catch (e) {

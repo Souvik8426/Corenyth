@@ -34,7 +34,7 @@ open class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "refreshWidget" -> { WidgetProvider.refreshAll(this); result.success(null) }
                     "widgetCount" -> result.success(WidgetProvider.count(this))
-                    "pinWidget" -> result.success(WidgetProvider.requestPin(this))
+                    "pinWidget" -> result.success(WidgetProvider.requestPin(this, call.argument<Boolean>("compact") == true))
                     "modelsDir" -> {
                         val dir = modelsDir()
                         val granted = storageGranted()

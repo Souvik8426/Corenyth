@@ -56,24 +56,27 @@ class Semantic {
 }
 
 /// Fields each intent may carry (besides `intent` and `negated`).
+/// Every intent ends with `reply`: the model's own words to the user, in
+/// their tone. For chat it is the answer; for anything else a follow-up the
+/// app appends after its own exact confirmation (see [isSafeFollowUp]).
 const _fields = {
-  'create_task': {'title', 'when'},
-  'create_reminder': {'title', 'when', 'multiple', 'follow_up'},
-  'complete': {'ref', 'title'},
-  'delete': {'ref', 'title'},
-  'postpone': {'ref', 'title', 'when'},
-  'list': {'range'},
-  'recall': {'title'},
-  'answer_pending': {'when'},
-  'cancel_pending': <String>{},
+  'create_task': {'title', 'when', 'reply'},
+  'create_reminder': {'title', 'when', 'multiple', 'follow_up', 'reply'},
+  'complete': {'ref', 'title', 'reply'},
+  'delete': {'ref', 'title', 'reply'},
+  'postpone': {'ref', 'title', 'when', 'reply'},
+  'list': {'range', 'reply'},
+  'recall': {'title', 'reply'},
+  'answer_pending': {'when', 'reply'},
+  'cancel_pending': {'reply'},
   'chat': {'reply'},
 };
 
 const _fieldsV2 = {
   ..._fields,
-  'progress': {'ref'},
-  'outcome': {'ref'},
-  'details': {'ref', 'title', 'when'},
+  'progress': {'ref', 'reply'},
+  'outcome': {'ref', 'reply'},
+  'details': {'ref', 'title', 'when', 'reply'},
 };
 
 /// Field order is fixed by [semanticGrammar]: intent, title, ref, when, range,
@@ -165,7 +168,10 @@ String _semanticGrammar(int version) {
     }
     parts.add(
         version == 2 ? opt('authorization', 'auth') : opt('negated', 'bool'));
-    if (fields[intent]!.contains('reply')) parts.add(opt('reply', 'str'));
+    // Required: the model always speaks; the app decides whether to show it.
+    if (fields[intent]!.contains('reply')) {
+      parts.add('\",\" \"\\\"reply\\\":\" str');
+    }
     parts.add('\"}\"');
     rules.add('plan-${intent.replaceAll('_', '-')} ::= ${parts.join(' ')}');
   }

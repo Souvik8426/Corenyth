@@ -289,7 +289,7 @@ class AppServices {
         }
         ok = await _loadPath();
         final sel = selection;
-        final fallback = p.join(p.dirname(_path), model06b.fileName);
+        final fallback = p.join(p.dirname(_path), corenythModel.fileName);
         if (!ok &&
             sel != null &&
             _path != fallback &&
@@ -377,7 +377,7 @@ class AppServices {
   }
 
   /// Model the user picked (default when unset).
-  ModelSpec get selectedModel => selection?.selected ?? model06b;
+  ModelSpec get selectedModel => selection?.selected ?? corenythModel;
 
   /// Catalog model at [modelPath], or null (tests' arbitrary paths).
   ModelSpec? get activeModel => modelByFileName(p.basename(_path));

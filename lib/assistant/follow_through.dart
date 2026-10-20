@@ -482,6 +482,22 @@ bool safeReply(String reply, String grounding) {
   return RegExp(r'\d+').allMatches(t).every((m) => known.contains(m.group(0)));
 }
 
+final _whenWord = _ci(
+    r'\b(?:today|tonight|tomorrow|tmrw|yesterday|morning|afternoon|evening|noon|midnight|'
+    r'week|weekend|month|monday|tuesday|wednesday|thursday|friday|saturday|sunday|'
+    r'[ap]\.?m\.?|o.?clock|minutes?|mins?|hours?|hrs?|time)\b');
+
+/// The model's follow-up after the app's own confirmation (plan `reply`):
+/// prose that adds warmth or a question, never a fact. The confirmation
+/// already states the exact time, so any number or time word here could
+/// only contradict it; claims of acting are the app's to make.
+bool isSafeFollowUp(String line, String user) {
+  final t = line.trim();
+  if (t.length < 2 || t.length > 200) return false;
+  if (!safeReply(t, '') || _whenWord.hasMatch(t)) return false;
+  return !echoes(t, user);
+}
+
 List<String> _plainWords(String s) => s
     .toLowerCase()
     .replaceAll('’', "'")

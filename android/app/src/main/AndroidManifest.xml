@@ -50,6 +50,18 @@
                        android:resource="@xml/assistant_widget_info"/>
         </receiver>
 
+        <receiver android:name=".CompactWidgetProvider" android:exported="false" android:label="Corenyth companion">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE"/></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/compact_widget_info"/>
+        </receiver>
+        <service android:name=".WidgetTaskService" android:permission="android.permission.BIND_REMOTEVIEWS" android:exported="false"/>
+        <activity android:name=".WidgetAddActivity" android:exported="false" android:theme="@style/VoiceTheme"
+            android:taskAffinity="" android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:windowSoftInputMode="adjustResize"/>
+
         <!-- Proactive delivery (Proactive.kt): our exact alarms, notification Done/Snooze, and
              re-arm + catch-up after boot, app update, time or time-zone change. -->
         <!-- Separate SQLite worker pool: a waiting background connection must not
