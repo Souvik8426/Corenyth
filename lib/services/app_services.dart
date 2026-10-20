@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -321,6 +322,13 @@ class AppServices {
           ok = await _loadPath();
         }
       } finally {
+        if (ok) {
+          modelFailure = null;
+          if (_failNote != null && modelNote.value == _failNote) {
+            modelNote.value = null;
+          }
+          _failNote = null;
+        }
         modelLoad.value = ok ? ModelLoad.loaded : ModelLoad.failed;
         _loading = null;
         debugPrint('model load: ${modelDiagnostics()}');
@@ -332,6 +340,18 @@ class AppServices {
   /// One native load of [_path]: SHA-256 check first (production only), and a
   /// crash marker around the native call. A fresh engine per path, so a switch
   /// never reloads an old cached path.
+  /// The note [_loadPath] last showed for a failure, cleared once a load works.
+  String? _failNote;
+
+  static bool _readable(String path) {
+    try {
+      File(path).openSync().closeSync();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> _loadPath() async {
     final sel = selection;
     final spec = modelByFileName(p.basename(_path));
@@ -340,10 +360,18 @@ class AppServices {
         modelFailure = 'not_allowlisted';
         return false; // only allowlisted ChatML files
       }
+      if (!_readable(_path)) {
+        // Before file access is granted the file can be listed but not read;
+        // that is not a corrupt download.
+        modelFailure = 'unreadable:${spec.id}';
+        modelNote.value = _failNote = 'Corenyth cannot read ${spec.fileName} '
+            'yet. Allow file access, then come back.';
+        return false;
+      }
       if (!await sel.verify(spec, _path)) {
         modelFailure = 'sha256_mismatch:${spec.id}';
-        modelNote.value = '${spec.fileName} does not match the published file '
-            '(SHA-256 check failed). Download it again.';
+        modelNote.value = _failNote = '${spec.fileName} does not match the '
+            'published file (SHA-256 check failed). Download it again.';
         return false;
       }
       await sel.markAttempt(spec.id);

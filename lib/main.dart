@@ -1183,13 +1183,19 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                           style: TextStyle(color: AppColors.success))),
               step(
                   2,
-                  'Copy ${want.fileName} (about ${want.approxMiB} MB) to the phone. '
-                  'From a computer: adb push <file> /sdcard/$_folder/${want.fileName}. '
-                  'Keep the file name exactly.'),
+                  'Download ${want.fileName} (about ${want.approxMiB} MB) from the Corenyth release page, '
+                  'or from a computer: adb push <file> /sdcard/$_folder/${want.fileName}. '
+                  'Keep the file name exactly.',
+                  want.url.isEmpty
+                      ? null
+                      : TextButton(
+                          onPressed: () => NativeBridge.openUrl(want.url)
+                              .catchError((_) {}),
+                          child: const Text('Download in browser'))),
               step(
                   3,
-                  'If you copied it to Downloads instead, open the Files app > Downloads, '
-                  'long-press the file, choose Move to... and pick Documents > $_folder.'),
+                  'A browser download lands in Downloads: open the Files app > Downloads, '
+                  'long-press the file, choose Move to... and pick Documents > localmodels.'),
               step(
                   4,
                   'Come back here. The app re-checks by itself and loads the model right away.',

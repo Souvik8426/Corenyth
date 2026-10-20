@@ -47,7 +47,9 @@ void main() {
       expect(corenythModel.expectedBytes, 381566560);
       expect(corenythModel.sha256,
           '77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821');
-      expect(corenythModel.url, isEmpty, reason: 'side-loaded only');
+      expect(corenythModel.url,
+          startsWith('https://github.com/Souvik8426/Corenyth/releases/download/'));
+      expect(corenythModel.url, endsWith('/${corenythModel.fileName}'));
       expect(corenythModel.chatTemplate, 'chatml');
       expect(isAllowlistedModelFile(corenythModel.fileName), isTrue);
       expect(modelFileName, corenythModel.fileName);

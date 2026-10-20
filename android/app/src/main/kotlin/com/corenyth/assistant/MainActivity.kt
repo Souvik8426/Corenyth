@@ -17,6 +17,11 @@ open class MainActivity : FlutterActivity() {
     companion object {
         /// Alpha feedback goes to the developer's inbox through the user's mail app.
         const val FEEDBACK_EMAIL = "souvikdas8426@gmail.com"
+        /// Hosts the model download link may point at (the app itself stays offline).
+        val OPEN_URL_PREFIXES = listOf(
+            "https://huggingface.co/",
+            "https://github.com/Souvik8426/Corenyth/releases/",
+        )
     }
 
     /**
@@ -57,8 +62,8 @@ open class MainActivity : FlutterActivity() {
                     }
                     "openUrl" -> {
                         val url = call.arguments as? String
-                        if (url == null || !url.startsWith("https://huggingface.co/")) {
-                            result.error("bad_url", "only https://huggingface.co/ links are opened", null)
+                        if (url == null || OPEN_URL_PREFIXES.none { url.startsWith(it) }) {
+                            result.error("bad_url", "only model download links are opened", null)
                         } else try {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             result.success(null)

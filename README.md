@@ -75,7 +75,7 @@ Once the app is running (with or without the local model loaded), you can intera
 Corenyth is built so your personal data cannot leave your phone:
 
 - **No `INTERNET` Permission in Release Builds:** The release `AndroidManifest.xml` declares zero network permissions. *(Note: Flutter automatically injects `INTERNET` into `debug` and `profile` builds to support local hot-reload over ADB; always inspect `app-release.apk` when verifying offline guarantees.)*
-- **User-Controlled Model Side-Loading:** The app never downloads weights in the background. You copy the fine-tuned GGUF once from your computer into `Documents/localmodels`.
+- **User-Controlled Model Side-Loading:** The app never downloads weights in the background. You download the fine-tuned GGUF from the [Releases page](https://github.com/Souvik8426/Corenyth/releases) (or copy it from your computer) into `Documents/localmodels`.
 - **100% Local State:** Tasks, reminder plans, chat history, and personal memories live exclusively inside your device's SQLite database (`assistant.db`). There is no cloud account, telemetry server, or remote API fallback.
 - **Privacy-Preserving Diagnostics:** Native and session logs (`LlamaBridge`, turn diagnostics) record route selection, token counts, and inference timings—never your message text or personal memories.
 
@@ -201,7 +201,7 @@ flutter build apk --release
 
 ## Installing an On-Device Model
 
-Because Corenyth has no `INTERNET` permission, it never downloads model files behind the scenes. You place the `.gguf` file into `Documents/localmodels` yourself.
+Because Corenyth has no `INTERNET` permission, it never downloads model files behind the scenes. You place the `.gguf` file into `Documents/localmodels` yourself. The APK and the model are both attached to each [GitHub release](https://github.com/Souvik8426/Corenyth/releases).
 
 ### Allowlisted Model
 
@@ -209,14 +209,14 @@ Only one GGUF file is accepted (the stock Qwen3 0.6B/1.7B files and any other GG
 
 | Filename (Keep Exact Name) | Exact Size | SHA-256 Checksum | Where it comes from |
 |---|---|---|---|
-| `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` | `381,566,560` bytes (~364 MiB) | `77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821` | Built with [training/](training/README.md) (Colab export `Qwen3-0.6B.Q4_0.gguf`, renamed) |
+| `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` | `381,566,560` bytes (~364 MiB) | `77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821` | [Release v0.1.0-alpha.1](https://github.com/Souvik8426/Corenyth/releases/tag/v0.1.0-alpha.1), built with [training/](training/README.md) |
 
 A retrained model has a new size and hash: update `corenythModel` in `lib/services/model_status.dart` with each export.
 
 ### Setup Instructions
 
 1. **Launch Corenyth Once:** Open the app on your phone and grant storage access when prompted (*All files access* on Android 11+, or *Storage permission* on Android 7–10). This automatically creates `/sdcard/Documents/localmodels/`.
-2. **Place the Model File** from your computer:
+2. **Place the Model File:** on the phone, tap **Download in browser** in the setup card (it opens the release asset), then in the **Files** app move `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` from `Download` to `Documents/localmodels`. Or, from your computer:
    ```sh
    adb push Qwen3-0.6B.Q4_0.gguf /sdcard/Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf
    ```
@@ -359,5 +359,7 @@ Issues and pull requests are welcome! Before submitting a PR:
 - **Repository License:** No open-source license file has been added to this repository yet (all rights reserved by default until a license is chosen).
 - **Third-Party Components:**
   - [llama.cpp](https://github.com/ggml-org/llama.cpp) by `ggml-org` (MIT License)
-  - [Qwen3](https://huggingface.co/Qwen) by the Qwen team, with quantized GGUF weights by [Unsloth](https://huggingface.co/unsloth)
+  - [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) by the Qwen team (Apache License 2.0); the released GGUF is a LoRA fine-tune of it, merged and quantized with [Unsloth](https://github.com/unslothai/unsloth)
+  - [Amazon MASSIVE](https://github.com/alexa/massive) en-US utterances, relabelled as fine-tuning data (CC BY 4.0)
+  - See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
   - [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans) by Tokotype (SIL Open Font License 1.1 — see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt))

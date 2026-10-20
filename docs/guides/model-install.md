@@ -10,7 +10,7 @@ Exactly one GGUF file is accepted. The stock Qwen3 0.6B/1.7B files and any other
 |---|---|---|---|---|
 | `corenyth-0.6b-tuned` | `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` | 381,566,560 | `77d3f6d4…b821` | Default and only model |
 
-It is Qwen3-0.6B with a LoRA trained on Corenyth's plan prompts, merged and quantized to Q4_0 by Unsloth (see [training/README.md](../../training/README.md)). It has no download URL (`url` is empty), so neither the setup card nor Details offers a download. Each retrained file has a new size and SHA-256: update `corenythModel` in `lib/services/model_status.dart` with every export.
+It is Qwen3-0.6B with a LoRA trained on Corenyth's plan prompts, merged and quantized to Q4_0 by Unsloth (see [training/README.md](../../training/README.md)). Its `url` is the GitHub release asset; the setup card's **Download in browser** button hands it to the browser (`openUrl` only accepts `huggingface.co` and this repo's `releases/` links), since the app itself has no INTERNET permission. Each retrained file has a new size and SHA-256: update `corenythModel` in `lib/services/model_status.dart` with every export.
 
 The spec lives in `lib/services/model_status.dart` (`corenythModel`, `modelCatalog`). It uses the Dart-owned ChatML template in `Prompt.render`; no native template change.
 
@@ -39,7 +39,7 @@ The spec lives in `lib/services/model_status.dart` (`corenythModel`, `modelCatal
 ## User steps
 
 1. Open the app once and grant file access.
-2. From a computer: `adb push Qwen3-0.6B.Q4_0.gguf /sdcard/Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` (the Colab export is named `Qwen3-0.6B.Q4_0.gguf`; the target name must be exact).
+2. Tap **Download in browser** in the setup card, then move the file from `Download` to `Documents/localmodels` with the Files app. Or from a computer: `adb push Qwen3-0.6B.Q4_0.gguf /sdcard/Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` (the Colab export is named `Qwen3-0.6B.Q4_0.gguf`; the target name must be exact).
 3. Or copy it to the phone another way and move it into `Documents/localmodels` with the Files app, keeping the exact name.
 4. Return to the app: it re-checks, verifies the hash and loads.
 

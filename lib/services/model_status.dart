@@ -40,12 +40,13 @@ class ModelSpec {
 const defaultModelId = 'corenyth-0.6b-tuned';
 
 /// The only allowlisted model: Qwen3-0.6B LoRA-fine-tuned on Corenyth's plan
-/// prompts (training/), merged and quantized to Q4_0 by Unsloth. Side-loaded:
-/// no download URL. A retrained file has a new size and hash; update both.
+/// prompts (training/), merged and quantized to Q4_0 by Unsloth. Published as a
+/// GitHub release asset; the app only opens the link in the browser (no
+/// INTERNET permission). A retrained file has a new size, hash and release URL.
 const ModelSpec corenythModel = ModelSpec(
   id: defaultModelId,
   fileName: 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf',
-  url: '',
+  url: 'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf',
   expectedBytes: 381566560,
   label: 'Corenyth 0.6B (fine-tuned)',
   sha256: '77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821',
@@ -55,7 +56,8 @@ const List<ModelSpec> modelCatalog = [corenythModel];
 
 /// Back-compat aliases for the default model (literals; field access is not a const expr).
 const modelFileName = 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';
-const modelUrl = '';
+const modelUrl =
+    'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';
 const modelBytes = 381566560;
 
 ModelSpec? modelById(String id) {
