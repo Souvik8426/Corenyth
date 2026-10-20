@@ -45,6 +45,15 @@ class NativeBridge {
   /// Hands an https URL to the user's browser (the app itself has no INTERNET permission).
   static Future<void> openUrl(String url) => _ch.invokeMethod('openUrl', url);
 
+  /// Address the feedback mail goes to (fixed natively too).
+  static const feedbackEmail = 'souvikdas8426@gmail.com';
+
+  /// Opens the user's mail app with a feedback draft to [feedbackEmail]; the
+  /// draft notes app version, Android version, phone and [model]. Nothing is
+  /// sent until the user sends it. Throws PlatformException `no_mail_app`.
+  static Future<void> sendFeedback({String? model}) => _ch.invokeMethod(
+      'sendFeedback', {'subject': 'Corenyth alpha feedback', 'model': model});
+
   /// Opens a chat link (https with a host only; re-validated natively). Throws
   /// PlatformException when rejected or no browser is installed.
   static Future<void> openExternalLink(String url) =>

@@ -14,6 +14,11 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 open class MainActivity : FlutterActivity() {
+    companion object {
+        /// Alpha feedback goes to the developer's inbox through the user's mail app.
+        const val FEEDBACK_EMAIL = "souvikdas8426@gmail.com"
+    }
+
     /**
      * Android 11+: "All files access" (the model is a file other apps put there, so scoped
      * storage can't see it). Android 6-10: legacy WRITE_EXTERNAL_STORAGE runtime permission.
@@ -59,6 +64,27 @@ open class MainActivity : FlutterActivity() {
                             result.success(null)
                         } catch (e: ActivityNotFoundException) {
                             result.error("no_browser", "no browser installed", null)
+                        }
+                    }
+                    "sendFeedback" -> {
+                        // The user's own mail app via mailto: (no INTERNET needed). The
+                        // recipient is fixed here; Dart only supplies the subject.
+                        val version = try {
+                            packageManager.getPackageInfo(packageName, 0).versionName
+                        } catch (e: Exception) { "?" }
+                        val body = "\n\n---\nCorenyth $version (alpha)\n" +
+                            "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), " +
+                            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+                            "Model: ${call.argument<String>("model") ?: "none"}"
+                        val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+                            .putExtra(Intent.EXTRA_EMAIL, arrayOf(FEEDBACK_EMAIL))
+                            .putExtra(Intent.EXTRA_SUBJECT, call.argument<String>("subject") ?: "Corenyth feedback")
+                            .putExtra(Intent.EXTRA_TEXT, body)
+                        try {
+                            startActivity(mail)
+                            result.success(null)
+                        } catch (e: ActivityNotFoundException) {
+                            result.error("no_mail_app", "no mail app installed", FEEDBACK_EMAIL)
                         }
                     }
                     "openExternalLink" -> {

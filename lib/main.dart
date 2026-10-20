@@ -45,8 +45,15 @@ Future<void> main() async {
 class ServiceStartup extends StatefulWidget {
   final bool voice;
   final Future<AppServices> Function() open;
+
+  /// A startup that never finishes (e.g. a step waiting on a lock after an
+  /// update) shows the Retry screen instead of an endless spinner.
+  final Duration timeout;
   const ServiceStartup(
-      {this.voice = false, this.open = AppServices.open, super.key});
+      {this.voice = false,
+      this.open = AppServices.open,
+      this.timeout = const Duration(seconds: 30),
+      super.key});
 
   @override
   State<ServiceStartup> createState() => _ServiceStartupState();
@@ -62,7 +69,7 @@ class _ServiceStartupState extends State<ServiceStartup> {
   }
 
   void _start() {
-    _services = widget.open();
+    _services = widget.open().timeout(widget.timeout);
     listenProactive((args) async => (await _services).runProactive(args));
   }
 
@@ -362,6 +369,19 @@ class _AssistantHomeState extends State<AssistantHome>
     }
   }
 
+  /// A feedback draft in the user's own mail app; without one, the address.
+  Future<void> _sendFeedback() async {
+    try {
+      await NativeBridge.sendFeedback(
+          model: widget.services.activeModel?.label);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+          content: Text('No mail app found. Send feedback to '
+              '${NativeBridge.feedbackEmail}.')));
+    }
+  }
+
   /// The launcher's own "Add to home screen" prompt; where it isn't
   /// available, how to add the widget by hand.
   Future<void> _addWidget() async {
@@ -488,6 +508,10 @@ class _AssistantHomeState extends State<AssistantHome>
                 _switch(id);
               },
               onDelete: _delete,
+              onFeedback: () {
+                dismiss();
+                _sendFeedback();
+              },
               onAddWidget: () {
                 dismiss();
                 _addWidget();

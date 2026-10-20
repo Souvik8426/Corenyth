@@ -79,4 +79,26 @@ void main() {
     await tester.tap(find.text('Add home screen widget'));
     expect(asked, 1);
   });
+
+  testWidgets('feedback sits above the widget option and calls back',
+      (tester) async {
+    var sent = 0;
+    Widget sidebar(VoidCallback? onFeedback) => MaterialApp(
+        home: Scaffold(
+            body: ChatSidebar(
+          chats: const [],
+          onNewChat: () {},
+          onSelect: (_) {},
+          onDelete: (_) {},
+          onFeedback: onFeedback,
+          onAddWidget: () {},
+        )));
+    await tester.pumpWidget(sidebar(null));
+    expect(find.text('Send feedback'), findsNothing);
+    await tester.pumpWidget(sidebar(() => sent++));
+    expect(tester.getTopLeft(find.text('Send feedback')).dy,
+        lessThan(tester.getTopLeft(find.text('Add home screen widget')).dy));
+    await tester.tap(find.text('Send feedback'));
+    expect(sent, 1);
+  });
 }

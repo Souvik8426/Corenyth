@@ -14,6 +14,21 @@ void main() {
     expect(find.text('Opening Corenyth…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 31)); // let the startup timeout run out
+  });
+
+  testWidgets('a startup that never finishes ends on Retry, not a spinner',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: ServiceStartup(
+      open: () => Completer<AppServices>().future,
+      timeout: const Duration(seconds: 2),
+    )));
+    expect(find.text('Opening Corenyth…'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Could not open Corenyth. Your saved data is kept.'),
+        findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
   });
 
   testWidgets('startup failure is visible and Retry starts a new attempt',
@@ -34,5 +49,6 @@ void main() {
     expect(attempts, 2);
     expect(find.text('Opening Corenyth…'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(seconds: 31)); // let the startup timeout run out
   });
 }
