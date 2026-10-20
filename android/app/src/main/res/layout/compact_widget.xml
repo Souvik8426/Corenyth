@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_bg">
+
+    <!-- Share the upper area so the add button no longer reserves a full row. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ViewFlipper
+            android:id="@+id/widget_mascot"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="32dp"
+            android:autoStart="true"
+            android:flipInterval="160"
+            android:contentDescription="Animated Corenyth companion">
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@mipmap/ic_launcher"
+                android:scaleType="fitCenter"
+                android:importantForAccessibility="no"/>
+        </ViewFlipper>
+
+        <TextView
+            android:id="@+id/widget_add"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top|end"
+            android:gravity="center"
+            android:text="+"
+            android:textSize="30sp"
+            android:textColor="@color/corenyth_lavender"
+            android:contentDescription="Add task"
+            android:background="@drawable/widget_pill"/>
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/widget_count"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp"
+        android:textSize="12sp"
+        android:textColor="@color/corenyth_muted"/>
+</LinearLayout>

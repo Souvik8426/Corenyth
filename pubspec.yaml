@@ -1,7 +1,7 @@
 name: assistant
 description: Local-first offline voice/text assistant with tasks, reminders and memory.
 publish_to: none
-version: 0.1.0+1
+version: 0.1.0-alpha.1+1
 environment:
   sdk: ">=3.3.0 <4.0.0"
 dependencies:
@@ -48,6 +48,4 @@ flutter_launcher_icons:
 hooks:
   user_defines:
     sqlite3:
-      source:
-        macos: system
-        default: sqlite3
+      source: sqlite3

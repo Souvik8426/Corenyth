@@ -153,6 +153,14 @@ class AssistantSession {
   /// Put before this turn's reply (an outcome noted alongside a new reminder).
   String? _prefix;
 
+  /// The model's own follow-up (plan `reply`), shown after the app's exact
+  /// confirmation when this turn's accepted plan wrote something.
+  String? _modelLine;
+
+  /// What an event is about, given with its time ("3pm, it's about the
+  /// budget"); stored on the event once it is created.
+  String? _subject;
+
   /// This turn's own early-alert offset ("15 minutes before"), see [leadOverride].
   int? _leadMin;
 
@@ -317,6 +325,8 @@ class AssistantSession {
     _note = null;
     _header = null;
     _prefix = null;
+    _modelLine = null;
+    _subject = null;
     _leadMin = null;
     _said = text;
     _turnNow = _now();
@@ -405,6 +415,12 @@ class AssistantSession {
       if (_header != null) reply = '$_header:\n$reply';
       if (_prefix != null) reply = '$_prefix $reply';
       if (_note != null) reply = '$reply $_note';
+      if (_modelLine != null &&
+          status != OperationJournal.failed &&
+          lastTurn?.receipts.any((r) => r.wrote) == true) {
+        reply = '$reply $_modelLine';
+        _diag['reply'] = 'model_line';
+      }
       await conversations.add(id, 'assistant', reply);
       await journal?.mark(_op, status,
           receipt: jsonEncode({...?lastTurn?.toJson(), 'reply': reply}));
@@ -804,8 +820,24 @@ class AssistantSession {
 
   Future<ToolCall?> _pendingAnswerRoute(String text) async {
     final draft = await _draft();
-    if (draft != null && _fallback.isTimeAnswer(draft, text)) {
-      return _answer(draft, _fallback.resolveClarify(draft, text), text);
+    if (draft == null) return null;
+    var answer = text;
+    String? subject;
+    // An event's time question may be answered with its topic too.
+    final about = draft.day == null
+        ? null
+        : RegExp(r"^(.+?)[,;.]?\s+(?:and\s+)?(?:it'?s\s+|it is\s+)?about\s+(.+?)[.!]*$",
+                caseSensitive: false)
+            .firstMatch(text.trim());
+    if (about != null && _fallback.isTimeAnswer(draft, about.group(1)!)) {
+      answer = about.group(1)!;
+      subject = about.group(2)!;
+    }
+    if (_fallback.isTimeAnswer(draft, answer)) {
+      final c =
+          await _answer(draft, _fallback.resolveClarify(draft, answer), answer);
+      if (c != null && c.tool != 'respond') _subject = subject;
+      return c;
     }
     return null;
   }
@@ -1433,6 +1465,10 @@ class AssistantSession {
       String text,
       Future<ExecutionReceipt> Function(ToolCall) run) async {
     try {
+      if (_subject != null && c.tool.startsWith('create_') && _lastTask != null) {
+        await run(ToolCall(
+            'set_event_details', {'id': _lastTask, 'subject': _subject}));
+      }
       if (c.tool == 'create_reminder' && _lastTask != null) {
         final found = await taskRepo.get(_lastTask!);
         if (found == null || found.done || !isEventTitle(found.title)) {
@@ -1655,10 +1691,14 @@ class AssistantSession {
     final p = Prompt(PromptKind.plan, text,
         now: _now(),
         contract: contract,
+        // The most relevant tasks, listed by id: a stable order keeps the
+        // KV-cached prefix valid from one message to the next.
         tasks: open.isEmpty
             ? '(none)'
             : [
-                for (final t in open.take(_taskCap)) _line(t),
+                for (final t in open.take(_taskCap).toList()
+                  ..sort((a, b) => a.id.compareTo(b.id)))
+                  _line(t),
                 if (open.length > _taskCap)
                   '(and ${open.length - _taskCap} more)',
               ].join('\n'),
@@ -1673,9 +1713,15 @@ class AssistantSession {
             ? null
             : '${draft.tool == 'create_reminder' ? 'reminder' : 'task'} '
                 '"${draft.title}" still needs a time',
+        // Profile (name, tone) stays in the KV-cached system prompt; the
+        // memories picked for this message go in the user turn.
+        memories: (await _personalMemories(text))
+            .where(isUsefulPersonalMemory)
+            .take(3)
+            .toList(),
+        tone: (await profile.get())?.tone,
         personalContext: buildPersonalContext(
-            await profile.get() ?? const UserProfile(),
-            await _personalMemories(text)));
+            await profile.get() ?? const UserProfile(), const []));
     timing['context'] = ctx.elapsedMilliseconds;
     if (_cancelled) throw ToolError('cancelled');
     _diag['model'] = 'called';
@@ -1688,6 +1734,7 @@ class AssistantSession {
         _diag['fallback'] = 'model_budget';
         return null;
       }
+      if (_logRaw) debugPrint('raw plan: $raw');
       s = parseSemantic(raw, version: v2 ? 2 : 1);
     } on PlatformException catch (e) {
       if (e.code == 'llama_cancelled' || _cancelled) {
@@ -1715,6 +1762,24 @@ class AssistantSession {
     _modelAuth = s.authorization;
     if (s.authorization != null) _diag['auth_model'] = s.authorization!;
     final c = await _act(s, text, open, draft);
+    final line = s.reply;
+    if (c != null &&
+        line != null &&
+        c.tool == 'respond' &&
+        _diag['clarify'] == 'event_time' &&
+        isSafeFollowUp(line, text)) {
+      _diag['reply'] = 'model_line';
+      return _say('${c.args['text']} ${line.trim()}');
+    }
+    if (c != null && line != null && _writes.contains(c.tool)) {
+      if (_diag['clarify'] != null) {
+        _diag['line'] = 'clarify';
+      } else if (!isSafeFollowUp(line, text)) {
+        _diag['line'] = 'unsafe';
+      } else {
+        _modelLine = line.trim();
+      }
+    }
     if (c == null) {
       lastFallbackReason ??=
           'the model\'s reading (${s.intent}) did not fit your message';
@@ -1750,6 +1815,19 @@ class AssistantSession {
               : null;
     }
   }
+
+  /// Development only (`--dart-define=CORENYTH_LOG_RAW=true`): logs the
+  /// model's raw plan, which quotes the user. Off in every normal build.
+  static const _logRaw = bool.fromEnvironment('CORENYTH_LOG_RAW');
+
+  /// Tools whose confirmation may carry the model's follow-up line.
+  static const _writes = {
+    'create_task',
+    'create_reminder',
+    'complete_task',
+    'delete_task',
+    'edit_task',
+  };
 
   /// Commands the semantic schema has no intent for (rename, reminder
   /// edit/cancel/list): a plan can't stand in for them; the rules run them.
@@ -1810,6 +1888,11 @@ class AssistantSession {
         final r = s.reply;
         final planned =
             r != null && !_groundless(r, open) && !echoes(r, text) ? r : null;
+        // One call per turn: the plan already carries the toned answer.
+        if (planned != null && safeReply(planned, text)) {
+          _diag['reply'] = 'model';
+          return _say(planned.trim());
+        }
         final said = await _converse(text, const [], planned ?? '',
             'Small talk or a general message. Reply naturally to what the user actually said, in one or two sentences.',
             history: await _chatHistory());
@@ -1821,6 +1904,14 @@ class AssistantSession {
           final read = _fallback.plan(text);
           if (read['type'] == 'tool' && read['tool'] == 'search_memory') {
             return _recall(text);
+          }
+          final r = s.reply;
+          if (r != null &&
+              safeReply(r, text) &&
+              !_groundless(r, open) &&
+              !echoes(r, text)) {
+            _diag['reply'] = 'model';
+            return _say(r.trim());
           }
           return _say(await _converse(text, const [], 'Tell me a little more.',
               'Respond to the actual message. No tasks, reminders or actions were requested.',
@@ -2005,14 +2096,16 @@ class AssistantSession {
             : null);
     final tool = reminder ? 'create_reminder' : 'create_task';
     // Asking for one value keeps everything else that was understood.
-    Future<ToolCall> askTime(String code, String lead, {String? time}) async {
+    Future<ToolCall> askTime(String code, String lead,
+        {String? time, DateTime? day}) async {
       _diag['clarify'] = code;
       final d = ClarifyDraft(
           tool: tool,
           title: title,
           multiple: multiple,
           followUp: followUp,
-          time: time);
+          time: time,
+          day: day?.toIso8601String().substring(0, 10));
       await _setDraft(d);
       return _say('$lead${d.prompt}');
     }
@@ -2066,6 +2159,15 @@ class AssistantSession {
       return _say('What needs to be done ${anchor!.text}? Tell me and I can '
           'add it as a task or set a reminder.');
     }
+    // "I have a meeting tomorrow": a day but no time for an event the user
+    // only mentioned. Ask its time (the day is kept) instead of guessing 9 AM.
+    if (!reminder &&
+        at != null &&
+        reading.dated &&
+        !reading.timed &&
+        isEventTitle(title)) {
+      return askTime('event_time', '', day: at);
+    }
     final problem = RuleEngine.timeProblem(reading, reminder, _now());
     if (problem != null) return askTime('deadline_not_alert', '$problem ');
     if (at == null && !reminder) return ToolCall(tool, {'title': title});
@@ -2091,27 +2193,53 @@ class AssistantSession {
     if (s.negated || RuleEngine.isQuestionOrNegated(text)) {
       return _say("I didn't change anything.");
     }
+    // "Add a task to clean my room" never completes or deletes: the user's
+    // words ask to create, so this plan is unsafe, not merely different.
+    if (s.intent != 'postpone' && _fallback.parseCreate(text) != null) {
+      return null;
+    }
     final tool = const {
       'complete': 'complete_task',
       'delete': 'delete_task',
       'postpone': 'edit_task'
     }[s.intent]!;
-    final ref = s.ref ?? s.title;
-    final id = ref == null ? null : RegExp(r'^#?(\d+)$').firstMatch(ref.trim());
-    // A number must be typed by the user; words must come from the message.
+    var ref = s.ref ?? s.title;
+    var id = ref == null
+        ? null
+        : RegExp(r'^#?(\d+)(?:\s+\D.*)?$').firstMatch(ref.trim());
+    var modelPicked = false;
+    // The prompt offers "#id" from Current tasks: a model-picked id stands
+    // when that task's own words are in the message, as if the user named it.
+    if (id != null &&
+        !RegExp('(?:#|\\b)${id.group(1)}\\b').hasMatch(text)) {
+      final picked =
+          open.where((t) => t.id == int.parse(id!.group(1)!)).toList();
+      if (picked.length != 1 || !_grounded(picked.single.title, text)) {
+        return null;
+      }
+      ref = picked.single.title;
+      id = null;
+      modelPicked = true;
+    }
+    // Words must come from the message.
     if (ref != null &&
-        (id != null
-            ? !RegExp('(?:#|\\b)${id.group(1)}\\b').hasMatch(text)
-            : !_grounded(ref, text, all: true))) {
+        id == null &&
+        !modelPicked &&
+        !_grounded(ref, text, all: true)) {
       return null;
     }
     Duration? shift;
     Map<String, Object?> args = const {};
     if (tool == 'edit_task') {
       final w = s.when;
-      final d = w == null || !_mentioned(w, text)
-          ? null
-          : RuleEngine.parseDuration(w);
+      // The user's own "by 30 minutes" wins when the model reworded it.
+      final by =
+          RegExp(r'^.*\b(?:by|for)\s+(.+?)[.!?]*$', caseSensitive: false)
+              .firstMatch(text);
+      final d = (w == null || !_mentioned(w, text)
+              ? null
+              : RuleEngine.parseDuration(w)) ??
+          (by == null ? null : RuleEngine.parseDuration(by.group(1)!));
       final r = w == null || d != null || !_mentioned(w, text)
           ? null
           : _fallback.resolveWhen(w);
@@ -2130,7 +2258,12 @@ class AssistantSession {
                 caseSensitive: false)
             .hasMatch(ref.trim());
     final last = pronoun ? open.where((t) => t.id == _lastTask).toList() : null;
-    final l = last ?? (ref == null ? <Task>[] : await _matching(ref, open));
+    var l = last ?? (ref == null ? <Task>[] : await _matching(ref, open));
+    // A ref that names nothing ("postpone"): the task the message names.
+    if (l.isEmpty && !modelPicked && id == null) {
+      final said = named(open, text);
+      if (said.length == 1) l = said;
+    }
     final pick = TargetPick(
         tool: tool,
         args: args,

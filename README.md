@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/corenyth-logo.png" alt="Corenyth logo" width="128">
+  <img src="assets/branding/corenyth-logo-primary.png" alt="Corenyth logo" width="128">
 </p>
 
 <h1 align="center">Corenyth</h1>
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/platform-Android%207.0%2B%20(API%2024%2B)-d4b072?style=flat-square" alt="Android 7.0+">
   <img src="https://img.shields.io/badge/Flutter-Dart%203.3%2B-02569B?style=flat-square&logo=flutter" alt="Flutter">
   <img src="https://img.shields.io/badge/inference-llama.cpp%20(b11541)-f2c4ce?style=flat-square" alt="llama.cpp">
-  <img src="https://img.shields.io/badge/models-Qwen3%200.6B%20%7C%201.7B%20GGUF-cdbbfF?style=flat-square" alt="Qwen3 GGUF">
+  <img src="https://img.shields.io/badge/models-Corenyth%20Qwen3%200.6B%20fine--tuned%20GGUF-cdbbfF?style=flat-square" alt="Qwen3 GGUF">
   <img src="https://img.shields.io/badge/network-100%25%20offline-9fd8b8?style=flat-square" alt="100% Offline">
 </p>
 
@@ -37,7 +37,7 @@
 At the heart of Corenyth is one strict architectural rule: **the model interprets, code acts**. A small on-device model is never trusted to invent database IDs, calculate calendar dates, or mutate state directly. Instead, the model emits a GBNF grammar-constrained JSON plan using words grounded in your prompt. Application code validates that plan against what you actually typed and the current database state, resolves every timestamp deterministically, and executes the action—or falls back to a built-in deterministic rule engine if the model output is rejected or no model is installed.
 
 > **Current Status — Early Prototype (`v0.1.0`)**
-> Text chat, tasks, exact reminders, proactive follow-through, local FTS4 memory, the native home-screen widget, and on-device Qwen3 inference are built and running. However, **broad language reliability is not accepted yet**: on the latest frozen evaluation, the real Qwen3-0.6B model scored **97 pass / 0 fail / 5 incomplete** on development cases, but **12 pass / 18 fail / 4 incomplete** on unseen held-out phrasings. Voice (ASR/TTS) is not integrated yet. See [reliability status](docs/development/reliability-status.md) and [roadmap & known limitations](#roadmap--known-limitations) for full details.
+> Text chat, tasks, exact reminders, proactive follow-through, local FTS4 memory, the native home-screen widget, and on-device Qwen3 inference are built and running. However, **broad language reliability is not accepted yet**: on the latest frozen evaluation, the real Qwen3-0.6B model scored **97 pass / 0 fail / 5 incomplete** on development cases, but **12 pass / 18 fail / 4 incomplete** on unseen held-out phrasings. Voice (ASR/TTS) is not integrated yet. Since 20 October 2026 the model also writes a toned reply in the same call as its plan, and an optional fine-tuned 0.6B ([training/](training/README.md)) reads every message of a short phone script correctly; the corpus has not been rerun with either, and tone is still followed only loosely. See [reliability status](docs/development/reliability-status.md) and [roadmap & known limitations](#roadmap--known-limitations) for full details.
 
 ---
 
@@ -49,8 +49,8 @@ At the heart of Corenyth is one strict architectural rule: **the model interpret
 - **Exact Reminders & Boot Recovery:** Persists tasks and reminder plans in SQLite (schema `v8`) and schedules native Android `AlarmManager` alerts with lock-screen **Done** and **Snooze** actions. Missed or pending alerts are automatically reconciled on app startup, device reboot, clock shifts, and timezone changes.
 - **Proactive Follow-Through:** Supports optional preparation nudges before timed events, post-meeting *"How did it go?"* outcome check-ins, daily recurring schedules, and an evening review before quiet hours—all landing naturally in your main chat thread.
 - **Local Personal Memory (FTS4):** Captures explicit `"remember..."` notes and personal facts with full-text search (`SQLite FTS4`), provenance tracking, bounded corrections/supersession, and deletion—automatically feeding relevant memories into planning and reply prompts.
-- **Zero-Engine Home-Screen Widget:** Displays your pending tasks on the Android home screen by reading `assistant.db` directly from Kotlin (`WidgetProvider.kt`) without spinning up the Flutter engine or loading the LLM.
-- **Cryptographically Verified Models:** Accepts only two allowlisted Qwen3 GGUF files (`0.6B` default, `1.7B` optional), verifying exact byte size and streaming a background SHA-256 checksum check before the native loader ever touches the file.
+- **Home-Screen Widgets:** Choose a scrollable 4×2 remaining-task list with completion controls or a 2×2 animated companion. Both offer “+” to open a keyboard-focused assistant panel over the home screen, using the same prompt processing, clarification, and task tools as app chat. Display reads SQLite without starting Flutter; interactive chat starts Flutter and uses the installed model or rules fallback. See [widget behavior](docs/architecture/android-platform.md#widgets).
+- **Cryptographically Verified Models:** Accepts exactly one GGUF file, Corenyth's fine-tuned Qwen3-0.6B, verifying exact byte size and streaming a background SHA-256 checksum check before the native loader ever touches the file.
 - **Ethereal Arcana UI:** Crafted around an OLED pitch-black (`#000000`) and astral-violet (`#121016`) glassmorphic theme set in **Plus Jakarta Sans** (see [`branding/DESIGN.md`](branding/DESIGN.md)).
 
 ---
@@ -75,7 +75,7 @@ Once the app is running (with or without the local model loaded), you can intera
 Corenyth is built so your personal data cannot leave your phone:
 
 - **No `INTERNET` Permission in Release Builds:** The release `AndroidManifest.xml` declares zero network permissions. *(Note: Flutter automatically injects `INTERNET` into `debug` and `profile` builds to support local hot-reload over ADB; always inspect `app-release.apk` when verifying offline guarantees.)*
-- **User-Controlled Model Side-Loading:** The app never downloads weights in the background. You download the GGUF model once via your browser or computer and place it in `Documents/localmodels`.
+- **User-Controlled Model Side-Loading:** The app never downloads weights in the background. You download the fine-tuned GGUF from the [Releases page](https://github.com/Souvik8426/Corenyth/releases) (or copy it from your computer) into `Documents/localmodels`.
 - **100% Local State:** Tasks, reminder plans, chat history, and personal memories live exclusively inside your device's SQLite database (`assistant.db`). There is no cloud account, telemetry server, or remote API fallback.
 - **Privacy-Preserving Diagnostics:** Native and session logs (`LlamaBridge`, turn diagnostics) record route selection, token counts, and inference timings—never your message text or personal memories.
 
@@ -91,7 +91,7 @@ flowchart TD
     S -->|"Fallback / no model installed"| R["RuleEngine<br/>lib/assistant/rule_engine.dart"]
     E -->|"MethodChannel: assistant/llm"| B["LlamaBridge.kt<br/>Single Worker Thread"]
     B -->|JNI| J["llama_jni.cpp<br/>libllama_jni.so"]
-    J --> L["llama.cpp (b11541)<br/>Qwen3-0.6B / 1.7B GGUF"]
+    J --> L["llama.cpp (b11541)<br/>Corenyth fine-tuned Qwen3-0.6B GGUF"]
     E -->|"CandidatePlan JSON (GBNF)"| V["Authorization, Validation &<br/>Temporal Resolution"]
     R -->|"CandidatePlan JSON"| V
     V -->|"Validated receipt"| X["ToolExecutor & FollowThrough<br/>lib/assistant/tools.dart"]
@@ -103,7 +103,7 @@ flowchart TD
 Every turn flows through three guarded stages:
 
 1. **Direct App Shortcuts:** If your message is pure arithmetic, answers an open clarification prompt (*"What time?"* or *"Which one?"*), or matches a high-confidence anchored command, `AssistantSession` handles it immediately.
-2. **Grammar-Constrained Semantic Planning:** Otherwise, `LlamaChannelEngine` formats a KV-cache-friendly ChatML prompt and calls `assistant/llm` (`load`, `generate`, `cancel`, `unload`). `llama.cpp` samples a JSON `CandidatePlan` strictly constrained by a GBNF grammar.
+2. **Grammar-Constrained Semantic Planning:** Otherwise, `LlamaChannelEngine` formats a KV-cache-friendly ChatML prompt and calls `assistant/llm` (`load`, `generate`, `cancel`, `unload`). `llama.cpp` samples a JSON `CandidatePlan` strictly constrained by a GBNF grammar. Every plan carries a short `reply` in the user's chosen tone: the chat answer, or a follow-up line added after the app's exact confirmation (e.g. *"What time is "meeting" on Sat 24 Oct? Ooh, what's the meeting about?"*).
 3. **Authorization, Temporal Resolution & Execution:** Before anything touches the database, `authorization.dart` and `temporal.dart` verify that the proposed intent matches your words (distinguishing polite requests from questions, hypotheticals, and negations), compute exact wall-clock dates, and execute via `ToolExecutor`. If the LLM plan is invalid, Corenyth transparently falls back to `RuleEngine`.
 
 For a deeper dive, read the [Architecture Overview](docs/architecture/overview.md), [Request Flow](docs/architecture/request-flow.md), [LLM Engine Guide](docs/architecture/llm-engine.md), and [Tools & Validation](docs/architecture/tools-and-validation.md).
@@ -117,7 +117,7 @@ For a deeper dive, read the [Architecture Overview](docs/architecture/overview.m
 | **Application & UI** | Flutter (Dart SDK `>=3.3.0 <4.0.0`), Material 3, *Ethereal Arcana* dark theme (`Plus Jakarta Sans`) |
 | **Android Native** | Kotlin (`JVM 17`), C++17 JNI (`llama_jni.cpp`), CMake `3.22.1`, Android NDK |
 | **On-Device Inference** | [llama.cpp](https://github.com/ggml-org/llama.cpp) pinned tag `b11541`, static `ggml`, CPU-only (`armv8-a` baseline on arm64, `x86_64` on emulator, no OpenMP) |
-| **Allowlisted Models** | [Qwen3-0.6B-Q4_0.gguf](https://huggingface.co/unsloth/Qwen3-0.6B-GGUF) (default) and [Qwen3-1.7B-Q4_0.gguf](https://huggingface.co/unsloth/Qwen3-1.7B-GGUF) (optional) by Unsloth |
+| **Allowlisted Model** | `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf`: [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) LoRA-fine-tuned on Corenyth's plan prompts ([training/](training/README.md)) |
 | **Database & Search** | SQLite via `sqflite` (schema `v8`, WAL enabled), `FTS4` full-text memory indexing, `sqflite_common_ffi` for desktop tests |
 | **Alarms & Background** | Native Android `AlarmManager` (`ProactiveReceiver` in `:proactive` process), `flutter_local_notifications` |
 | **Core Packages** | `crypto` (streaming SHA-256 model verification), `timezone`, `flutter_markdown_plus`, `path` |
@@ -131,7 +131,7 @@ For a deeper dive, read the [Architecture Overview](docs/architecture/overview.m
 **Target Android Device (or Emulator)**
 - **Architecture:** 64-bit Android phone (`arm64-v8a`) or `x86_64` Android emulator. *(On 32-bit devices, the native library is omitted and the app runs cleanly on the deterministic rule engine.)*
 - **OS Version:** Android 7.0 Nougat (`API 24`) or newer.
-- **Free Storage:** ~365 MiB for the default `Qwen3-0.6B` model, or ~1,008 MiB for the optional `Qwen3-1.7B` model.
+- **Free Storage:** ~364 MiB for the fine-tuned model.
 
 **Development Machine**
 - **Flutter SDK:** Stable channel (developed with Flutter `3.47.7`, Dart `>=3.3.0`).
@@ -201,30 +201,27 @@ flutter build apk --release
 
 ## Installing an On-Device Model
 
-Because Corenyth has no `INTERNET` permission, it never downloads model files behind the scenes. You place the `.gguf` file into `Documents/localmodels` yourself.
+Because Corenyth has no `INTERNET` permission, it never downloads model files behind the scenes. You place the `.gguf` file into `Documents/localmodels` yourself. The APK and the model are both attached to each [GitHub release](https://github.com/Souvik8426/Corenyth/releases).
 
-### Allowlisted Model Catalog
+### Allowlisted Model
 
-Only these two official Unsloth Qwen3 GGUF files are accepted (arbitrary GGUF files are rejected to guarantee ChatML template and grammar compatibility):
+Only one GGUF file is accepted (the stock Qwen3 0.6B/1.7B files and any other GGUF are rejected):
 
-| Role | Filename (Keep Exact Name) | Exact Size | SHA-256 Checksum | Download Link |
-|---|---|---|---|---|
-| **Default** | `Qwen3-0.6B-Q4_0.gguf` | `382,156,160` bytes (~365 MiB) | `24ccc1cc08429fadd236268f920e965a376603479ca70f499be8930169c2159b` | [Download 0.6B GGUF](https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/626eb58354de1127ccd7a9dc213485a3b716534c/Qwen3-0.6B-Q4_0.gguf) |
-| **Optional** | `Qwen3-1.7B-Q4_0.gguf` | `1,056,782,912` bytes (~1,008 MiB) | `c876f159707a4e4f70e045106c69db15bfc935a4981706fd4f65c6e7ea1e81c5` | [Download 1.7B GGUF](https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/d7f544eead698dbd1f15126ef60b45a1e1933222/Qwen3-1.7B-Q4_0.gguf) |
+| Filename (Keep Exact Name) | Exact Size | SHA-256 Checksum | Where it comes from |
+|---|---|---|---|
+| `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` | `381,566,560` bytes (~364 MiB) | `77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821` | [Release v0.1.0-alpha.1](https://github.com/Souvik8426/Corenyth/releases/tag/v0.1.0-alpha.1), built with [training/](training/README.md) |
+
+A retrained model has a new size and hash: update `corenythModel` in `lib/services/model_status.dart` with each export.
 
 ### Setup Instructions
 
 1. **Launch Corenyth Once:** Open the app on your phone and grant storage access when prompted (*All files access* on Android 11+, or *Storage permission* on Android 7–10). This automatically creates `/sdcard/Documents/localmodels/`.
-2. **Place the Model File:**
-   - **Option A — Via USB / `adb` from your computer (Fastest):**
-     ```sh
-     adb push Qwen3-0.6B-Q4_0.gguf /sdcard/Documents/localmodels/
-     # Optional larger model:
-     adb push Qwen3-1.7B-Q4_0.gguf /sdcard/Documents/localmodels/
-     ```
-   - **Option B — Directly on your phone:** Tap the download link in the table above (or from the in-app setup card, which hands the Hugging Face URL to your browser), then use your phone's **Files** app to move the downloaded `.gguf` file from `Downloads` into `Documents/localmodels/` without renaming it.
-3. **Verify & Load:** Return to Corenyth. The app checks the file size, computes its SHA-256 hash in a background isolate on first load (caching the verification result by size and modification timestamp), and loads the model into memory.
-4. **Switching & Automatic Fallback:** You can switch between `0.6B` and `1.7B` in the model status UI when inference is idle. If a model fails verification, fails to load, or triggers an out-of-memory kill mid-load, Corenyth automatically falls back to `0.6B` or the built-in `RuleEngine` and displays the reason in the status chip.
+2. **Place the Model File:** on the phone, tap **Download in browser** in the setup card (it opens the release asset), then in the **Files** app move `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` from `Download` to `Documents/localmodels`. Or, from your computer:
+   ```sh
+   adb push Qwen3-0.6B.Q4_0.gguf /sdcard/Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf
+   ```
+   (Or copy it to the phone any other way and move it into `Documents/localmodels/` with the **Files** app, using exactly that name.)
+3. **Verify & Load:** Return to Corenyth. The app checks the file size, computes its SHA-256 hash in a background isolate on first load (caching the verification result by size and modification timestamp), and loads the model into memory. If verification or loading fails, Corenyth uses the built-in `RuleEngine` and shows the reason in the status chip.
 
 See the [Model Install Guide](docs/guides/model-install.md) for full details on verification caching and fallback markers.
 
@@ -308,6 +305,7 @@ Corenyth/
 │                                  # MainActivity, LlamaBridge, WidgetProvider, Proactive, VoiceSessionActivity
 ├── test/                          # 400+ unit, widget, FFI SQLite migration & regression tests
 ├── eval/                          # Frozen JSONL evaluation corpus, schema validator, scorer & native host runner
+├── training/                      # Qwen3-0.6B fine-tune: MASSIVE-based dataset builder & Colab training cells
 ├── docs/                          # Architecture deep dives, setup guides, reliability status & ADRs
 ├── branding/                      # Corenyth logo and Ethereal Arcana DESIGN.md specification
 └── assets/fonts/                  # Bundled Plus Jakarta Sans typeface (Regular through ExtraBold)
@@ -332,8 +330,9 @@ All architectural and operational documentation lives in [`docs/`](docs/README.m
 
 Being transparent about what works today and what is still in progress:
 
-- **Held-Out Language Generalization (Top Priority):** While the real Qwen3-0.6B model passes development cases (`97 pass / 0 fail / 5 incomplete`), unseen held-out phrasing currently scores `12 pass / 18 fail / 4 incomplete`. Improving semantic generalization across task updates, scheduling, and memory without weakening the validation layer is the primary engineering focus.
-- **On-Device Benchmarks for `Qwen3-1.7B`:** Model selection, background SHA-256 hashing, and crash fallback are tested with mocked channels, but real-hardware RAM footprint and token latency for the 1.7B model have not been benchmarked yet.
+- **Held-Out Language Generalization (Top Priority):** While the real Qwen3-0.6B model passes development cases (`97 pass / 0 fail / 5 incomplete`), unseen held-out phrasing currently scores `12 pass / 18 fail / 4 incomplete`. Improving semantic generalization across task updates, scheduling, and memory without weakening the validation layer is the primary engineering focus. A LoRA fine-tune of 0.6B ([training/](training/README.md)) is the current approach; it has not yet been scored on the frozen corpus.
+- **Tone-Following Replies:** The model now writes the reply line itself, but the 0.6B (stock or fine-tuned) follows the selected tone only loosely. Larger, mutually exclusive tone examples in the next training round are planned.
+- **Larger Models:** The stock Qwen3 0.6B and 1.7B are no longer selectable; only the fine-tuned 0.6B loads. A fine-tuned 1.7B would need its own training run, allowlist entry and on-phone RAM/latency check.
 - **Voice Input & Output (`sherpa-onnx`):** Streaming VAD/ASR speech recognition, local TTS playback, and voice barge-in interruption are planned next.
 - **Extended Date Expressions:** Phrases like *"today/tonight/tomorrow"*, *"morning/afternoon/evening"*, *"in N minutes/hours"*, weekdays, and named month dates work today. Relative expressions like *"next Friday"*, *"next week"*, or *"in 2 weeks"* are not parsed yet—Corenyth asks you for a specific date/time rather than guessing.
 - **Vector Embeddings / Mem0:** Personal memory currently uses local SQLite `FTS4` ranked by importance and recency. The `embedding` column in `memories` is reserved for future semantic search.
@@ -360,5 +359,7 @@ Issues and pull requests are welcome! Before submitting a PR:
 - **Repository License:** No open-source license file has been added to this repository yet (all rights reserved by default until a license is chosen).
 - **Third-Party Components:**
   - [llama.cpp](https://github.com/ggml-org/llama.cpp) by `ggml-org` (MIT License)
-  - [Qwen3](https://huggingface.co/Qwen) by the Qwen team, with quantized GGUF weights by [Unsloth](https://huggingface.co/unsloth)
+  - [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) by the Qwen team (Apache License 2.0); the released GGUF is a LoRA fine-tune of it, merged and quantized with [Unsloth](https://github.com/unslothai/unsloth)
+  - [Amazon MASSIVE](https://github.com/alexa/massive) en-US utterances, relabelled as fine-tuning data (CC BY 4.0)
+  - See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
   - [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans) by Tokotype (SIL Open Font License 1.1 — see [`assets/fonts/OFL.txt`](assets/fonts/OFL.txt))

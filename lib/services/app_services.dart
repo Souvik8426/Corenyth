@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -196,18 +197,32 @@ class AppServices {
   }
 
   static Future<AppServices> open() async {
-    final db = await openAppDb();
+    // Each step is timed and bounded: after an app update the background
+    // `:proactive` engine opens the same database at the same moment, and a
+    // step that never returns must surface as a Retry, not a frozen screen.
+    final clock = Stopwatch()..start();
+    Future<T> step<T>(String name, Future<T> Function() f,
+        {Duration limit = const Duration(seconds: 15)}) async {
+      final t = clock.elapsedMilliseconds;
+      try {
+        return await f().timeout(limit);
+      } finally {
+        debugPrint('startup: $name ${clock.elapsedMilliseconds - t} ms');
+      }
+    }
+
+    final db = await step('database', () => openAppDb());
 
     final sched = AlarmReminderScheduler();
     String? issue;
     try {
-      await sched.init();
+      await step('notifications', sched.init);
     } catch (_) {
       issue = 'Notifications could not be set up; reminders may not fire.';
     }
 
-    final models = await NativeBridge
-        .modelsDir(); // creates Documents/localmodels on every boot
+    // Creates Documents/localmodels on every boot.
+    final models = await step('models folder', NativeBridge.modelsDir);
 
     final sel = await ModelSelection.open();
     final crashed = await sel.crashedAttempt();
@@ -230,15 +245,19 @@ class AppServices {
     s.modelFailure = failure;
     debugPrint('model boot: ${s.modelDiagnostics()}');
     try {
-      await s.conversations.ensureMainChat();
-      await s.operations.recoverStale();
-      await s
-          .catchUp(); // before re-arming: missed occurrences are filed once, never replayed
+      await step('main chat', s.conversations.ensureMainChat);
+      await step('recover operations', s.operations.recoverStale);
+      // Before re-arming: missed occurrences are filed once, never replayed.
+      await step('catch up', () => s.catchUp());
     } catch (_) {}
 
-    await s.armReview();
     try {
-      final failed = await sched.rescheduleAll(s.reminders);
+      await step('review alarm', () => s.armReview());
+    } catch (_) {}
+    try {
+      final failed = await step('reschedule reminders',
+          () => sched.rescheduleAll(s.reminders),
+          limit: const Duration(seconds: 20));
       if (failed.isNotEmpty) {
         issue ??= 'Could not schedule reminder${failed.length > 1 ? 's' : ''} '
             '${failed.map((id) => '#$id').join(', ')}; they may not fire.';
@@ -289,7 +308,7 @@ class AppServices {
         }
         ok = await _loadPath();
         final sel = selection;
-        final fallback = p.join(p.dirname(_path), model06b.fileName);
+        final fallback = p.join(p.dirname(_path), corenythModel.fileName);
         if (!ok &&
             sel != null &&
             _path != fallback &&
@@ -303,6 +322,13 @@ class AppServices {
           ok = await _loadPath();
         }
       } finally {
+        if (ok) {
+          modelFailure = null;
+          if (_failNote != null && modelNote.value == _failNote) {
+            modelNote.value = null;
+          }
+          _failNote = null;
+        }
         modelLoad.value = ok ? ModelLoad.loaded : ModelLoad.failed;
         _loading = null;
         debugPrint('model load: ${modelDiagnostics()}');
@@ -314,6 +340,18 @@ class AppServices {
   /// One native load of [_path]: SHA-256 check first (production only), and a
   /// crash marker around the native call. A fresh engine per path, so a switch
   /// never reloads an old cached path.
+  /// The note [_loadPath] last showed for a failure, cleared once a load works.
+  String? _failNote;
+
+  static bool _readable(String path) {
+    try {
+      File(path).openSync().closeSync();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> _loadPath() async {
     final sel = selection;
     final spec = modelByFileName(p.basename(_path));
@@ -322,10 +360,18 @@ class AppServices {
         modelFailure = 'not_allowlisted';
         return false; // only allowlisted ChatML files
       }
+      if (!_readable(_path)) {
+        // Before file access is granted the file can be listed but not read;
+        // that is not a corrupt download.
+        modelFailure = 'unreadable:${spec.id}';
+        modelNote.value = _failNote = 'Corenyth cannot read ${spec.fileName} '
+            'yet. Allow file access, then come back.';
+        return false;
+      }
       if (!await sel.verify(spec, _path)) {
         modelFailure = 'sha256_mismatch:${spec.id}';
-        modelNote.value = '${spec.fileName} does not match the published file '
-            '(SHA-256 check failed). Download it again.';
+        modelNote.value = _failNote = '${spec.fileName} does not match the '
+            'published file (SHA-256 check failed). Download it again.';
         return false;
       }
       await sel.markAttempt(spec.id);
@@ -377,7 +423,7 @@ class AppServices {
   }
 
   /// Model the user picked (default when unset).
-  ModelSpec get selectedModel => selection?.selected ?? model06b;
+  ModelSpec get selectedModel => selection?.selected ?? corenythModel;
 
   /// Catalog model at [modelPath], or null (tests' arbitrary paths).
   ModelSpec? get activeModel => modelByFileName(p.basename(_path));

@@ -5,6 +5,44 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('widget panel focuses input and submits a prompt from the keyboard',
+      (tester) async {
+    final input = TextEditingController();
+    final scroll = ScrollController();
+    addTearDown(input.dispose);
+    addTearDown(scroll.dispose);
+    final submitted = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.bottomCenter,
+          child: SizedBox(
+            height: 280,
+            child: ChatView(
+              name: '',
+              messages: [Message('assistant', 'What time tomorrow?')],
+              input: input,
+              scroll: scroll,
+              autofocus: true,
+              busy: false,
+              ready: true,
+              onSend: () => submitted.add(input.text),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.enterText(find.byType(TextField), 'Tomorrow at 6 pm');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    expect(submitted, ['Tomorrow at 6 pm']);
+    expect(find.text('What time tomorrow?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('proactive messages retain their time and task context',
       (t) async {
     final input = TextEditingController();

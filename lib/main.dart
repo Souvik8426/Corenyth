@@ -29,7 +29,7 @@ import 'ui/model_status_view.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // The widget's Talk button launches VoiceSessionActivity with initial route /voice.
+  // Widget quick chat and voice windows share the translucent /voice route.
   final voice = PlatformDispatcher.instance.defaultRouteName == '/voice';
   runApp(MaterialApp(
     title: 'Corenyth',
@@ -45,8 +45,15 @@ Future<void> main() async {
 class ServiceStartup extends StatefulWidget {
   final bool voice;
   final Future<AppServices> Function() open;
+
+  /// A startup that never finishes (e.g. a step waiting on a lock after an
+  /// update) shows the Retry screen instead of an endless spinner.
+  final Duration timeout;
   const ServiceStartup(
-      {this.voice = false, this.open = AppServices.open, super.key});
+      {this.voice = false,
+      this.open = AppServices.open,
+      this.timeout = const Duration(seconds: 30),
+      super.key});
 
   @override
   State<ServiceStartup> createState() => _ServiceStartupState();
@@ -62,7 +69,7 @@ class _ServiceStartupState extends State<ServiceStartup> {
   }
 
   void _start() {
-    _services = widget.open();
+    _services = widget.open().timeout(widget.timeout);
     listenProactive((args) async => (await _services).runProactive(args));
   }
 
@@ -71,8 +78,11 @@ class _ServiceStartupState extends State<ServiceStartup> {
         future: _services,
         builder: (context, snapshot) {
           if (snapshot.hasData)
-            return AppStart(snapshot.data!, voice: widget.voice);
+            return widget.voice
+                ? _assistantHome(snapshot.data!, true)
+                : AppStart(snapshot.data!);
           return Scaffold(
+            backgroundColor: widget.voice ? AppColors.transparent : null,
             body: Center(
               child: snapshot.connectionState == ConnectionState.done &&
                       snapshot.hasError
@@ -160,13 +170,16 @@ Widget _assistantHome(AppServices services, bool voice) => voice
         body: Align(
           alignment: Alignment.bottomCenter,
           child: FractionallySizedBox(
-            heightFactor: 0.55,
+            heightFactor: 0.85,
             child: Material(
               elevation: 8,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(24)),
               clipBehavior: Clip.antiAlias,
-              child: ChatPage(services, closeOnEnd: true),
+              child: SafeArea(
+                top: false,
+                child: ChatPage(services, closeOnEnd: true),
+              ),
             ),
           ),
         ),
@@ -356,10 +369,48 @@ class _AssistantHomeState extends State<AssistantHome>
     }
   }
 
+  /// A feedback draft in the user's own mail app; without one, the address.
+  Future<void> _sendFeedback() async {
+    try {
+      await NativeBridge.sendFeedback(
+          model: widget.services.activeModel?.label);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+          content: Text('No mail app found. Send feedback to '
+              '${NativeBridge.feedbackEmail}.')));
+    }
+  }
+
   /// The launcher's own "Add to home screen" prompt; where it isn't
   /// available, how to add the widget by hand.
   Future<void> _addWidget() async {
-    final asked = await NativeBridge.pinWidget();
+    final compact = await showDialog<bool>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Choose your widget'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, false),
+            child: const ListTile(
+              leading: Icon(Icons.checklist_rounded),
+              title: Text('My tasks · 4 × 2'),
+              subtitle: Text('Scroll, complete, and add tasks'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, true),
+            child: const ListTile(
+              leading: Icon(Icons.add_circle_outline),
+              title: Text('Companion · 2 × 2'),
+              subtitle: Text('Animated mascot and quick add'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (compact == null || !mounted) return;
+    final asked = await NativeBridge.pinWidget(compact: compact);
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
         content: Text(asked
@@ -457,6 +508,10 @@ class _AssistantHomeState extends State<AssistantHome>
                 _switch(id);
               },
               onDelete: _delete,
+              onFeedback: () {
+                dismiss();
+                _sendFeedback();
+              },
               onAddWidget: () {
                 dismiss();
                 _addWidget();
@@ -863,7 +918,9 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) => Column(children: [
         if (widget.closeOnEnd)
           Row(children: [
-            Padding(padding: const EdgeInsets.all(12), child: Text(state.name)),
+            const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('Ask Corenyth')),
             const Spacer(),
             IconButton(
                 tooltip: 'Close chat',
@@ -891,6 +948,7 @@ class _ChatPageState extends State<ChatPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : ChatView(
                     name: widget.name,
+                    autofocus: widget.closeOnEnd,
                     messages: log,
                     onEmotionChanged: widget.onEmotionChanged,
                     input: input,
@@ -988,70 +1046,26 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     sv.loadModel();
   }
 
-  bool _switching = false;
-
-  /// Catalog picker. Disabled while a load/switch runs; a not-installed
-  /// choice is saved and its download offered.
-  Widget _picker(bool loading) => ValueListenableBuilder<bool>(
-      valueListenable: widget.services.chatBusy,
-      builder: (context, replying, _) =>
-          _pickerBody(loading || replying, replying));
-
-  Widget _pickerBody(bool busy, bool replying) {
-    final sv = widget.services;
-    final dir = p.dirname(sv.modelPath);
-    final selected = sv.selectedModel;
-    bool installed(ModelSpec m) =>
-        checkModelSpec(dir, m, granted: true) == ModelState.ready;
+  /// The one allowlisted model and whether its file is in place. There is no
+  /// choice to make: only Corenyth's fine-tuned 0.6B may load.
+  Widget _picker(bool loading) {
+    final m = widget.services.selectedModel;
+    final installed = checkModelSpec(
+            p.dirname(widget.services.modelPath), m, granted: true) ==
+        ModelState.ready;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Model', style: Theme.of(context).textTheme.titleSmall),
-      for (final m in modelCatalog)
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(m.id == selected.id
-              ? Icons.radio_button_checked
-              : Icons.radio_button_unchecked),
-          selected: m.id == selected.id,
-          enabled: !busy && !_switching,
-          // The selected row stays tappable until it is the loaded model (e.g. a
-          // choice saved before its file was installed).
-          onTap: m.id == sv.activeModel?.id &&
-                  sv.modelLoad.value == ModelLoad.loaded
-              ? null
-              : () => _select(m),
-          title: Text(m.label),
-          subtitle: Text('${m.fileName} · about ${m.approxMiB} MB · '
-              '${installed(m) ? 'installed' : 'not installed'}'),
-        ),
-      if (!installed(selected))
-        OutlinedButton(
-            onPressed: () => NativeBridge.openUrl(selected.url),
-            child: Text('Download ${selected.fileName}')),
-      if (replying)
-        const Text('Wait for the current reply to finish to switch models.'),
-      const Text('The larger model needs more memory and answers more slowly. '
-          'Memory use and speed have not been measured on this phone. '
-          'If it fails to load, the app returns to the default model.'),
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.memory),
+        title: Text(m.label),
+        subtitle: Text('${m.fileName} · about ${m.approxMiB} MB · '
+            '${installed ? 'installed' : 'not installed'}'),
+      ),
+      if (!installed)
+        Text('Copy ${m.fileName} into $_folder to use it '
+            '(for example: adb push <file> /sdcard/$_folder/${m.fileName}).'),
     ]);
-  }
-
-  Future<void> _select(ModelSpec m) async {
-    setState(() => _switching = true);
-    try {
-      final ok = await widget.services.selectModel(m);
-      if (!mounted) return;
-      final installed = checkModelSpec(p.dirname(widget.services.modelPath), m,
-              granted: true) ==
-          ModelState.ready;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-          content: Text(ok
-              ? 'Now using ${m.label}.'
-              : !installed
-                  ? '${m.label} selected. Put ${m.fileName} in $_folder to use it.'
-                  : 'Could not load ${m.label}.')));
-    } finally {
-      if (mounted) setState(() => _switching = false);
-    }
   }
 
   @override
@@ -1169,14 +1183,19 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                           style: TextStyle(color: AppColors.success))),
               step(
                   2,
-                  'Download ${want.fileName} (about ${want.approxMiB} MB, use Wi-Fi). Keep the file name exactly.',
-                  OutlinedButton(
-                      onPressed: () => NativeBridge.openUrl(want.url),
-                      child: const Text('Open download page'))),
+                  'Download ${want.fileName} (about ${want.approxMiB} MB) from the Corenyth release page, '
+                  'or from a computer: adb push <file> /sdcard/$_folder/${want.fileName}. '
+                  'Keep the file name exactly.',
+                  want.url.isEmpty
+                      ? null
+                      : TextButton(
+                          onPressed: () => NativeBridge.openUrl(want.url)
+                              .catchError((_) {}),
+                          child: const Text('Download in browser'))),
               step(
                   3,
-                  'When it finishes, open the Files app > Downloads, long-press the file, '
-                  'choose Move to... and pick Documents > $_folder.'),
+                  'A browser download lands in Downloads: open the Files app > Downloads, '
+                  'long-press the file, choose Move to... and pick Documents > localmodels.'),
               step(
                   4,
                   'Come back here. The app re-checks by itself and loads the model right away.',

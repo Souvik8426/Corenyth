@@ -20,7 +20,8 @@ class ModelSelection {
   String get _path => p.join(dir, '.selected_model');
   String get _attemptPath => p.join(dir, '.model_load_attempt');
 
-  /// Catalog id currently chosen; missing/unknown → default 0.6B.
+  /// Catalog id currently chosen; missing/unknown (e.g. a removed stock
+  /// model) → the default.
   String readId() {
     final f = File(_path);
     if (!f.existsSync()) return defaultModelId;
@@ -43,16 +44,16 @@ class ModelSelection {
   String pathIn(String modelsDir, [ModelSpec? spec]) =>
       p.join(modelsDir, (spec ?? selected).fileName);
 
-  /// Prefer [preferredId]/selected if its file is ready; else default 0.6B if ready;
+  /// Prefer [preferredId]/selected if its file is ready; else the default if ready;
   /// else null (caller uses rules). [isReady] is for tests; production uses size check.
   ModelSpec? resolveLoadable(String modelsDir,
       {String? preferredId, bool Function(ModelSpec)? isReady}) {
     final ready = isReady ??
         ((s) =>
             checkModelSpec(modelsDir, s, granted: true) == ModelState.ready);
-    final want = modelById(preferredId ?? readId()) ?? model06b;
+    final want = modelById(preferredId ?? readId()) ?? corenythModel;
     if (ready(want)) return want;
-    if (want.id != model06b.id && ready(model06b)) return model06b;
+    if (want.id != corenythModel.id && ready(corenythModel)) return corenythModel;
     return null;
   }
 

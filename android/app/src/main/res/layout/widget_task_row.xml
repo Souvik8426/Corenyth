@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:gravity="center_vertical" android:orientation="horizontal">
+    <TextView android:id="@+id/task_done" android:layout_width="48dp" android:layout_height="56dp" android:text="○" android:textSize="28sp" android:gravity="center" android:textColor="@color/corenyth_lavender"/>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:paddingTop="8dp" android:paddingBottom="8dp">
+        <TextView android:id="@+id/task_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="15sp" android:textColor="@color/corenyth_ivory"/>
+        <TextView android:id="@+id/task_due" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="@color/corenyth_muted"/>
+    </LinearLayout>
+</LinearLayout>

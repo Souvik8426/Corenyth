@@ -1,7 +1,8 @@
 # LLM engine
 
-The default model is Qwen3-0.6B (Q4_0 GGUF); an optional allowlisted Qwen3-1.7B Q4_0 may be selected.
-Both use Dart-owned ChatML (`Prompt.render`). Models run on the phone's CPU via llama.cpp. The Dart side
+The only allowlisted model is Qwen3-0.6B fine-tuned on Corenyth's own plan prompts (Q4_0 GGUF, side-loaded; see
+[training/README.md](../../training/README.md)). The stock Qwen3 0.6B/1.7B files are no longer accepted.
+It uses Dart-owned ChatML (`Prompt.render`). Models run on the phone's CPU via llama.cpp. The Dart side
 only knows `LlmEngine.complete(Prompt)`. Everything native sits behind a MethodChannel.
 
 ## Build
@@ -36,8 +37,7 @@ for a shorter message, `llama_cancelled` ends the turn silently, other errors fa
   residency is process-wide and another activity or memory pressure may have freed it. The status only shows
   "loading" when it was not believed loaded. It is called at session start and before each inference.
 - Selected model comes from `ModelSelection` (private `.selected_model`). Each load first checks the pinned SHA-256
-  (cached), then loads with a fresh `LlamaChannelEngine` for the current path. On failure it falls back to the
-  default 0.6B file if installed (and re-selects it), else rules. See [model-install.md](../guides/model-install.md).
+  (cached), then loads with a fresh `LlamaChannelEngine` for the current path. On failure the rule engine answers. See [model-install.md](../guides/model-install.md).
 - Each session gets its own `LlamaChannelEngine`, so `cancel` stops only that session's requests.
 - `releaseModel` (memory pressure) is serialized with loads and sets the status to idle before unloading.
 
@@ -45,7 +45,7 @@ for a shorter message, `llama_cancelled` ends the turn silently, other errors fa
 
 - `LlamaBridge` (`LlamaBridge.kt`) runs `load`, `generate` and `unload` on a single-thread executor and posts results
   to the main looper. Request keys are `channel identity : id`, so ids from different isolates do not collide.
-- The model is process-wide, so `MainActivity` and `VoiceSessionActivity` share one instance.
+- The model is process-wide, so `MainActivity`, `VoiceSessionActivity`, and `WidgetAddActivity` share one instance.
 - Cancel sets an atomic id; llama.cpp's abort callback compares it with the running request, so prompt processing
   stops too.
 
@@ -62,12 +62,16 @@ for a shorter message, `llama_cancelled` ends the turn silently, other errors fa
 3. `nativeUnload` frees the context and model.
 
 Logs (`adb logcat -s LlamaBridge llama.cpp`): load time, prompt tokens (and how many were reused), time to first
-token, generated tokens and timings. Model output text is not logged.
+token, generated tokens and timings. Model output text is not logged (except the raw plan in a development build with
+`--dart-define=CORENYTH_LOG_RAW=true`).
 
 ## Prompt (`engine.dart`, `Prompt.render`)
 
-The assistant uses `PromptKind.plan` (see [request-flow.md](request-flow.md)): system text, `Now`, `Pending:`, fresh `#id title` task
-lines, bounded earlier user context, active personal memories and the current message, with `maxTokens` 120. Task selection ranks relevance before applying its cap. Native tokenization chooses a fitting prompt candidate; byte length is not a measured token count. The older `action` kind below is
+The assistant uses `PromptKind.plan` (see [request-flow.md](request-flow.md)), with `maxTokens` 120. Layout, most stable first:
+
+- System: plan instructions, the tone guide (`Prompt.toneGuide`), five short examples, then "About the user" (name, occupation, `Preferred assistant tone`). Per-message memories are **not** here, so the system prefix stays KV-cached.
+- User turn: `Now`, `Pending:`, `Things the user shared:` (relevant memories), `Current tasks` (the most relevant tasks, listed by id so the order is stable between messages), bounded earlier user context, `Reply tone: <tone> (<style>)` from `Prompt.toneStyles`, then `Message:`.
+- Output: the plan JSON with a required `reply` on every intent (grammar enforces it). Task selection ranks relevance before applying its cap. Native tokenization chooses a fitting prompt candidate; byte length is not a measured token count. The older `action` kind below is
 kept for the grammar contract and tests.
 
 - Qwen ChatML, most stable first for KV reuse: system (fixed instructions + personal context), chat history, then the

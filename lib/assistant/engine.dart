@@ -86,8 +86,13 @@ class Prompt {
   /// plan only: [promptContractVersion] (plan-v1) or [planContractV2],
   /// choosing the system prompt and grammar.
   final String contract;
+
+  /// plan only: the profile tone, repeated next to the message (small models
+  /// follow the nearest instruction); null = none.
+  final String? tone;
   Prompt(this.kind, this.user,
       {this.memories = const [],
+      this.tone,
       this.tasks,
       this.reminders,
       this.personalContext = '',
@@ -106,30 +111,57 @@ class Prompt {
         PromptKind.reply => Prompt.replyGrammar,
       };
 
+  /// How each profile tone (Memories -> Edit tone) should sound. Fixed text,
+  /// so the system prompt stays KV-cache stable; the profile names the tone.
+  static const toneStyles = {
+    'cheerful': 'upbeat and warm, light exclamation',
+    'playful': 'witty and teasing, one fitting emoji',
+    'calm': 'gentle, soothing, unhurried',
+    'mature': 'thoughtful and composed, no slang or emoji',
+    'professional': 'brief, polite and formal, no emoji',
+  };
+
+  static const toneGuide =
+      'Tones: cheerful = upbeat and warm, light exclamation; playful = witty and teasing, one fitting emoji; calm = gentle, soothing, unhurried; mature = thoughtful and composed, no slang or emoji; professional = brief, polite and formal, no emoji.';
+
   /// Stable (KV-cache friendly). Untrusted text only ever appears in the user turn.
   static const planSystem =
       '''Turn the user's message into ONE JSON plan for an offline task assistant. The app reads and writes the database; you never state facts about the user's tasks.
-intent: create_task (something to do) | create_reminder (asks to be reminded/notified) | complete (says something is done) | delete | postpone (move a task later) | list (asks what is planned/pending) | recall (asks what they told you) | answer_pending (only gives the time the Pending question asked for) | cancel_pending | chat (small talk or a general question).
+intent: create_task (something to do) | create_reminder (asks to be reminded/notified) | complete (says something is done) | delete | postpone (move a task later) | list (asks what is planned/pending) | recall (asks what they told you before; "remind me to…" is create_reminder, never recall) | answer_pending (only gives the time the Pending question asked for) | cancel_pending | chat (small talk or a general question).
 title: the action itself, short, as the user said it, without filler like "too", "also", "pls", "I have to". For recall: what to look up.
 ref: for complete/delete/postpone, the #id from Current tasks or the task's words.
 when: copy the user's own time words exactly (e.g. "tomo", "morning 8:10", "in 20 min", "by 2h"); never turn them into a date. Omit if none.
 range (list only): today | tomorrow | overdue | all.
 multiple / follow_up: only if the user asks for extra alerts or a follow-up (true) or refuses them (false).
 negated: true if the user says not to, or is only asking or supposing.
-reply (chat only): one short friendly sentence; never mention tasks, times or reminders.''';
+reply (always, at most 12 words, in the user's preferred tone): for chat, answer them. Otherwise the app confirms the action itself, so never repeat the task, times or numbers; add a short follow-up, like asking what a meeting is about.
+$toneGuide
+Examples:
+I have a meeting tomorrow -> {"intent":"create_task","title":"meeting","when":"tomorrow","reply":"Ooh, what's the meeting about?"}
+remind me to call mom at 5pm -> {"intent":"create_reminder","title":"call mom","when":"at 5pm","reply":"Want to note what to talk about?"}
+hey how's it going -> {"intent":"chat","reply":"Doing great, thanks for asking! How's your day?"}
+I bought the milk -> {"intent":"complete","ref":"buy milk","reply":"Nice, one less thing to do!"}
+what's on tomorrow? -> {"intent":"list","range":"tomorrow","reply":"Here's what's coming up."}''';
 
   /// plan-v2: authorization is its own explicit label, so a polite request
   /// ("Can you remind me…?") is never mistaken for "only asking".
   static const planSystemV2 =
       '''Turn the user's message into ONE JSON plan for an offline task assistant. The app reads and writes the database; you never state facts about the user's tasks.
-intent: create_task (something to do) | create_reminder (asks to be reminded/notified) | complete (says something is done) | delete | postpone (move a task later) | list (asks what is planned/pending) | recall (asks what they told you) | answer_pending (only gives the time the Pending question asked for) | cancel_pending | progress (news about an existing task, e.g. "Aditya hasn't replied") | outcome (how a finished event went) | details (when an event ends or what it is about) | chat (small talk or a general question).
+intent: create_task (something to do) | create_reminder (asks to be reminded/notified) | complete (says something is done) | delete | postpone (move a task later) | list (asks what is planned/pending) | recall (asks what they told you before; "remind me to…" is create_reminder, never recall) | answer_pending (only gives the time the Pending question asked for) | cancel_pending | progress (news about an existing task, e.g. "Aditya hasn't replied") | outcome (how a finished event went) | details (when an event ends or what it is about) | chat (small talk or a general question).
 title: the action itself, short, as the user said it, without filler like "too", "also", "pls", "I have to". For recall: what to look up. For details: the subject.
 ref: for complete/delete/postpone/progress/outcome/details, the #id from Current tasks or the task's words.
 when: copy the user's own time words exactly (e.g. "tomo", "morning 8:10", "in 20 min", "by 2h"); never turn them into a date. For details: the end time words. Omit if none.
 range (list only): today | tomorrow | overdue | all.
 multiple / follow_up: only if the user asks for extra alerts or a follow-up (true) or refuses them (false).
 authorization: request (asks you to do something, including polite questions such as "Can you remind me to call Mum at 5?") | statement (tells a plan, fact or news, e.g. "I have a meeting at 3") | question (only asks for information, e.g. "How do reminders work?") | hypothetical (supposes or is undecided: "what if", "maybe I should", "should I") | negated (tells you not to do it: "don't remind me").
-reply (chat only): one short friendly sentence; never mention tasks, times or reminders.''';
+reply (always, at most 12 words, in the user's preferred tone): for chat, answer them. Otherwise the app confirms the action itself, so never repeat the task, times or numbers; add a short follow-up, like asking what a meeting is about.
+$toneGuide
+Examples:
+I have a meeting tomorrow -> {"intent":"create_task","title":"meeting","when":"tomorrow","reply":"Ooh, what's the meeting about?"}
+remind me to call mom at 5pm -> {"intent":"create_reminder","title":"call mom","when":"at 5pm","reply":"Want to note what to talk about?"}
+hey how's it going -> {"intent":"chat","reply":"Doing great, thanks for asking! How's your day?"}
+I bought the milk -> {"intent":"complete","ref":"buy milk","reply":"Nice, one less thing to do!"}
+what's on tomorrow? -> {"intent":"list","range":"tomorrow","reply":"Here's what's coming up."}''';
 
   /// Stable across turns, so the native KV cache can reuse it (no dates in here).
   static const actionSystem =
@@ -145,7 +177,8 @@ Use a tool only with clear evidence in the request. "remind me what…" / catch-
   /// model can only talk about the facts it is given.
   static const replySystem =
       '''You are a warm, concise offline personal assistant. Reply to the user's message in one or two short sentences, in their preferred tone, as {"type":"respond","text":"..."}.
-Use only the Facts given; never invent people, dates, times, results or tasks. You cannot act: never say you set, saved, scheduled, changed, moved, sent or contacted anything. Never repeat the user's message back; speak as the assistant, to the user. When it helps, end by offering one or two next options as a question.''';
+Use only the Facts given; never invent people, dates, times, results or tasks. You cannot act: never say you set, saved, scheduled, changed, moved, sent or contacted anything. Never repeat the user's message back; speak as the assistant, to the user. When it helps, end by offering one or two next options as a question.
+$toneGuide''';
 
   /// [replySystem]'s output: a respond object only, never a tool call.
   static const replyGrammar =
@@ -216,9 +249,15 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
     b.writeln(
         'Now: ${days[now.weekday - 1]} ${now.toIso8601String().substring(0, 16)}');
     if (pending != null) b.writeln('Pending: ${neutralizeChatMl(pending!)}');
+    if (memories.isNotEmpty) {
+      b.writeln('Things the user shared: '
+          '${neutralizeChatMl(memories.join('; '))}');
+    }
     if (tasks != null) b.writeln('Current tasks:\n${neutralizeChatMl(tasks!)}');
     if (context != null && context!.isNotEmpty)
       b.writeln(neutralizeChatMl(context!));
+    final style = tone == null ? null : toneStyles[tone!];
+    if (style != null) b.writeln('Reply tone: ${tone!} ($style)');
     b.write('Message: ${neutralizeChatMl(user)} /no_think<|im_end|>\n'
         '<|im_start|>assistant\n<think>\n\n</think>\n\n');
     return b.toString();

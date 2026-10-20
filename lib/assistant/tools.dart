@@ -375,7 +375,7 @@ class ToolExecutor {
               : alerts.isEmpty
                   ? AlarmStatus.none
                   : AlarmStatus.cancelled;
-        return 'Nice, marked #$id ${t.title} done.'
+        return 'Marked #$id ${t.title} done.'
             '${alerts.isEmpty ? "" : " I cancelled its remaining reminders."}'
             '$sync';
       case 'delete_task':
@@ -1031,6 +1031,10 @@ const _months = [
   'Nov',
   'Dec'
 ];
+
+/// "Thu 5 Nov": a date without its year.
+String shortDate(DateTime d) =>
+    '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]}';
 
 /// "Thu 5 Nov 2026": a date with its year always spelled out (deadlines).
 String fullDate(DateTime d) =>

@@ -10,3 +10,8 @@ android/**/GeneratedPluginRegistrant.*
 
 # llama.cpp sources (cloned at a pinned tag, see README)
 android/app/src/main/cpp/llama.cpp/
+
+# Release signing (never commit)
+android/key.properties
+*.jks
+*.keystore

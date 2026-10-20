@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// Allowlisted local GGUF models (Qwen3 ChatML only). Sizes/SHA-256 are the Hugging Face
-/// LFS metadata of the pinned commits (`X-Linked-Size` / `X-Linked-ETag`, tree API `lfs.oid`).
+/// Allowlisted local GGUF model (Qwen3 ChatML only): Corenyth's fine-tuned 0.6B.
+/// Size/SHA-256 are those of the exported file (training/README.md).
 /// [checkModel] is only a size check; [ModelSelection.verify] hashes the file before load.
 
 enum ModelState { noAccess, missing, incomplete, ready }
@@ -37,37 +37,28 @@ class ModelSpec {
   int get approxMiB => (expectedBytes / (1024 * 1024)).round();
 }
 
-const defaultModelId = 'qwen3-0.6b';
+const defaultModelId = 'corenyth-0.6b-tuned';
 
-/// Pinned commit `626eb583…` — unsloth/Qwen3-0.6B-GGUF Q4_0.
-const ModelSpec model06b = ModelSpec(
+/// The only allowlisted model: Qwen3-0.6B LoRA-fine-tuned on Corenyth's plan
+/// prompts (training/), merged and quantized to Q4_0 by Unsloth. Published as a
+/// GitHub release asset; the app only opens the link in the browser (no
+/// INTERNET permission). A retrained file has a new size, hash and release URL.
+const ModelSpec corenythModel = ModelSpec(
   id: defaultModelId,
-  fileName: 'Qwen3-0.6B-Q4_0.gguf',
-  url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/'
-      '626eb58354de1127ccd7a9dc213485a3b716534c/Qwen3-0.6B-Q4_0.gguf',
-  expectedBytes: 382156160,
-  label: 'Qwen3 0.6B (default)',
-  sha256: '24ccc1cc08429fadd236268f920e965a376603479ca70f499be8930169c2159b',
+  fileName: 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf',
+  url: 'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf',
+  expectedBytes: 381566560,
+  label: 'Corenyth 0.6B (fine-tuned)',
+  sha256: '77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821',
 );
 
-/// Pinned commit `d7f544ee…` — unsloth/Qwen3-1.7B-GGUF Q4_0 (optional).
-const ModelSpec model17b = ModelSpec(
-  id: 'qwen3-1.7b',
-  fileName: 'Qwen3-1.7B-Q4_0.gguf',
-  url: 'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/'
-      'd7f544eead698dbd1f15126ef60b45a1e1933222/Qwen3-1.7B-Q4_0.gguf',
-  expectedBytes: 1056782912,
-  label: 'Qwen3 1.7B (optional)',
-  sha256: 'c876f159707a4e4f70e045106c69db15bfc935a4981706fd4f65c6e7ea1e81c5',
-);
-
-const List<ModelSpec> modelCatalog = [model06b, model17b];
+const List<ModelSpec> modelCatalog = [corenythModel];
 
 /// Back-compat aliases for the default model (literals; field access is not a const expr).
-const modelFileName = 'Qwen3-0.6B-Q4_0.gguf';
-const modelUrl = 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/'
-    '626eb58354de1127ccd7a9dc213485a3b716534c/Qwen3-0.6B-Q4_0.gguf';
-const modelBytes = 382156160;
+const modelFileName = 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';
+const modelUrl =
+    'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';
+const modelBytes = 381566560;
 
 ModelSpec? modelById(String id) {
   for (final m in modelCatalog) {

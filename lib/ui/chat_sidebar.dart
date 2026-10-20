@@ -14,6 +14,9 @@ class ChatSidebar extends StatelessWidget {
   /// Shown as "Add home screen widget" at the bottom when set.
   final VoidCallback? onAddWidget;
 
+  /// Shown as "Send feedback" above the widget option when set.
+  final VoidCallback? onFeedback;
+
   const ChatSidebar({
     super.key,
     required this.chats,
@@ -25,6 +28,7 @@ class ChatSidebar extends StatelessWidget {
     this.error,
     this.onRetry,
     this.onAddWidget,
+    this.onFeedback,
   });
 
   @override
@@ -147,8 +151,17 @@ class ChatSidebar extends StatelessWidget {
                       },
                     ),
             ),
-            if (onAddWidget != null) ...[
+            if (onFeedback != null || onAddWidget != null)
               const Divider(height: 1),
+            if (onFeedback != null)
+              ListTile(
+                leading:
+                    Icon(Icons.feedback_outlined, color: colorScheme.primary),
+                title: const Text('Send feedback'),
+                subtitle: const Text('Opens your mail app'),
+                onTap: onFeedback,
+              ),
+            if (onAddWidget != null) ...[
               ListTile(
                 leading:
                     Icon(Icons.widgets_outlined, color: colorScheme.primary),

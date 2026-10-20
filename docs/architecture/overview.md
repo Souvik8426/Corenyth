@@ -35,9 +35,10 @@ and database references, then builds and executes a tool call. Invalid output is
 
 Follow-through adds validated app-side interpretation in `follow_through.dart`: meeting detail/outcome replies,
 progress updates, daily schedules and briefings. The session persists optional details and outcomes through the
-repositories; ordinary task actions still use `ToolExecutor`. A separate `PromptKind.reply` asks Qwen for short
-prose about retrieved facts in the selected tone. It cannot return an executable action. Invalid/action-claiming
-prose uses a deterministic fallback. Actual host Qwen evaluation now exists but fails held-out acceptance; phone behavior still requires the checklist.
+repositories; ordinary task actions still use `ToolExecutor`. The plan itself carries a toned `reply`: the chat
+answer, or a follow-up line appended after the app's exact confirmation. A separate `PromptKind.reply` is used only
+for outcome/hypothetical wording or when the plan's reply is unusable. Neither can return an executable action;
+invalid/action-claiming prose uses a deterministic fallback. Actual host Qwen evaluation now exists but fails held-out acceptance; phone behavior still requires the checklist.
 
 Display chats share relevant user context and one new missing-time question. Task-bound event questions survive
 chat switches and restart. Old assistant task lists are not treated as current database facts.
@@ -53,11 +54,11 @@ chat switches and restart. Old assistant task lists are not treated as current d
 | Rule engine | `lib/assistant/rule_engine.dart` | Regex planner that returns the same JSON shape |
 | Tools | `lib/assistant/tools.dart` | Schemas, GBNF grammar, JSON extraction, validation, `ToolExecutor` |
 | Data | `lib/data/db.dart`, `repos.dart` | SQLite schema, repositories |
-| Model status / selection | `lib/services/model_status.dart`, `model_selection.dart` | Allowlisted catalog, size check, SHA-256 verify (cached), persisted id, load fallback |
+| Model status / selection | `lib/services/model_status.dart`, `model_selection.dart` | The single allowlisted fine-tuned model, size check, SHA-256 verify (cached), persisted id, rules fallback |
 | Native bridge | `lib/services/native_bridge.dart` | Dart side of `assistant/native` (folder, storage, browser, widget refresh) |
 | Reminders | `lib/services/reminder_scheduler.dart` | Schedules and cancels exact alarms; checks runtime notification/exact-alarm state |
 | Reminder plans | `lib/data/repos.dart` (`reminderPlan`, `AlertIntent`, `TaskRepo.update`) | Stored per-task plan request, regenerated on due change; durable schedule/cancel intents |
-| Android | `android/app/src/main/kotlin/.../` | `MainActivity`, `LlamaBridge`, `WidgetProvider`, `VoiceSessionActivity` |
+| Android | `android/app/src/main/kotlin/.../` | `MainActivity`, `LlamaBridge`, `WidgetProvider`, `CompactWidgetProvider`, `WidgetTaskService`, `WidgetAddActivity`, `VoiceSessionActivity` |
 | Native LLM | `android/app/src/main/cpp/` | CMake build of llama.cpp and `llama_jni.cpp` |
 
 ## Two channels to native

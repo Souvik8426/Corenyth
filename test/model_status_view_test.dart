@@ -28,11 +28,11 @@ void main() {
             body: ModelStatusView(
                 modelState: ModelState.ready,
                 load: ModelLoad.loaded,
-                selectedLabel: model17b.label,
-                activeLabel: model06b.label,
+                selectedLabel: 'Removed stock model',
+                activeLabel: corenythModel.label,
                 fellBack: true,
                 onTap: () {}))));
-    expect(find.text('Loaded · ${model06b.label}'), findsOneWidget);
+    expect(find.text('Loaded · ${corenythModel.label}'), findsOneWidget);
     expect(
         find.text(
             'Fell back from selected model. RAM/latency not measured on this device.'),
@@ -51,11 +51,11 @@ void main() {
             body: ModelStatusView(
                 modelState: ModelState.ready,
                 load: ModelLoad.loaded,
-                activeLabel: model06b.label,
+                activeLabel: corenythModel.label,
                 lastAnswerSource: 'Built-in assistant logic',
                 onTap: () {}))));
     expect(find.text('Last answer: Built-in assistant logic'), findsOneWidget);
-    expect(find.text('Loaded · ${model06b.label}'), findsOneWidget);
+    expect(find.text('Loaded · ${corenythModel.label}'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }

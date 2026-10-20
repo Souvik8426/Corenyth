@@ -21,9 +21,9 @@ class NativeBridge {
   /// Asks the launcher to place the Corenyth widget on the home screen.
   /// False when it can't (older Android, some launchers, not on Android):
   /// the user then adds it from the home screen's widget picker.
-  static Future<bool> pinWidget() async {
+  static Future<bool> pinWidget({bool compact = false}) async {
     try {
-      return await _ch.invokeMethod<bool>('pinWidget') ?? false;
+      return await _ch.invokeMethod<bool>('pinWidget', {'compact': compact}) ?? false;
     } on MissingPluginException {
       return false;
     } catch (e) {
@@ -44,6 +44,15 @@ class NativeBridge {
 
   /// Hands an https URL to the user's browser (the app itself has no INTERNET permission).
   static Future<void> openUrl(String url) => _ch.invokeMethod('openUrl', url);
+
+  /// Address the feedback mail goes to (fixed natively too).
+  static const feedbackEmail = 'souvikdas8426@gmail.com';
+
+  /// Opens the user's mail app with a feedback draft to [feedbackEmail]; the
+  /// draft notes app version, Android version, phone and [model]. Nothing is
+  /// sent until the user sends it. Throws PlatformException `no_mail_app`.
+  static Future<void> sendFeedback({String? model}) => _ch.invokeMethod(
+      'sendFeedback', {'subject': 'Corenyth alpha feedback', 'model': model});
 
   /// Opens a chat link (https with a host only; re-validated natively). Throws
   /// PlatformException when rejected or no browser is installed.

@@ -14,6 +14,16 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 open class MainActivity : FlutterActivity() {
+    companion object {
+        /// Alpha feedback goes to the developer's inbox through the user's mail app.
+        const val FEEDBACK_EMAIL = "souvikdas8426@gmail.com"
+        /// Hosts the model download link may point at (the app itself stays offline).
+        val OPEN_URL_PREFIXES = listOf(
+            "https://huggingface.co/",
+            "https://github.com/Souvik8426/Corenyth/releases/",
+        )
+    }
+
     /**
      * Android 11+: "All files access" (the model is a file other apps put there, so scoped
      * storage can't see it). Android 6-10: legacy WRITE_EXTERNAL_STORAGE runtime permission.
@@ -34,7 +44,7 @@ open class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "refreshWidget" -> { WidgetProvider.refreshAll(this); result.success(null) }
                     "widgetCount" -> result.success(WidgetProvider.count(this))
-                    "pinWidget" -> result.success(WidgetProvider.requestPin(this))
+                    "pinWidget" -> result.success(WidgetProvider.requestPin(this, call.argument<Boolean>("compact") == true))
                     "modelsDir" -> {
                         val dir = modelsDir()
                         val granted = storageGranted()
@@ -52,13 +62,34 @@ open class MainActivity : FlutterActivity() {
                     }
                     "openUrl" -> {
                         val url = call.arguments as? String
-                        if (url == null || !url.startsWith("https://huggingface.co/")) {
-                            result.error("bad_url", "only https://huggingface.co/ links are opened", null)
+                        if (url == null || OPEN_URL_PREFIXES.none { url.startsWith(it) }) {
+                            result.error("bad_url", "only model download links are opened", null)
                         } else try {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             result.success(null)
                         } catch (e: ActivityNotFoundException) {
                             result.error("no_browser", "no browser installed", null)
+                        }
+                    }
+                    "sendFeedback" -> {
+                        // The user's own mail app via mailto: (no INTERNET needed). The
+                        // recipient is fixed here; Dart only supplies the subject.
+                        val version = try {
+                            packageManager.getPackageInfo(packageName, 0).versionName
+                        } catch (e: Exception) { "?" }
+                        val body = "\n\n---\nCorenyth $version (alpha)\n" +
+                            "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}), " +
+                            "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n" +
+                            "Model: ${call.argument<String>("model") ?: "none"}"
+                        val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+                            .putExtra(Intent.EXTRA_EMAIL, arrayOf(FEEDBACK_EMAIL))
+                            .putExtra(Intent.EXTRA_SUBJECT, call.argument<String>("subject") ?: "Corenyth feedback")
+                            .putExtra(Intent.EXTRA_TEXT, body)
+                        try {
+                            startActivity(mail)
+                            result.success(null)
+                        } catch (e: ActivityNotFoundException) {
+                            result.error("no_mail_app", "no mail app installed", FEEDBACK_EMAIL)
                         }
                     }
                     "openExternalLink" -> {

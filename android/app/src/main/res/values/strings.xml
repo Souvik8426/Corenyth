@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_description">Your pending tasks and a quick way into Corenyth.</string>
+<string name="widget_description">Your remaining tasks and quick add.</string>
+<string name="assistant_widget_description">Scroll remaining tasks, mark them done, and add a task.</string>
+<string name="compact_widget_description">Animated companion and quick add in a compact 2 × 2 widget.</string>
 </resources>

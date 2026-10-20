@@ -79,7 +79,7 @@ void main() {
     expect(
         model.prompts
             .firstWhere((p) => p.kind == PromptKind.plan)
-            .personalContext,
+            .render(),
         contains('short answers'));
     await tasks.create('call Aditya');
     await session.handle("Aditya hasn't replied");

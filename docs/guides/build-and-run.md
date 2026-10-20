@@ -33,10 +33,13 @@ The debug APK ends up at `build/app/outputs/flutter-apk/app-debug.apk`. The firs
 
 ```sh
 adb devices          # phone must show as "device"
-flutter run
+flutter devices      # find the Android device ID
+flutter run -d <device-id>
 ```
 
-Install the model before testing replies. See [model-install.md](model-install.md).
+Use the Android device ID rather than `chrome`. Native activity or resource changes require a rebuild/restart; hot reload alone does not update installed widgets.
+
+Install the model before testing model-backed replies. See [model-install.md](model-install.md).
 
 ## Debug logs
 
@@ -78,3 +81,28 @@ flutter build apk --release --dart-define=CORENYTH_GIT_SHA=<printed-identity>
 The release APK is `build/app/outputs/flutter-apk/app-release.apk`. Verify its packaged permissions; debug/profile APKs retain development INTERNET permission and are not evidence for the release's offline permission check. Source manifests identify uncommitted/new files that a Git commit alone cannot identify. Documentation-only edits do not mean the existing APK contains a new application build.
 
 The latest recorded suites have 403 passes each (legacy and unified), with the opt-in corpus test skipped. The release builds and analysis is clean, but the real-model held-out gate failed. Do not install/promote merely because those software checks pass. See [reliability-status.md](../development/reliability-status.md) and the [P5 report](../archive/plans/reliability-workflow/P5-report.md).
+
+## Widget verification on a phone
+
+1. Rebuild with `flutter run -d <device-id>`, then open the sidebar's **Add home screen widget** chooser.
+   Add **My tasks · 4 × 2** and **Companion · 2 × 2** (or use the launcher's widget picker).
+2. Check the larger widget's current logo, scrollable list with more than three pending tasks, due labels,
+   and remaining count. Verify the compact layout has no top-left logo, has a larger floating/blinking
+   mascot, and keeps “+” at the top right and status at the bottom. Resize both widgets.
+3. Tap “+” in each. Confirm the keyboard appears in the **Ask Corenyth** panel over the launcher,
+   without navigating to the main app screen. Check this with the app closed and already running.
+4. Send “Remind me to buy groceries tomorrow at 6 pm”. Verify the reply, saved title, due date/time,
+   reminder, and widget refresh. The whole prompt must not be stored as a literal task title.
+5. Exercise a clarification and answer it in the same panel. Check that only the confirmed action is
+   saved, the reply stays visible, and closing returns to the launcher. Verify the conversation in app history.
+6. Complete a task from its widget circle. Check the remaining count/list and cancellation of its reminders.
+   Also check an empty list, repeated completion, and task changes made from the main app.
+7. Check missing-model fallback, Stop during a reply, keyboard dismissal, rotation, small screen sizes,
+   and a startup error/retry. Confirm failures do not silently create a literal task or duplicate an action.
+
+Validation recorded for the widget prompt integration: Android Kotlin/resource compilation, targeted Dart
+analysis, and 87 tests across `chat_view_test.dart`, `startup_test.dart`, `temporal_session_test.dart`, and
+`proactive_session_test.dart` passed. These checks include keyboard submission and shared session behavior;
+they do not establish real-model accuracy or launcher-specific keyboard/animation behavior. The separate
+18-test `proactive_delivery_test.dart` run covered widget completion and reminder cancellation.
+Full on-device prompt-flow verification remains pending.
