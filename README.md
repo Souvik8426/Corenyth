@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/corenyth-logo.png" alt="Corenyth logo" width="128">
+  <img src="assets/branding/corenyth-logo-primary.png" alt="Corenyth logo" width="128">
 </p>
 
 <h1 align="center">Corenyth</h1>

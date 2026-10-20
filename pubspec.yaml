@@ -48,6 +48,4 @@ flutter_launcher_icons:
 hooks:
   user_defines:
     sqlite3:
-      source:
-        macos: system
-        default: sqlite3
+      source: sqlite3
