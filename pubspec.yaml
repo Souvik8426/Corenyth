@@ -13,6 +13,7 @@ dependencies:
   timezone: ^0.9.4
   crypto: ^3.0.7 # already resolved transitively; model SHA-256 check
   flutter_markdown_plus: ^1.0.12
+  archive: ^4.5.2
 dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   flutter_test:

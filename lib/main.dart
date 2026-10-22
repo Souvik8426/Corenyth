@@ -14,6 +14,7 @@ import 'services/app_services.dart';
 import 'services/proactive.dart';
 import 'services/reminder_scheduler.dart';
 import 'ui/reminder_settings.dart';
+import 'ui/backup_settings.dart';
 import 'package:path/path.dart' as p;
 
 import 'services/model_status.dart';
@@ -470,8 +471,22 @@ class _AssistantHomeState extends State<AssistantHome>
                   const SizedBox(height: 24),
                   ReminderSettings(widget.services.preferences,
                       onTest: widget.services.testNotification),
+                  const SizedBox(height: 24),
+                  BackupSettings(widget.services.backup, onImported: _imported),
                 ]))),
       );
+
+  /// A backup was imported: the open chat may be gone, so the main chat is
+  /// opened again and the lists are reloaded.
+  Future<void> _imported() async {
+    await widget.services.backupImported();
+    if (!mounted) return;
+    setState(() {
+      _refresh++;
+      _setSelected(ConversationRepo.mainChatId);
+    });
+    await _load();
+  }
 
   @override
   Widget build(BuildContext context) => MascotEmotionScope(

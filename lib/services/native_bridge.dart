@@ -61,4 +61,54 @@ class NativeBridge {
 
   /// Close the translucent voice activity without killing the app process.
   static Future<void> closeActivity() => SystemNavigator.pop();
+
+  /// Opens the system file picker for a Corenyth backup.
+  ///
+  /// Returns the absolute path of a copy of the chosen file inside the app's
+  /// own cache (the original is never touched), or null when the user
+  /// cancelled. Throws [PlatformException] with code `no_picker` when no
+  /// picker is available and `read_failed` when the file could not be read.
+  static Future<String?> pickBackupFile() async {
+    try {
+      return await _ch.invokeMethod<String?>('pickBackup');
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Hands the backup at [path] to the system share sheet, so the user can
+  /// move it to another device. Throws [PlatformException] with code
+  /// `no_app` when nothing can receive it and `bad_path` when the file is
+  /// gone.
+  static Future<bool> shareBackupFile(String path) async {
+    try {
+      return await _ch.invokeMethod<bool>('shareBackup', {'path': path}) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 }
+
+/// A picker or share that failed on the native side.
+class NativeBackupException implements Exception {
+  final String code;
+  final String message;
+  const NativeBackupException(this.code, this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// The native failure codes the backup picker and share sheet report, turned
+/// into messages the user can act on.
+NativeBackupException nativeBackupError(PlatformException e) =>
+    NativeBackupException(
+        e.code,
+        switch (e.code) {
+          'no_picker' => 'No file picker is available on this device.',
+          'read_failed' => 'That file could not be read.',
+          'no_app' => 'No app on this device can receive the backup.',
+          'bad_path' => 'The backup file is gone.',
+          _ => 'The backup could not be opened.',
+        });
