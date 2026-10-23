@@ -1,7 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Matches the app's raised cards: dark surface, soft lavender outline. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/corenyth_surface"/>
-    <stroke android:width="1dp" android:color="@color/corenyth_outline"/>
-    <corners android:radius="24dp"/>
-</shape>
+<!-- Glass panel, as close as RemoteViews allow (no backdrop blur): translucent
+     dark fill, the app's faint violet/blue glow, a top sheen and a hairline edge. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <solid android:color="@color/corenyth_glass_fill"/>
+            <corners android:radius="24dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <gradient android:type="radial" android:centerX="0.1" android:centerY="0"
+                android:gradientRadius="220dp"
+                android:startColor="@color/corenyth_glow_violet"
+                android:endColor="@color/corenyth_transparent"/>
+            <corners android:radius="24dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <gradient android:type="radial" android:centerX="1" android:centerY="1"
+                android:gradientRadius="200dp"
+                android:startColor="@color/corenyth_glow_blue"
+                android:endColor="@color/corenyth_transparent"/>
+            <corners android:radius="24dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <gradient android:angle="270" android:centerY="0.12"
+                android:startColor="@color/corenyth_glass_sheen"
+                android:centerColor="@color/corenyth_transparent"
+                android:endColor="@color/corenyth_transparent"/>
+            <corners android:radius="24dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <solid android:color="@color/corenyth_transparent"/>
+            <stroke android:width="1dp" android:color="@color/corenyth_glass_border"/>
+            <corners android:radius="24dp"/>
+        </shape>
+    </item>
+</layer-list>

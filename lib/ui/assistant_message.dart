@@ -3,11 +3,14 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../services/native_bridge.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 
 /// Mirrors MainActivity's openExternalLink check: https with a host only.
 bool canOpenLink(String? href) {
   final uri = href == null ? null : Uri.tryParse(href.trim());
-  return uri != null && uri.scheme.toLowerCase() == 'https' && uri.host.isNotEmpty;
+  return uri != null &&
+      uri.scheme.toLowerCase() == 'https' &&
+      uri.host.isNotEmpty;
 }
 
 Future<void> _open(BuildContext context, String url) async {
@@ -30,7 +33,7 @@ class AssistantMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final body = theme.textTheme.bodyLarge!;
+    final body = theme.textTheme.bodyMedium!;
     final code = body.copyWith(
         fontFamily: 'monospace',
         fontSize: (body.fontSize ?? 16) * 0.88,
@@ -38,8 +41,8 @@ class AssistantMessage extends StatelessWidget {
         backgroundColor: AppColors.transparent);
     final quiet = BoxDecoration(
         color: AppColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.lavender.withValues(alpha: 0.12)));
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: AppColors.cardBorder));
     return MarkdownBody(
       data: text,
       selectable: true,
@@ -59,11 +62,11 @@ class AssistantMessage extends StatelessWidget {
             fontWeight: FontWeight.w700, color: AppColors.ivory),
         em: const TextStyle(fontStyle: FontStyle.italic),
         a: const TextStyle(
-            color: AppColors.lavender, decoration: TextDecoration.underline),
-        h1: theme.textTheme.titleLarge!.copyWith(color: AppColors.lavender),
-        h2: theme.textTheme.titleMedium!.copyWith(color: AppColors.lavender),
-        h3: theme.textTheme.titleSmall!.copyWith(color: AppColors.lavender),
-        listBullet: body.copyWith(color: AppColors.lavender),
+            color: AppColors.coreViolet, decoration: TextDecoration.underline),
+        h1: theme.textTheme.titleLarge!.copyWith(color: AppColors.coreViolet),
+        h2: theme.textTheme.titleMedium!.copyWith(color: AppColors.coreViolet),
+        h3: theme.textTheme.titleSmall!.copyWith(color: AppColors.coreViolet),
+        listBullet: body.copyWith(color: AppColors.coreViolet),
         code: code,
         codeblockDecoration: quiet,
         codeblockPadding: const EdgeInsets.all(12),
@@ -71,14 +74,14 @@ class AssistantMessage extends StatelessWidget {
         blockquoteDecoration: BoxDecoration(
             border: Border(
                 left: BorderSide(
-                    color: AppColors.lavender.withValues(alpha: 0.6),
+                    color: AppColors.coreViolet.withValues(alpha: 0.6),
                     width: 3))),
         blockquotePadding: const EdgeInsets.only(left: 12),
         tableHead: body.copyWith(
-            fontWeight: FontWeight.w700, color: AppColors.lavender),
+            fontWeight: FontWeight.w700, color: AppColors.coreViolet),
         tableBody: body,
-        tableBorder: TableBorder.all(
-            color: AppColors.lavender.withValues(alpha: 0.2)),
+        tableBorder:
+            TableBorder.all(color: AppColors.coreViolet.withValues(alpha: 0.2)),
         tableCellsPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         // Intrinsic widths make the package wrap tables in a horizontal scroll.
@@ -86,7 +89,7 @@ class AssistantMessage extends StatelessWidget {
         horizontalRuleDecoration: BoxDecoration(
             border: Border(
                 top: BorderSide(
-                    color: AppColors.lavender.withValues(alpha: 0.2)))),
+                    color: AppColors.coreViolet.withValues(alpha: 0.2)))),
       ),
     );
   }

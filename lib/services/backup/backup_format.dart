@@ -13,7 +13,7 @@ const String backupFormatTag = 'corenyth-backup';
 
 /// App version recorded in the manifest, so an import can tell which build
 /// wrote the file.
-const String backupAppVersion = '0.1.0-alpha.1+1';
+const String backupAppVersion = '0.2.0+2';
 
 /// File name of a backup inside the models folder.
 const String backupFileName = 'backup.corenyth';

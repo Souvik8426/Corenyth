@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../data/repos.dart';
 import '../services/native_bridge.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import 'glass_surface.dart';
+import 'glass_dialog.dart';
 
 class TasksPage extends StatefulWidget {
   const TasksPage(this.tasks,
@@ -145,7 +148,7 @@ class _TasksPageState extends State<TasksPage> {
   Future<void> _confirmDelete(Task task) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         title: const Text('Delete task?'),
         content: Text('“${task.title}” will be permanently deleted.'),
         scrollable: true,
@@ -178,28 +181,29 @@ class _TasksPageState extends State<TasksPage> {
       useSafeArea: true,
       isDismissible: false,
       enableDrag: false,
-      backgroundColor: AppColors.surfaceRaised,
-      builder: (context) => _TaskEditor(
-          task: task,
-          onSave: (title, notes, due, priority) async {
-            if (task == null) {
-              await widget.tasks
-                  .create(title, notes: notes, due: due, priority: priority);
-            } else {
-              final changed = await widget.tasks.update(task.id, {
-                'title': title,
-                'notes': notes,
-                'due_at': due?.millisecondsSinceEpoch,
-                'priority': priority,
-              });
-              if (!changed) throw StateError('Task no longer exists');
-            }
-            await NativeBridge.refreshWidget();
-            if (mounted) {
-              if (task == null) setState(() => _completed = false);
-              await _load();
-            }
-          }),
+      backgroundColor: AppColors.transparent,
+      builder: (context) => GlassSheet(
+          child: _TaskEditor(
+              task: task,
+              onSave: (title, notes, due, priority) async {
+                if (task == null) {
+                  await widget.tasks.create(title,
+                      notes: notes, due: due, priority: priority);
+                } else {
+                  final changed = await widget.tasks.update(task.id, {
+                    'title': title,
+                    'notes': notes,
+                    'due_at': due?.millisecondsSinceEpoch,
+                    'priority': priority,
+                  });
+                  if (!changed) throw StateError('Task no longer exists');
+                }
+                await NativeBridge.refreshWidget();
+                if (mounted) {
+                  if (task == null) setState(() => _completed = false);
+                  await _load();
+                }
+              })),
     );
   }
 
@@ -209,43 +213,58 @@ class _TasksPageState extends State<TasksPage> {
     final done = _tasks.length - pending;
     final text = Theme.of(context).textTheme;
     return ColoredBox(
-      color: AppColors.background,
+      color: AppColors.transparent,
       child: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.all(16),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: Text('Tasks', style: text.displaySmall)),
-              IconButton(
-                tooltip: 'Refresh tasks',
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ]),
-            const SizedBox(height: 8),
-            Text(
-                _hasLoaded
-                    ? '$pending ${pending == 1 ? 'task' : 'tasks'} pending'
-                    : 'A little space for what’s next.',
-                style: text.bodyMedium?.copyWith(color: AppColors.muted)),
-            const SizedBox(height: 16),
-            Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                    style:
-                        FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                    onPressed: _mutating ? null : _openEditor,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Add task'))),
-            const SizedBox(height: 24),
+            LayoutBuilder(builder: (context, constraints) {
+              final heading = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tasks', style: text.displaySmall),
+                    const SizedBox(height: 4),
+                    Text(
+                        _hasLoaded
+                            ? '$pending ${pending == 1 ? 'task' : 'tasks'} pending'
+                            : 'A little space for what’s next.',
+                        style:
+                            text.bodySmall?.copyWith(color: AppColors.muted)),
+                  ]);
+              final actions = Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  children: [
+                    IconButton(
+                        tooltip: 'Refresh tasks',
+                        onPressed: _loading ? null : _load,
+                        icon: const Icon(Icons.refresh_rounded)),
+                    FilledButton.icon(
+                        onPressed: _mutating ? null : _openEditor,
+                        style: FilledButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 12)),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('Add task')),
+                  ]);
+              if (constraints.maxWidth < 450 &&
+                  MediaQuery.textScalerOf(context).scale(14) > 18) {
+                return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [heading, const SizedBox(height: 8), actions]);
+              }
+              return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [Expanded(child: heading), actions]);
+            }),
+            const SizedBox(height: 18),
             Wrap(spacing: 8, runSpacing: 8, children: [
               _filter('Active ($pending)', false),
               _filter('Completed ($done)', true),
             ]),
-            const SizedBox(height: 24),
+            const SizedBox(height: 10),
             if (_loading) ...[
               const Center(
                   child: SizedBox(
@@ -289,7 +308,7 @@ class _TasksPageState extends State<TasksPage> {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(24)),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -307,7 +326,7 @@ class _TasksPageState extends State<TasksPage> {
               ),
             for (final task in _tasks.where((task) => task.done == _completed))
               Padding(
-                padding: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: _card(task),
               ),
           ],
@@ -320,12 +339,12 @@ class _TasksPageState extends State<TasksPage> {
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(48, 48),
           backgroundColor: _completed == completed
-              ? AppColors.lavender.withValues(alpha: 0.18)
+              ? AppColors.surfaceRaised
               : AppColors.surface,
           side: BorderSide(
               color: _completed == completed
-                  ? AppColors.lavender
-                  : AppColors.muted.withValues(alpha: 0.4)),
+                  ? AppColors.coreViolet
+                  : AppColors.glassBorder),
         ),
         onPressed: () => setState(() => _completed = completed),
         child: Text(label),
@@ -333,103 +352,130 @@ class _TasksPageState extends State<TasksPage> {
 
   Widget _card(Task task) {
     final text = Theme.of(context).textTheme;
+    final overdue = !task.done &&
+        task.dueAt != null &&
+        task.dueAt!.isBefore(DateTime.now());
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-            color: task.id == widget.focusTaskId
-                ? AppColors.gold
-                : AppColors.lavender.withValues(alpha: 0.12)),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (task.id == widget.focusTaskId)
-          Text('From reminder',
-              style: text.labelSmall?.copyWith(color: AppColors.gold)),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          IconButton(
-            tooltip: task.done ? 'Restore task' : 'Complete task',
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            color: task.done ? AppColors.success : AppColors.lavender,
-            onPressed: _mutating ? null : () => _toggle(task),
-            icon: Icon(task.done
-                ? Icons.check_circle_rounded
-                : Icons.radio_button_unchecked),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(task.title,
-                style: text.titleMedium?.copyWith(
-                  decoration: task.done ? TextDecoration.lineThrough : null,
-                  color: task.done ? AppColors.muted : AppColors.ivory,
-                )),
-          )),
-        ]),
-        if (task.notes?.trim().isNotEmpty == true) ...[
-          const SizedBox(height: 8),
-          Text(task.notes!,
-              style: text.bodyMedium?.copyWith(color: AppColors.muted)),
-        ],
-        const SizedBox(height: 16),
-        Wrap(spacing: 16, runSpacing: 8, children: [
-          Text('${_priority(task.priority)} priority',
-              style: text.bodySmall?.copyWith(
-                  color:
-                      task.priority == 2 ? AppColors.gold : AppColors.muted)),
-          Text(
-              task.dueAt == null
-                  ? 'No due date'
-                  : _dueLabel(context, task.dueAt!),
-              style: text.bodySmall),
-          if (!task.done && _alerts[task.id] != null)
-            Text(
-                'Alerts: ${_alerts[task.id]!.map((r) => _alertLabel(context, r)).join(', ')}',
-                style: text.bodySmall?.copyWith(color: AppColors.muted)),
-        ]),
-        if (!task.done &&
-            task.dueAt != null &&
-            task.dueAt!.isBefore(DateTime.now())) ...[
-          const SizedBox(height: 12),
-          // The check-in question only when the user asked for a follow-up.
-          Text(_followUps.contains(task.id) ? 'How did it go?' : 'Overdue',
-              style: text.bodyMedium),
-          const SizedBox(height: 4),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton.tonal(
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: _mutating ? null : () => _toggle(task),
-              child: const Text('Mark done'),
-            ),
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-              onPressed: _mutating ? null : () => _postpone(task),
-              child: const Text('Postpone 1 hour'),
-            ),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(
+                color: task.id == widget.focusTaskId
+                    ? AppColors.gold
+                    : AppColors.cardBorder)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (task.id == widget.focusTaskId)
+            Text('From reminder',
+                style: text.labelSmall?.copyWith(color: AppColors.gold)),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            IconButton(
+                tooltip: task.done ? 'Restore task' : 'Complete task',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                color: task.done ? AppColors.success : AppColors.muted,
+                onPressed: _mutating ? null : () => _toggle(task),
+                icon: Icon(task.done
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked)),
+            const SizedBox(width: 4),
+            Expanded(
+                child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(task.title,
+                              style: text.titleSmall?.copyWith(
+                                  fontSize: 15,
+                                  decoration: task.done
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  color: task.done
+                                      ? AppColors.muted
+                                      : AppColors.ivory)),
+                          const SizedBox(height: 6),
+                          Wrap(spacing: 6, runSpacing: 4, children: [
+                            Text('${_priority(task.priority)} priority',
+                                style: text.bodySmall
+                                    ?.copyWith(color: AppColors.tertiaryText)),
+                            const Text('·',
+                                style: TextStyle(
+                                    color: AppColors.tertiaryText,
+                                    fontSize: 12)),
+                            Text(
+                                task.dueAt == null
+                                    ? 'No due date'
+                                    : _dueLabel(context, task.dueAt!),
+                                style: text.bodySmall
+                                    ?.copyWith(color: AppColors.tertiaryText)),
+                            if (!task.done && _alerts[task.id] != null) ...[
+                              const Text('·',
+                                  style: TextStyle(
+                                      color: AppColors.tertiaryText,
+                                      fontSize: 12)),
+                              Text(
+                                  'Alerts: ${_alerts[task.id]!.map((r) => _alertLabel(context, r)).join(', ')}',
+                                  style: text.bodySmall),
+                            ],
+                            if (overdue) ...[
+                              const Text('·',
+                                  style: TextStyle(
+                                      color: AppColors.tertiaryText,
+                                      fontSize: 12)),
+                              Text(
+                                  _followUps.contains(task.id)
+                                      ? 'How did it go?'
+                                      : 'Overdue',
+                                  style: text.bodySmall
+                                      ?.copyWith(color: AppColors.error)),
+                            ],
+                          ]),
+                        ]))),
           ]),
-        ],
-        const SizedBox(height: 16),
-        Align(
-            alignment: Alignment.centerRight,
-            child: Wrap(spacing: 8, children: [
-              IconButton(
+          if (task.notes?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Text(task.notes!,
+                style: text.bodyMedium?.copyWith(color: AppColors.muted)),
+          ],
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+                child: Wrap(spacing: 8, runSpacing: 8, children: [
+              if (overdue) ...[
+                FilledButton(
+                    onPressed: _mutating ? null : () => _toggle(task),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.goldFill,
+                        foregroundColor: AppColors.gold,
+                        side: const BorderSide(color: AppColors.goldBorder),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        textStyle: text.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    child: const Text('Mark done')),
+                OutlinedButton(
+                    onPressed: _mutating ? null : () => _postpone(task),
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        textStyle: text.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    child: const Text('Postpone 1 hour')),
+              ],
+            ])),
+            IconButton(
                 tooltip: 'Edit task',
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: _mutating ? null : () => _openEditor(task),
-                icon: const Icon(Icons.edit_outlined),
-              ),
-              IconButton(
+                icon: const Icon(Icons.edit_outlined)),
+            IconButton(
                 tooltip: 'Delete task',
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 color: AppColors.muted,
                 onPressed: _mutating ? null : () => _confirmDelete(task),
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-            ])),
-      ]),
-    );
+                icon: const Icon(Icons.delete_outline_rounded)),
+          ]),
+        ]));
   }
 }
 
@@ -529,7 +575,7 @@ class _TaskEditorState extends State<_TaskEditor> {
           constraints: BoxConstraints(
               maxHeight: MediaQuery.sizeOf(context).height * 0.9),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 26),
             child: Form(
                 key: _form,
                 child: Column(
@@ -537,8 +583,8 @@ class _TaskEditorState extends State<_TaskEditor> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(widget.task == null ? 'New task' : 'Edit task',
-                        style: text.headlineMedium),
-                    const SizedBox(height: 24),
+                        style: text.headlineSmall),
+                    const SizedBox(height: 16),
                     TextFormField(
                       key: const ValueKey('task-title'),
                       controller: _title,
@@ -562,7 +608,7 @@ class _TaskEditorState extends State<_TaskEditor> {
                       decoration:
                           const InputDecoration(labelText: 'Notes (optional)'),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     Text('Due (optional)', style: text.titleSmall),
                     const SizedBox(height: 8),
                     if (_due != null) ...[
@@ -604,7 +650,7 @@ class _TaskEditorState extends State<_TaskEditor> {
                     const SizedBox(height: 8),
                     Text('Due dates don’t create reminders.',
                         style: text.bodySmall),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     Text('Priority', style: text.titleSmall),
                     const SizedBox(height: 8),
                     Wrap(spacing: 8, runSpacing: 8, children: [
@@ -614,15 +660,13 @@ class _TaskEditorState extends State<_TaskEditor> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(48, 48),
-                              foregroundColor: priority == 2
-                                  ? AppColors.gold
-                                  : AppColors.ivory,
+                              foregroundColor: AppColors.ivory,
                               side: BorderSide(
                                   color: _priorityValue == priority
-                                      ? AppColors.lavender
-                                      : AppColors.muted.withValues(alpha: 0.4)),
+                                      ? AppColors.coreViolet
+                                      : AppColors.glassBorder),
                               backgroundColor: _priorityValue == priority
-                                  ? AppColors.lavender.withValues(alpha: 0.18)
+                                  ? AppColors.selectedChip
                                   : AppColors.surface,
                             ),
                             onPressed: _saving
@@ -633,7 +677,7 @@ class _TaskEditorState extends State<_TaskEditor> {
                           ),
                         ),
                     ]),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
                     if (_error != null) ...[
                       Semantics(
                           liveRegion: true,
@@ -642,8 +686,9 @@ class _TaskEditorState extends State<_TaskEditor> {
                                   ?.copyWith(color: AppColors.error))),
                       const SizedBox(height: 16),
                     ],
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      FilledButton(
+                    Row(children: [
+                      Expanded(
+                          child: FilledButton(
                         style: FilledButton.styleFrom(
                             minimumSize: const Size(48, 48)),
                         onPressed: _saving ? null : _save,
@@ -652,9 +697,10 @@ class _TaskEditorState extends State<_TaskEditor> {
                             : _error == null
                                 ? 'Save task'
                                 : 'Try again'),
-                      ),
-                      TextButton(
-                        style: TextButton.styleFrom(
+                      )),
+                      const SizedBox(width: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
                             minimumSize: const Size(48, 48)),
                         onPressed:
                             _saving ? null : () => Navigator.of(context).pop(),

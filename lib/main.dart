@@ -23,6 +23,8 @@ import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'ui/chat_view.dart';
 import 'ui/app_shell.dart';
+import 'ui/glass_surface.dart';
+import 'ui/glass_dialog.dart';
 import 'ui/chat_sidebar.dart';
 import 'ui/tasks_page.dart';
 import 'ui/memories_page.dart';
@@ -388,7 +390,7 @@ class _AssistantHomeState extends State<AssistantHome>
   Future<void> _addWidget() async {
     final compact = await showDialog<bool>(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (context) => GlassSimpleDialog(
         title: const Text('Choose your widget'),
         children: [
           SimpleDialogOption(
@@ -423,7 +425,7 @@ class _AssistantHomeState extends State<AssistantHome>
     if (_busy || _chatBusy) return;
     final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => GlassAlertDialog(
               title: const Text('Delete chat?'),
               content: Text(
                   'Delete “${chat.title.trim().isEmpty ? 'New chat' : chat.title}” and its messages? Your tasks and memories are kept.'),
@@ -462,18 +464,20 @@ class _AssistantHomeState extends State<AssistantHome>
   void _settings() => showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => SafeArea(
-            child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(children: [
-                  ModelSetupCard(widget.services),
-                  const SizedBox(height: 24),
-                  ReminderSettings(widget.services.preferences,
-                      onTest: widget.services.testNotification),
-                  const SizedBox(height: 24),
-                  BackupSettings(widget.services.backup, onImported: _imported),
-                ]))),
+        showDragHandle: false,
+        builder: (_) => GlassSheet(
+            child: SafeArea(
+                child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(children: [
+                      ModelSetupCard(widget.services),
+                      const SizedBox(height: 24),
+                      ReminderSettings(widget.services.preferences,
+                          onTest: widget.services.testNotification),
+                      const SizedBox(height: 24),
+                      BackupSettings(widget.services.backup,
+                          onImported: _imported),
+                    ])))),
       );
 
   /// A backup was imported: the open chat may be gone, so the main chat is
@@ -492,6 +496,7 @@ class _AssistantHomeState extends State<AssistantHome>
   Widget build(BuildContext context) => MascotEmotionScope(
       emotion: _mascotEmotion,
       child: AppShell(
+        profileName: _name,
         onProfile: _profile,
         onSettings: _settings,
         selectedDestination: _destination,
@@ -934,8 +939,7 @@ class _ChatPageState extends State<ChatPage> {
         if (widget.closeOnEnd)
           Row(children: [
             const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('Ask Corenyth')),
+                padding: EdgeInsets.all(12), child: Text('Ask Corenyth')),
             const Spacer(),
             IconButton(
                 tooltip: 'Close chat',
@@ -1044,13 +1048,14 @@ class _ModelSetupCardState extends State<ModelSetupCard>
   void _showDetails() => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-          child: FractionallySizedBox(
-              heightFactor: 0.85,
-              child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: ModelSetupCard(widget.services)))));
+      showDragHandle: false,
+      builder: (_) => GlassSheet(
+          child: SafeArea(
+              child: FractionallySizedBox(
+                  heightFactor: 0.85,
+                  child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: ModelSetupCard(widget.services))))));
 
   void _load() {
     final sv = widget.services;
@@ -1065,8 +1070,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
   /// choice to make: only Corenyth's fine-tuned 0.6B may load.
   Widget _picker(bool loading) {
     final m = widget.services.selectedModel;
-    final installed = checkModelSpec(
-            p.dirname(widget.services.modelPath), m, granted: true) ==
+    final installed = checkModelSpec(p.dirname(widget.services.modelPath), m,
+            granted: true) ==
         ModelState.ready;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Model', style: Theme.of(context).textTheme.titleSmall),
@@ -1204,8 +1209,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                   want.url.isEmpty
                       ? null
                       : TextButton(
-                          onPressed: () => NativeBridge.openUrl(want.url)
-                              .catchError((_) {}),
+                          onPressed: () =>
+                              NativeBridge.openUrl(want.url).catchError((_) {}),
                           child: const Text('Download in browser'))),
               step(
                   3,
@@ -1238,12 +1243,26 @@ class ModelLoadDialog extends StatelessWidget {
         final busy = v == ModelLoad.idle || v == ModelLoad.loading;
         return PopScope(
             canPop: !busy,
-            child: AlertDialog(
+            child: GlassAlertDialog(
+              backgroundColor: AppColors.transparent,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              titleTextStyle: Theme.of(context).textTheme.titleLarge,
+              alignment: Alignment.center,
               icon: busy
                   ? const ModelLoadingIndicator()
                   : v == ModelLoad.loaded
-                      ? const Icon(Icons.check_circle,
-                          color: AppColors.success, size: 40)
+                      ? Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                              color: AppColors.successFill,
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusMd),
+                              border:
+                                  Border.all(color: AppColors.successBorder)),
+                          child: const Icon(Icons.check_rounded,
+                              color: AppColors.success, size: 24))
                       : const Icon(Icons.error_outline,
                           color: AppColors.error, size: 40),
               title: Text(busy

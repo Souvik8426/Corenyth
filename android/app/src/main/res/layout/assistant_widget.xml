@@ -2,12 +2,12 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:background="@drawable/widget_bg">
     <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:orientation="horizontal">
         <ImageView android:layout_width="30dp" android:layout_height="30dp" android:src="@mipmap/ic_launcher" android:importantForAccessibility="no"/>
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:paddingStart="10dp" android:text="My tasks" android:textSize="20sp" android:textStyle="bold" android:textColor="@color/corenyth_ivory"/>
-        <TextView android:id="@+id/widget_add" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center" android:text="+" android:textSize="30sp" android:textColor="@color/corenyth_lavender" android:contentDescription="Add task" android:background="@drawable/widget_pill"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:paddingStart="10dp" android:text="My tasks" android:textSize="18sp" android:textStyle="bold" android:textColor="@color/corenyth_ivory"/>
+        <TextView android:id="@+id/widget_add" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center" android:text="+" android:textSize="26sp" android:textColor="@color/corenyth_on_ivory" android:contentDescription="Add task" android:background="@drawable/widget_pill"/>
     </LinearLayout>
-    <TextView android:id="@+id/widget_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:paddingBottom="8dp" android:textSize="12sp" android:textColor="@color/corenyth_muted"/>
+    <TextView android:id="@+id/widget_count" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="4dp" android:paddingBottom="8dp" android:textSize="12sp" android:textColor="@color/corenyth_text_tertiary"/>
     <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
-        <ListView android:id="@+id/widget_list" android:layout_width="match_parent" android:layout_height="match_parent" android:divider="@color/corenyth_outline" android:dividerHeight="1dp"/>
-        <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="You're all caught up." android:textColor="@color/corenyth_muted" android:textSize="14sp"/>
+        <ListView android:id="@+id/widget_list" android:layout_width="match_parent" android:layout_height="match_parent" android:divider="@color/corenyth_hairline" android:dividerHeight="1dp"/>
+        <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:text="You're all caught up." android:textColor="@color/corenyth_text_secondary" android:textSize="14sp"/>
     </FrameLayout>
 </LinearLayout>

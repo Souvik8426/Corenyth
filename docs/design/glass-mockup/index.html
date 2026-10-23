@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corenyth Glass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Existing Corenyth palette */
+  --ivory: #F3ECDD;
+  --text-2: #B4AEC0;          /* secondary text, ≥ 7:1 on black */
+  --text-3: #8C8698;          /* tertiary / meta, ≥ 4.5:1 on black */
+  --violet: #CDBBFF;
+  --cyan: #BFE9FF;
+  --gold: #D4B072;
+  --success: #9FD8B8;
+  --error: #E8838F;
+  /* Ghost mesh colours that feed the glow (pink dropped for a calmer read) */
+  --g-sky: #87CEEB;
+  --g-blue: #4A90E2;
+
+  --core-gradient: linear-gradient(120deg, var(--violet), var(--cyan));
+  --on-ivory: #15121C;
+
+  /* Radius scale: tighter, consistent */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  /* Glass: chrome layer only (top bar, nav, composer, sheets) */
+  --glass-fill: rgba(255, 255, 255, 0.055);
+  --glass-fill-strong: rgba(22, 20, 30, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --glass-blur: blur(24px) saturate(140%);
+
+  /* Solid content surfaces */
+  --card: #0F0E14;
+  --card-raised: #17151E;
+  --card-border: rgba(255, 255, 255, 0.07);
+  --hairline: rgba(255, 255, 255, 0.07);
+
+  --canvas: #0B0A0F;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--canvas);
+  color: var(--ivory);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-feature-settings: 'tnum' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
+  padding: 48px 40px 80px;
+}
+h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.lede { color: var(--text-2); margin-top: 6px; font-size: 14px; max-width: 720px; line-height: 1.55; }
+
+/* Token strip */
+.tokens { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 40px; }
+.swatch { width: 120px; font-size: 11px; color: var(--text-2); line-height: 1.4; }
+.swatch div { height: 56px; border-radius: var(--r-md); margin-bottom: 6px; border: 1px solid rgba(255,255,255,.08); }
+
+.board { display: flex; flex-wrap: wrap; gap: 40px; }
+.screen-label { font-size: 13px; color: var(--text-2); margin-bottom: 10px; font-weight: 500; }
+
+/* ---------- Phone frame ---------- */
+.phone {
+  position: relative;
+  width: 360px; height: 800px;
+  border-radius: 36px;
+  overflow: hidden;
+  background: #000;
+  isolation: isolate;
+  box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06);
+}
+/* Background: pure black base with a faint violet / cyan / blue glow */
+.aurora { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
+.aurora span { position: absolute; border-radius: 50%; filter: blur(90px); }
+.aurora .a1 { width: 360px; height: 320px; left: -140px; top: -90px; background: #8E78F0; opacity: .22; }
+.aurora .a2 { width: 320px; height: 300px; right: -160px; top: 160px; background: var(--g-sky); opacity: .10; }
+.aurora .a3 { width: 360px; height: 280px; left: -100px; bottom: 80px; background: var(--g-blue); opacity: .16; }
+.aurora .a4 { width: 260px; height: 240px; right: -90px; bottom: -60px; background: #6E64D8; opacity: .14; }
+.aurora::before {
+  content: ''; position: absolute; left: -40%; right: -40%; top: 40%; height: 110px;
+  background: linear-gradient(90deg, transparent, rgba(205,187,255,.14), rgba(191,233,255,.10), transparent);
+  transform: rotate(-22deg); filter: blur(44px);
+}
+.aurora::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(90% 45% at 50% 52%, rgba(0,0,0,.45), rgba(0,0,0,.1) 75%);
+}
+.aurora.calm .a1 { opacity: .18; } .aurora.calm .a3 { opacity: .12; }
+
+/* Avatar: static hairline ring, solid core, ivory initial */
+.avatar { --s: 48px; position: relative; width: var(--s); height: var(--s); flex: none; }
+.avatar .ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 210deg, rgba(205,187,255,.9), rgba(191,233,255,.7), rgba(205,187,255,.15), rgba(205,187,255,.9));
+}
+.avatar .core {
+  position: absolute; inset: 1.5px; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(120% 90% at 30% 15%, #2A2538, #121019 70%);
+  display: grid; place-items: center;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+}
+.avatar .initial {
+  font-weight: 600; font-size: calc(var(--s) * .38); letter-spacing: -0.01em; color: var(--ivory);
+}
+.avatar .badge { display: none; }
+.avatar.sm { --s: 34px; }
+
+.glass {
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), 0 10px 30px rgba(0,0,0,.35);
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-lg);
+}
+
+/* Status bar */
+.status { height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 12px; font-weight: 600; }
+.status .r { display: flex; gap: 6px; align-items: center; opacity: .85; }
+
+/* Top app bar (glass) */
+.topbar {
+  margin: 4px 12px 0; height: 56px; border-radius: var(--r-lg);
+  display: flex; align-items: center; padding: 0 6px; gap: 2px;
+}
+.icon-btn { width: 44px; height: 44px; border-radius: var(--r-md); display: grid; place-items: center; color: var(--ivory); }
+.brand { display: flex; align-items: center; gap: 10px; flex: 1; padding-left: 2px; }
+.brand b { font-size: 15px; font-weight: 700; display: block; letter-spacing: -0.015em; }
+.brand small { font-size: 12px; color: var(--text-3); }
+
+/* Model status strip */
+.model-chip {
+  margin: 8px 12px 0; padding: 10px 6px 10px 14px; border-radius: var(--r-md);
+  display: flex; align-items: center; gap: 10px; font-size: 12.5px; font-weight: 500;
+}
+.model-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; }
+.model-chip .txt { flex: 1; line-height: 1.35; }
+.model-chip .txt span { color: var(--text-3); font-size: 12px; font-weight: 400; display: block; }
+.link { color: var(--violet); font-weight: 600; font-size: 13px; padding: 0 10px; }
+
+/* Ghost hero */
+.hero { display: grid; place-items: center; margin-top: 26px; position: relative; }
+.hero .halo { position: absolute; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, rgba(205,187,255,.16), transparent 65%); }
+.pager { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; margin-top: 16px; font-size: 12px; color: var(--text-3); font-weight: 500; }
+.pager .pill { letter-spacing: .02em; }
+
+/* Messages (solid) */
+.msgs { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 6px; }
+.bubble { padding: 11px 14px; font-size: 14.5px; line-height: 1.5; max-width: 84%; }
+.bubble.user { align-self: flex-end; background: #1D1A27; border: 1px solid rgba(205,187,255,.14); border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-lg); }
+.bubble.bot { align-self: flex-start; background: var(--card-raised); border: 1px solid var(--card-border); border-radius: var(--r-lg) var(--r-lg) var(--r-lg) var(--r-xs); }
+.meta { font-size: 12px; color: var(--text-3); }
+.meta.r { align-self: flex-end; }
+.who { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: .08em; color: var(--text-3); font-weight: 600; margin-top: 12px; text-transform: uppercase; }
+
+/* Composer + bottom nav (glass, floating) */
+.dock { position: absolute; left: 12px; right: 12px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+.composer { height: 52px; border-radius: var(--r-lg); display: flex; align-items: center; padding: 0 5px 0 16px; color: var(--text-3); font-size: 14.5px; }
+.composer span { flex: 1; }
+.send { width: 42px; height: 42px; border-radius: var(--r-md); background: var(--ivory); display: grid; place-items: center; color: var(--on-ivory); }
+.nav { height: 64px; border-radius: var(--r-xl); display: flex; padding: 6px; gap: 4px; }
+.nav a { flex: 1; border-radius: var(--r-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: var(--text-3); font-weight: 500; }
+.nav a.on { color: var(--ivory); background: rgba(255,255,255,.07); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+.nav a.on svg { color: var(--violet); }
+.home-ind { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 110px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.5); }
+
+/* Page headings */
+.page { padding: 20px 16px 0; }
+.page-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-h h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
+.sub { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: var(--r-sm); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.btn.primary { background: var(--ivory); color: var(--on-ivory); }
+.btn.tonal { background: rgba(255,255,255,.06); color: var(--ivory); border: 1px solid rgba(255,255,255,.10); }
+.btn.gold { background: rgba(212,176,114,.12); color: var(--gold); border: 1px solid rgba(212,176,114,.24); }
+.btn.ghost { color: var(--ivory); border: 1px solid rgba(255,255,255,.12); }
+.btn.text { color: var(--violet); padding: 0 8px; }
+
+.seg { display: inline-flex; padding: 3px; border-radius: var(--r-md); background: rgba(255,255,255,.03); border: 1px solid var(--card-border); gap: 2px; margin-top: 18px; }
+.seg span { padding: 8px 14px; border-radius: var(--r-sm); font-size: 13px; color: var(--text-3); font-weight: 500; }
+.seg span.on { background: var(--card-raised); color: var(--ivory); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+
+.task { padding: 14px 14px 12px; margin-top: 10px; }
+.task-row { display: flex; gap: 12px; align-items: flex-start; }
+.check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid rgba(243,236,221,.35); flex: none; margin-top: 2px; }
+.task h4 { font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+.tags { display: flex; gap: 6px 12px; margin-top: 6px; flex-wrap: wrap; }
+.tag { font-size: 12px; color: var(--text-3); }
+.tag + .tag::before { content: '·'; margin-right: 12px; margin-left: -6px; color: var(--text-3); }
+.tag.warn { color: var(--error); font-weight: 500; }
+.task-actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.task-actions .sp { flex: 1; }
+.mini { width: 36px; height: 36px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--text-2); }
+
+.section-t { font-size: 15px; font-weight: 700; margin-top: 20px; letter-spacing: -0.01em; }
+.field { height: 46px; border-radius: var(--r-sm); background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.10); display: flex; align-items: center; padding: 0 14px; gap: 10px; color: var(--text-3); font-size: 14px; margin-top: 10px; }
+.field.filled { color: var(--ivory); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chip { height: 36px; padding: 0 12px; border-radius: var(--r-sm); display: inline-flex; align-items: center; gap: 6px; font-size: 13px; border: 1px solid rgba(255,255,255,.10); color: var(--text-2); }
+.chip.on { background: rgba(205,187,255,.10); border-color: rgba(205,187,255,.35); color: var(--ivory); }
+.chip.on svg { color: var(--violet); }
+
+/* Scrim + glass sheets */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0; padding: 10px 18px 26px;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid var(--glass-border); border-bottom: 0;
+  box-shadow: var(--glass-highlight), 0 -12px 40px rgba(0,0,0,.4);
+}
+.grabber { width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); margin: 0 auto 16px; }
+.sheet h3 { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+.inset { background: rgba(0,0,0,.35); border: 1px solid var(--card-border); border-radius: var(--r-md); padding: 14px; margin-top: 12px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.row + .row { border-top: 1px solid var(--hairline); }
+.row .t { flex: 1; font-size: 14px; font-weight: 600; }
+.row .t small { display: block; font-weight: 400; font-size: 12px; color: var(--text-3); margin-top: 3px; line-height: 1.45; }
+.switch { width: 42px; height: 24px; border-radius: 12px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); position: relative; flex: none; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-2); }
+.switch.on { background: var(--violet); border-color: transparent; }
+.switch.on::after { left: 21px; background: var(--on-ivory); }
+
+/* Sidebar drawer (glass) */
+.drawer {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 290px;
+  border-radius: 0 var(--r-xl) var(--r-xl) 0; padding: 44px 14px 20px;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(32px) saturate(140%);
+  backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid var(--glass-border); border-left: 0;
+  box-shadow: var(--glass-highlight), 20px 0 40px rgba(0,0,0,.4);
+  display: flex; flex-direction: column;
+}
+.chat-list { margin-top: 20px; display: flex; flex-direction: column; gap: 4px; }
+.list-label { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 0 4px 6px; }
+.chat-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--r-md); border: 1px solid transparent; }
+.chat-item .ic { width: 36px; height: 36px; border-radius: var(--r-sm); display: grid; place-items: center; flex: none; background: rgba(255,255,255,.04); border: 1px solid var(--hairline); color: var(--text-3); }
+.chat-item .t { flex: 1; min-width: 0; }
+.chat-item .t b { display: block; font-size: 14px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-item .t small { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-item .when { font-size: 12px; color: var(--text-3); align-self: flex-start; margin-top: 2px; }
+/* Selected: lifted frosted tile with a tinted icon, no side bar */
+.chat-item.on { background: rgba(255,255,255,.075); border-color: rgba(255,255,255,.10); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 8px 20px rgba(0,0,0,.3); }
+.chat-item.on .ic { background: rgba(205,187,255,.12); border-color: rgba(205,187,255,.28); }
+.chat-item.on .t b { color: var(--ivory); }
+.chat-item.on .t small { color: var(--text-2); }
+.drawer-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--hairline); padding-top: 8px; }
+.foot-item { display: flex; gap: 12px; padding: 12px 6px; font-size: 14px; font-weight: 600; align-items: flex-start; }
+.foot-item svg { color: var(--text-2); }
+.foot-item small { display: block; font-weight: 400; color: var(--text-3); font-size: 12px; margin-top: 2px; }
+
+/* Dialog (glass) */
+.dialog { position: absolute; left: 28px; right: 28px; top: 280px; border-radius: var(--r-xl); padding: 24px 22px 12px; text-align: left;
+  background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(32px) saturate(140%); backdrop-filter: blur(32px) saturate(140%);
+  border: 1px solid var(--glass-border); box-shadow: var(--glass-highlight), 0 20px 50px rgba(0,0,0,.5); }
+.okmark { width: 40px; height: 40px; border-radius: var(--r-md); margin: 0 0 14px; display: grid; place-items: center; background: rgba(159,216,184,.10); border: 1px solid rgba(159,216,184,.28); color: var(--success); }
+
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.s { width: 16px; height: 16px; }
+
+@media (max-width: 480px) {
+  body { padding: 24px 16px 60px; }
+  .phone { width: 100%; max-width: 360px; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- Ghost mesh, approximating the app's MeshGradient character -->
+    <radialGradient id="gh1" cx="30%" cy="25%" r="70%"><stop offset="0" stop-color="#E2CAFF"/><stop offset="1" stop-color="#E2CAFF" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gh2" cx="80%" cy="35%" r="60%"><stop offset="0" stop-color="#87CEEB"/><stop offset="1" stop-color="#87CEEB" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gh3" cx="25%" cy="85%" r="65%"><stop offset="0" stop-color="#4A90E2"/><stop offset="1" stop-color="#4A90E2" stop-opacity="0"/></radialGradient>
+    <radialGradient id="gh4" cx="80%" cy="85%" r="55%"><stop offset="0" stop-color="#FFB3D9"/><stop offset="1" stop-color="#FFB3D9" stop-opacity="0"/></radialGradient>
+    <clipPath id="ghostClip"><path d="M10 52 C10 22 30 4 50 4 C70 4 90 22 90 52 L90 98 C84 106 76 106 70 98 C64 90 56 90 50 98 C44 106 36 106 30 98 C24 90 16 90 10 98 Z"/></clipPath>
+    <symbol id="ghost" viewBox="0 0 100 108">
+      <g clip-path="url(#ghostClip)">
+        <rect width="100" height="108" fill="#5E6E9E"/>
+        <rect width="100" height="108" fill="url(#gh3)"/>
+        <rect width="100" height="108" fill="url(#gh2)"/>
+        <rect width="100" height="108" fill="url(#gh4)"/>
+        <rect width="100" height="108" fill="url(#gh1)"/>
+        <ellipse cx="34" cy="20" rx="20" ry="9" fill="#fff" opacity=".18"/>
+      </g>
+      <ellipse cx="38" cy="50" rx="6.5" ry="9" fill="#2C3E50" opacity=".85"/>
+      <ellipse cx="62" cy="50" rx="6.5" ry="9" fill="#2C3E50" opacity=".85"/>
+    </symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 5h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 3V6a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+    <symbol id="i-tick" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-up-c" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="i-down-c" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></symbol>
+  </defs>
+</svg>
+
+<h1>Corenyth · Glass</h1>
+<p class="lede">A pitch-black base with a faint violet and cyan glow from the ghost. Glass is kept for the floating layer: top bar, model strip, composer, navigation, sheets, drawer and dialogs. Content sits on solid surfaces. One accent colour, ivory for primary actions, a tight radius scale and nothing smaller than 12px.</p>
+
+<div class="tokens">
+  <div class="swatch"><div style="position:relative;overflow:hidden;background:#000"><span style="position:absolute;inset:-20px;background:radial-gradient(circle at 20% 20%,rgba(142,120,240,.3),transparent 50%),radial-gradient(circle at 85% 45%,rgba(135,206,235,.12),transparent 50%),radial-gradient(circle at 30% 100%,rgba(74,144,226,.2),transparent 50%)"></span></div>Background<br>#000 + glow</div>
+  <div class="swatch"><div style="background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.10)"></div>Glass chrome<br>white 5.5% · blur 24</div>
+  <div class="swatch"><div style="background:rgba(22,20,30,.62);border-color:rgba(255,255,255,.10)"></div>Glass sheet<br>#16141E 62% · blur 32</div>
+  <div class="swatch"><div style="background:#0F0E14"></div>Surface<br>#0F0E14 / #17151E</div>
+  <div class="swatch"><div style="background:#F3ECDD"></div>Primary action<br>Ivory #F3ECDD</div>
+  <div class="swatch"><div style="background:#CDBBFF"></div>Accent<br>Violet #CDBBFF</div>
+  <div class="swatch"><div style="background:#8C8698"></div>Text tiers<br>#F3ECDD · #B4AEC0 · #8C8698</div>
+  <div class="swatch"><div style="background:linear-gradient(90deg,#9FD8B8 0 33%,#D4B072 33% 66%,#E8838F 66%)"></div>Status<br>success · gold · error</div>
+</div>
+
+<div class="board">
+
+<!-- 1. Chat home -->
+<section>
+  <p class="screen-label">01 · Chat home</p>
+  <div class="phone">
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:11</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass">
+      <div class="icon-btn"><svg class="i"><use href="#i-menu"/></svg></div>
+      <div class="brand"><svg width="26" height="28"><use href="#ghost"/></svg><div><b>Corenyth</b><small>Your on-device space</small></div></div>
+      <div class="icon-btn"><svg class="i"><use href="#i-sliders"/></svg></div>
+      <div class="icon-btn"><div class="avatar sm"><span class="ring"></span><span class="core"><span class="initial">S</span></span></div></div>
+    </div>
+    <div class="model-chip glass">
+      <span class="dot"></span>
+      <div class="txt">Corenyth 0.6B · fine-tuned<span>Running locally · RAM not measured yet</span></div>
+      <span class="link">Details</span>
+    </div>
+    <div class="hero"><div class="halo"></div><svg width="104" height="112" style="position:relative"><use href="#ghost"/></svg></div>
+    <div class="pager"><svg class="i s"><use href="#i-up-c"/></svg><span class="pill">Exchange 3 of 3</span><svg class="i s"><use href="#i-down-c"/></svg></div>
+    <div class="msgs">
+      <div class="bubble user">It's regarding the project he wanted to discuss</div>
+      <div class="meta r">Wed, Oct 21 · 9:31 AM</div>
+      <div class="who"><svg width="14" height="15"><use href="#ghost"/></svg>CORENYTH</div>
+      <div class="bubble bot">Added task <b>project</b>. Exciting! Anything to prepare?</div>
+      <div class="meta">Wed, Oct 21 · 9:31 AM</div>
+    </div>
+    <div class="dock">
+      <div class="composer glass"><span>Message Corenyth…</span><div class="send"><svg class="i"><use href="#i-up"/></svg></div></div>
+      <nav class="nav glass">
+        <a class="on"><svg class="i"><use href="#i-chat"/></svg>Chat</a>
+        <a><svg class="i"><use href="#i-check"/></svg>Tasks</a>
+        <a><svg class="i"><use href="#i-spark"/></svg>Memories</a>
+      </nav>
+    </div>
+    <div class="home-ind"></div>
+  </div>
+</section>
+
+<!-- 2. Sidebar -->
+<section>
+  <p class="screen-label">02 · Chat history drawer</p>
+  <div class="phone">
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:11</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass"><div class="icon-btn"></div><div class="brand"></div></div>
+    <div class="hero" style="margin-top:90px"><div class="halo"></div><svg width="104" height="112" style="position:relative"><use href="#ghost"/></svg></div>
+    <div class="scrim"></div>
+    <aside class="drawer">
+      <h3 style="font-size:20px;font-weight:700">Your chats</h3>
+      <p class="sub" style="line-height:1.45">Chats share context. Check-ins arrive in your main chat.</p>
+      <div class="btn primary" style="justify-content:center;margin-top:16px;height:44px"><svg class="i s"><use href="#i-plus"/></svg>New chat</div>
+      <div class="chat-list">
+        <p class="list-label">Recent</p>
+        <div class="chat-item on">
+          <span class="ic"><svg width="20" height="22"><use href="#ghost"/></svg></span>
+          <div class="t"><b>Main chat</b><small>Daily reviews and check-ins</small></div>
+          <span class="mini" style="width:32px;height:32px"><svg class="i s"><use href="#i-trash"/></svg></span>
+        </div>
+        <div class="chat-item">
+          <span class="ic"><svg class="i s"><use href="#i-chat"/></svg></span>
+          <div class="t"><b>Project prep</b><small>Notes for the talk with Kabir</small></div>
+          <span class="when">Tue</span>
+        </div>
+      </div>
+      <div class="drawer-foot">
+        <div class="foot-item"><svg class="i"><use href="#i-mail"/></svg><div>Send feedback<small>Opens your mail app</small></div></div>
+        <div class="foot-item"><svg class="i"><use href="#i-grid"/></svg><div>Add home screen widget<small>Your tasks at a glance, one tap to chat</small></div></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- 3. Tasks -->
+<section>
+  <p class="screen-label">03 · Tasks</p>
+  <div class="phone">
+    <div class="aurora calm"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:13</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass">
+      <div class="icon-btn"><svg class="i"><use href="#i-menu"/></svg></div>
+      <div class="brand"><svg width="26" height="28"><use href="#ghost"/></svg><div><b>Corenyth</b><small>Your on-device space</small></div></div>
+      <div class="icon-btn"><svg class="i"><use href="#i-sliders"/></svg></div>
+      <div class="icon-btn"><div class="avatar sm"><span class="ring"></span><span class="core"><span class="initial">S</span></span></div></div>
+    </div>
+    <div class="page">
+      <div class="page-h"><div><h2>Tasks</h2><p class="sub">2 tasks pending</p></div>
+        <div style="display:flex;gap:8px"><div class="mini"><svg class="i s"><use href="#i-refresh"/></svg></div><div class="btn primary"><svg class="i s"><use href="#i-plus"/></svg>Add</div></div></div>
+      <div class="seg"><span class="on">Active · 2</span><span>Completed · 0</span></div>
+
+      <div class="card task">
+        <div class="task-row"><span class="check"></span><div style="flex:1">
+          <h4>call kabir</h4>
+          <div class="tags"><span class="tag">Normal</span><span class="tag">Wed, Oct 21 · 8:00 PM</span><span class="tag warn">Overdue</span></div>
+        </div></div>
+        <div class="task-actions"><span class="btn gold" style="height:34px;font-size:12.5px"><svg class="i s"><use href="#i-tick"/></svg>Mark done</span><span class="btn ghost" style="height:34px;font-size:12.5px">Postpone 1h</span><span class="sp"></span><span class="mini"><svg class="i s"><use href="#i-pen"/></svg></span><span class="mini"><svg class="i s"><use href="#i-trash"/></svg></span></div>
+      </div>
+
+      <div class="card task">
+        <div class="task-row"><span class="check"></span><div style="flex:1">
+          <h4>project</h4>
+          <div class="tags"><span class="tag">Normal</span><span class="tag">No due date</span></div>
+        </div>
+        <span class="mini"><svg class="i s"><use href="#i-pen"/></svg></span><span class="mini"><svg class="i s"><use href="#i-trash"/></svg></span></div>
+      </div>
+    </div>
+    <div class="dock">
+      <nav class="nav glass">
+        <a><svg class="i"><use href="#i-chat"/></svg>Chat</a>
+        <a class="on"><svg class="i"><use href="#i-check"/></svg>Tasks</a>
+        <a><svg class="i"><use href="#i-spark"/></svg>Memories</a>
+      </nav>
+    </div>
+    <div class="home-ind"></div>
+  </div>
+</section>
+
+<!-- 4. New task sheet -->
+<section>
+  <p class="screen-label">04 · New task sheet</p>
+  <div class="phone">
+    <div class="aurora calm"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:13</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass"><div class="icon-btn"></div><div class="brand"><b style="font-size:16px">Corenyth</b></div></div>
+    <div class="page"><h2 style="font-size:26px">Tasks</h2>
+      <div class="card task" style="height:150px"></div><div class="card task" style="height:90px"></div></div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grabber"></div>
+      <h3>New task</h3>
+      <div class="field">Title</div>
+      <div class="field" style="height:72px;align-items:flex-start;padding-top:12px">Notes (optional)</div>
+      <p class="section-t" style="font-size:13px;margin-top:16px">Due <span style="color:var(--muted);font-weight:500">· optional</span></p>
+      <div class="chips"><span class="chip"><svg class="i s"><use href="#i-cal"/></svg>Set due date</span><span class="chip" style="opacity:.5"><svg class="i s"><use href="#i-clock"/></svg>Set due time</span></div>
+      <p class="sub" style="font-size:11.5px">Due dates don’t create reminders.</p>
+      <p class="section-t" style="font-size:13px;margin-top:16px">Priority</p>
+      <div class="chips"><span class="chip">Low</span><span class="chip on"><svg class="i s"><use href="#i-tick"/></svg>Normal</span><span class="chip">High</span></div>
+      <div style="display:flex;gap:10px;margin-top:20px"><span class="btn primary" style="flex:1;justify-content:center;height:46px">Save task</span><span class="btn ghost" style="height:46px">Cancel</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Memories -->
+<section>
+  <p class="screen-label">05 · Memories</p>
+  <div class="phone">
+    <div class="aurora calm"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:13</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass">
+      <div class="icon-btn"><svg class="i"><use href="#i-menu"/></svg></div>
+      <div class="brand"><svg width="26" height="28"><use href="#ghost"/></svg><div><b>Corenyth</b><small>Your on-device space</small></div></div>
+      <div class="icon-btn"><svg class="i"><use href="#i-sliders"/></svg></div>
+      <div class="icon-btn"><div class="avatar sm"><span class="ring"></span><span class="core"><span class="initial">S</span></span></div></div>
+    </div>
+    <div class="page">
+      <div class="page-h"><h2>Context &amp; memory</h2></div>
+      <p class="sub">A little context for replies that feel more like you.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px"><span class="tag" style="padding:5px 10px;color:var(--success);background:rgba(159,216,184,.12)">● On this device</span><span class="mini" style="width:28px;height:28px"><svg class="i s"><use href="#i-refresh"/></svg></span></div>
+
+      <div class="card" style="padding:16px;margin-top:14px;display:flex;gap:14px;align-items:center">
+        <div class="avatar"><span class="ring"></span><span class="core"><span class="initial">S</span></span></div>
+        <div style="flex:1"><b style="font-size:15px">Souvik</b><div class="sub" style="margin-top:2px">Developer · Tone: <span style="color:var(--violet)">Cheerful</span></div></div>
+        <span class="mini"><svg class="i s"><use href="#i-pen"/></svg></span>
+      </div>
+
+      <div class="page-h" style="margin-top:20px"><div><p class="section-t" style="margin:0">Learned memories</p><p class="sub">0 saved</p></div><span class="btn tonal"><svg class="i s"><use href="#i-plus"/></svg>Add</span></div>
+      <div class="field" style="border-radius:999px"><svg class="i s"><use href="#i-search"/></svg>Search memories</div>
+      <div class="chips"><span class="chip on"><svg class="i s"><use href="#i-tick"/></svg>All</span><span class="chip">Personal</span><span class="chip">Other</span></div>
+
+      <div class="card" style="padding:18px;margin-top:12px;text-align:center">
+        <svg class="i" style="width:28px;height:28px;color:var(--violet)"><use href="#i-spark"/></svg>
+        <p style="font-weight:600;margin-top:6px">No memories yet</p>
+        <p class="sub" style="line-height:1.45">Save something to keep, or return after a conversation closes.</p>
+      </div>
+    </div>
+    <div class="dock">
+      <nav class="nav glass">
+        <a><svg class="i"><use href="#i-chat"/></svg>Chat</a>
+        <a><svg class="i"><use href="#i-check"/></svg>Tasks</a>
+        <a class="on"><svg class="i"><use href="#i-spark"/></svg>Memories</a>
+      </nav>
+    </div>
+    <div class="home-ind"></div>
+  </div>
+</section>
+
+<!-- 6. Model settings sheet -->
+<section>
+  <p class="screen-label">06 · Model &amp; reminders sheet</p>
+  <div class="phone">
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:12</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass"><div class="icon-btn"></div><div class="brand"><b style="font-size:16px">Corenyth</b></div></div>
+    <div class="hero"><div class="halo"></div><svg width="90" height="98" style="position:relative"><use href="#ghost"/></svg></div>
+    <div class="scrim"></div>
+    <div class="sheet" style="top:120px">
+      <div class="grabber"></div>
+      <h3>Your local model</h3>
+      <div class="inset" style="display:flex;gap:12px;align-items:center">
+        <div style="width:40px;height:40px;border-radius:12px;background:rgba(205,187,255,.14);display:grid;place-items:center;color:var(--violet)"><svg class="i"><use href="#i-chip"/></svg></div>
+        <div style="flex:1;font-size:13.5px"><b>Corenyth 0.6B · fine-tuned</b><div class="sub" style="font-size:11px;margin-top:3px">Qwen3-0.6B Q4_0 · 364 MB · Active</div></div>
+        <span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--success)"></span>
+      </div>
+      <p class="sub" style="font-size:11.5px;margin-top:8px">Loaded on this device. No cloud connection required.</p>
+
+      <p class="section-t" style="display:flex;gap:8px;align-items:center"><svg class="i s"><use href="#i-bell"/></svg>Reminder notifications</p>
+      <div class="inset" style="padding:4px 14px">
+        <div class="row"><div class="t">Nudge mode<small>Alerts 30 and 10 min before, plus at the time.</small></div><span class="switch"></span></div>
+        <div class="row"><div class="t">Follow-ups<small>Ask how events went and review your day at 9:30 PM.</small></div><span class="switch"></span></div>
+        <div class="row"><div class="t">Do not disturb<small>10:00 PM – 7:00 AM. The reminder you asked for still rings.</small></div><span class="switch on"></span></div>
+      </div>
+      <div class="chips" style="margin-top:12px"><span class="chip">Starts 10:00 PM</span><span class="chip">Ends 7:00 AM</span></div>
+      <span class="btn text" style="margin-top:10px;padding:0">Send a test notification</span>
+    </div>
+  </div>
+</section>
+
+<!-- 7. Profile sheet -->
+<section>
+  <p class="screen-label">07 · Edit profile sheet</p>
+  <div class="phone">
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:12</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass"><div class="icon-btn"></div><div class="brand"><b style="font-size:16px">Corenyth</b></div></div>
+    <div class="hero"><div class="halo"></div><svg width="104" height="112" style="position:relative"><use href="#ghost"/></svg></div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grabber"></div>
+      <h3>Edit your profile</h3>
+      <p class="sub">Choose how you introduce yourself and how the assistant replies.</p>
+      <div class="field filled" style="flex-direction:column;align-items:flex-start;justify-content:center;gap:0;height:54px"><small style="font-size:10.5px;color:var(--muted)">Name</small>Souvik</div>
+      <div class="field filled" style="flex-direction:column;align-items:flex-start;justify-content:center;gap:0;height:54px"><small style="font-size:10.5px;color:var(--muted)">Occupation (optional)</small>Developer</div>
+      <p class="section-t" style="font-size:13px">Assistant tone</p>
+      <div class="chips"><span class="chip on"><svg class="i s"><use href="#i-tick"/></svg>Cheerful</span><span class="chip">Mature</span><span class="chip">Playful</span><span class="chip">Calm</span><span class="chip">Professional</span></div>
+      <div style="display:flex;gap:10px;margin-top:22px"><span class="btn primary" style="flex:1;justify-content:center;height:46px">Save profile</span><span class="btn ghost" style="height:46px">Cancel</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 8. Model loaded dialog -->
+<section>
+  <p class="screen-label">08 · Model loaded dialog</p>
+  <div class="phone">
+    <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span></div>
+    <div class="status"><span>8:11</span><span class="r">▲ ● 99%</span></div>
+    <div class="topbar glass">
+      <div class="icon-btn"><svg class="i"><use href="#i-menu"/></svg></div>
+      <div class="brand"><svg width="26" height="28"><use href="#ghost"/></svg><div><b>Corenyth</b><small>Your on-device space</small></div></div>
+    </div>
+    <div class="hero" style="margin-top:60px"><div class="halo"></div><svg width="104" height="112" style="position:relative"><use href="#ghost"/></svg></div>
+    <div class="scrim"></div>
+    <div class="dialog">
+      <div class="okmark"><svg class="i"><use href="#i-tick"/></svg></div>
+      <p style="font-size:18px;font-weight:700">Model loaded</p>
+      <p class="sub" style="font-size:13px;line-height:1.45">The assistant is now using the local model.</p>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px"><span class="btn text">OK</span></div>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

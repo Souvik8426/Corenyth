@@ -8,4 +8,17 @@
     <color name="corenyth_muted">#A9A3B5</color>
     <color name="corenyth_lavender">#B9A6E8</color>
 	<color name="ic_launcher_background">#000000</color>
+
+    <!-- Glass design tokens for the home-screen widgets (mirror lib/theme/app_colors.dart). -->
+    <color name="corenyth_glass_fill">#E0100E16</color>
+    <color name="corenyth_glass_border">#1AFFFFFF</color>
+    <color name="corenyth_glass_sheen">#14FFFFFF</color>
+    <color name="corenyth_glow_violet">#2E8E78F0</color>
+    <color name="corenyth_glow_blue">#1F4A90E2</color>
+    <color name="corenyth_hairline">#12FFFFFF</color>
+    <color name="corenyth_text_secondary">#B4AEC0</color>
+    <color name="corenyth_text_tertiary">#8C8698</color>
+    <color name="corenyth_check_ring">#66F3ECDD</color>
+    <color name="corenyth_on_ivory">#15121C</color>
+    <color name="corenyth_transparent">#00000000</color>
 </resources>
