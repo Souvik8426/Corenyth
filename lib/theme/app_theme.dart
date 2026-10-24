@@ -4,16 +4,31 @@ import 'package:flutter/services.dart';
 import 'app_colors.dart';
 
 abstract final class AppTheme {
+  static const radiusXs = 6.0;
+  static const radiusSm = 10.0;
+  static const radiusMd = 14.0;
+  static const radiusLg = 18.0;
+  static const radiusXl = 24.0;
+  static const glassBlur = 24.0;
+  static const overlayBlur = 32.0;
+  static const glassSaturation = 1.4;
+  static const sheetRadius =
+      BorderRadius.vertical(top: Radius.circular(radiusXl));
+  static const drawerRadius =
+      BorderRadius.horizontal(right: Radius.circular(radiusXl));
+
   static final dark = ThemeData(
     useMaterial3: true,
+    visualDensity: VisualDensity.standard,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
     brightness: Brightness.dark,
     colorScheme: AppColors.scheme,
     scaffoldBackgroundColor: AppColors.background,
     canvasColor: AppColors.surface,
     iconTheme: const IconThemeData(color: AppColors.ivory),
     hintColor: AppColors.muted,
-    focusColor: AppColors.lavender.withValues(alpha: 0.18),
-    hoverColor: AppColors.lavender.withValues(alpha: 0.08),
+    focusColor: AppColors.selectedChip,
+    hoverColor: AppColors.coreViolet.withValues(alpha: 0.08),
     fontFamily: 'PlusJakartaSans',
     textTheme: const TextTheme(
       displayLarge: TextStyle(
@@ -22,14 +37,14 @@ abstract final class AppTheme {
           height: 44 / 36,
           letterSpacing: -1.08),
       displayMedium: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.w600,
-          height: 36 / 28,
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          height: 32 / 24,
           letterSpacing: -0.7),
       displaySmall: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.w600,
-          height: 36 / 28,
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          height: 32 / 24,
           letterSpacing: -0.7),
       headlineLarge: TextStyle(
           fontSize: 30,
@@ -38,23 +53,23 @@ abstract final class AppTheme {
           letterSpacing: -0.6),
       headlineMedium: TextStyle(
           fontSize: 24,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           height: 32 / 24,
           letterSpacing: -0.48),
       headlineSmall: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w500,
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
           height: 28 / 20,
           letterSpacing: -0.3),
       titleLarge: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w500,
+          fontSize: 19,
+          fontWeight: FontWeight.w700,
           height: 28 / 20,
           letterSpacing: -0.3),
       titleMedium: TextStyle(
-          fontSize: 17,
+          fontSize: 15,
           fontWeight: FontWeight.w600,
-          height: 24 / 17,
+          height: 24 / 15,
           letterSpacing: -0.17),
       titleSmall: TextStyle(
           fontSize: 14,
@@ -88,58 +103,68 @@ abstract final class AppTheme {
           height: 16 / 12,
           letterSpacing: 0.36),
       labelSmall: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          height: 14 / 10,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          height: 16 / 12,
+          color: AppColors.tertiaryText,
           letterSpacing: 0.6),
     ),
     filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-            shape: const StadiumBorder(),
+            backgroundColor: AppColors.ivory,
+            foregroundColor: AppColors.onIvory,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(radiusSm)),
             minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14))),
     elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-      shape: const StadiumBorder(),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
       minimumSize: const Size(48, 48),
-      backgroundColor: AppColors.lavender,
-      foregroundColor: AppColors.surface,
+      backgroundColor: AppColors.ivory,
+      foregroundColor: AppColors.onIvory,
       shadowColor: AppColors.coreCyan.withValues(alpha: 0.08),
       elevation: 1,
     )),
     outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-      shape: const StadiumBorder(),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
       minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       foregroundColor: AppColors.ivory,
-      backgroundColor: AppColors.surfaceRaised.withValues(alpha: 0.6),
-      side: BorderSide(color: AppColors.lavender.withValues(alpha: 0.25)),
+      backgroundColor: AppColors.surfaceRaised,
+      side: BorderSide(color: AppColors.glassBorder),
     )),
     textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-            shape: const StadiumBorder(), minimumSize: const Size(48, 48))),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(radiusSm)),
+            minimumSize: const Size(48, 48))),
     iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-            foregroundColor: AppColors.lavender,
-            minimumSize: const Size(48, 48))),
+            foregroundColor: AppColors.ivory, minimumSize: const Size(48, 48))),
     cardTheme: CardThemeData(
-      color: AppColors.surface.withValues(alpha: 0.8),
+      color: AppColors.surface,
       surfaceTintColor: AppColors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: AppColors.lavender.withValues(alpha: 0.12)),
+        borderRadius: BorderRadius.circular(radiusLg),
+        side: BorderSide(color: AppColors.cardBorder),
       ),
     ),
     inputDecorationTheme: InputDecorationThemeData(
       filled: true,
-      fillColor: AppColors.surfaceRaised.withValues(alpha: 0.9),
+      fillColor: AppColors.surfaceRaised,
+      floatingLabelStyle: const TextStyle(fontSize: 16, color: AppColors.muted),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       hintStyle: const TextStyle(color: AppColors.muted),
       labelStyle: const TextStyle(color: AppColors.muted),
-      border: _inputBorder(AppColors.lavender.withValues(alpha: 0.18)),
-      enabledBorder: _inputBorder(AppColors.lavender.withValues(alpha: 0.18)),
+      border: _inputBorder(AppColors.glassBorder),
+      enabledBorder: _inputBorder(AppColors.glassBorder),
       disabledBorder: _inputBorder(AppColors.scheme.outlineVariant),
-      focusedBorder: _inputBorder(AppColors.lavender),
+      focusedBorder: _inputBorder(AppColors.coreViolet),
       errorBorder: _inputBorder(AppColors.error),
       focusedErrorBorder: _inputBorder(AppColors.error),
     ),
@@ -161,67 +186,97 @@ abstract final class AppTheme {
       unselectedLabelColor: AppColors.muted,
       dividerColor: AppColors.transparent,
       indicator: ShapeDecoration(
-        color: AppColors.lavender.withValues(alpha: 0.18),
-        shape: const StadiumBorder(),
-        shadows: [
-          BoxShadow(
-              color: AppColors.lavender.withValues(alpha: 0.18), blurRadius: 32)
-        ],
+        color: AppColors.selectedChip,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusSm)),
+        shadows: [BoxShadow(color: AppColors.selectedChip, blurRadius: 32)],
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: AppColors.surface.withValues(alpha: 0.8),
+      backgroundColor: AppColors.surface,
       surfaceTintColor: AppColors.transparent,
-      indicatorColor: AppColors.lavender.withValues(alpha: 0.18),
-      indicatorShape: const StadiumBorder(),
+      indicatorColor: AppColors.selectedChip,
+      indicatorShape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: AppColors.surface,
-      selectedItemColor: AppColors.lavender,
+      selectedItemColor: AppColors.coreViolet,
       unselectedItemColor: AppColors.muted,
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.surfaceRaised,
-      selectedColor: AppColors.lavender.withValues(alpha: 0.18),
+      selectedColor: AppColors.selectedChip,
+      checkmarkColor: AppColors.coreViolet,
       labelStyle: const TextStyle(color: AppColors.ivory),
-      side: BorderSide(color: AppColors.muted.withValues(alpha: 0.4)),
-      shape: const StadiumBorder(),
+      side: WidgetStateBorderSide.resolveWith((states) => BorderSide(
+          color: states.contains(WidgetState.selected)
+              ? AppColors.selectedBorder
+              : AppColors.glassBorder)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surfaceRaised,
       contentTextStyle: const TextStyle(
           fontFamily: 'PlusJakartaSans', color: AppColors.ivory),
-      actionTextColor: AppColors.lavender,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      actionTextColor: AppColors.coreViolet,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.surfaceRaised.withValues(alpha: 0.9),
+      backgroundColor: AppColors.surfaceRaised,
       surfaceTintColor: AppColors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(32),
-        side: BorderSide(color: AppColors.lavender.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(radiusXl),
+        side: BorderSide(color: AppColors.glassBorder),
       ),
     ),
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: AppColors.surfaceRaised.withValues(alpha: 0.9),
+      modalBarrierColor: AppColors.scrim,
+      showDragHandle: false,
+      backgroundColor: AppColors.transparent,
       surfaceTintColor: AppColors.transparent,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(radiusXl))),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: AppColors.lavender,
-      foregroundColor: AppColors.surface,
-      shape: const StadiumBorder(),
+      backgroundColor: AppColors.ivory,
+      foregroundColor: AppColors.onIvory,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
       elevation: 2,
       focusElevation: 4,
     ),
-    dividerTheme:
-        DividerThemeData(color: AppColors.lavender.withValues(alpha: 0.12)),
+    switchTheme: SwitchThemeData(
+      trackColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected)
+              ? AppColors.coreViolet
+              : AppColors.selectedTile),
+      thumbColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected)
+              ? AppColors.onIvory
+              : AppColors.muted),
+    ),
+    listTileTheme: const ListTileThemeData(
+      textColor: AppColors.ivory,
+      iconColor: AppColors.muted,
+      titleTextStyle: TextStyle(
+          fontFamily: 'PlusJakartaSans',
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.ivory),
+      subtitleTextStyle: TextStyle(
+          fontFamily: 'PlusJakartaSans',
+          fontSize: 12,
+          color: AppColors.tertiaryText),
+    ),
+    dividerTheme: DividerThemeData(color: AppColors.cardBorder),
   );
 
   static OutlineInputBorder _inputBorder(Color color) => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(radiusSm),
         borderSide: BorderSide(color: color),
       );
 }

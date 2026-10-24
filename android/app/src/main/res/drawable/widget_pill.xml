@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The chat composer's look: a raised pill. -->
+<!-- Primary action, like the app's "Add task": solid ivory, 14dp corners. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid android:color="@color/corenyth_surface_raised"/>
-    <stroke android:width="1dp" android:color="@color/corenyth_outline"/>
-    <corners android:radius="999dp"/>
+    <solid android:color="@color/corenyth_ivory"/>
+    <corners android:radius="14dp"/>
 </shape>

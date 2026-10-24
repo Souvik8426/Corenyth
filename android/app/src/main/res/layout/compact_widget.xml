@@ -36,8 +36,8 @@
             android:layout_gravity="top|end"
             android:gravity="center"
             android:text="+"
-            android:textSize="30sp"
-            android:textColor="@color/corenyth_lavender"
+            android:textSize="26sp"
+            android:textColor="@color/corenyth_on_ivory"
             android:contentDescription="Add task"
             android:background="@drawable/widget_pill"/>
     </FrameLayout>
@@ -49,5 +49,5 @@
         android:paddingTop="4dp"
         android:paddingBottom="8dp"
         android:textSize="12sp"
-        android:textColor="@color/corenyth_muted"/>
+        android:textColor="@color/corenyth_text_tertiary"/>
 </LinearLayout>

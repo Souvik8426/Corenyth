@@ -11,6 +11,8 @@ import '../assistant/session.dart';
 import '../assistant/tools.dart';
 import '../data/db.dart';
 import '../data/repos.dart';
+import 'backup/backup_gateway.dart';
+import 'backup/backup_service.dart';
 import 'model_selection.dart';
 import 'model_status.dart';
 import 'native_bridge.dart';
@@ -46,6 +48,10 @@ class AppServices {
   final ReviewRepo review;
   final OperationJournal operations;
   final ReminderScheduler scheduler;
+
+  /// Backup and restore of the user's saved context. It reads and writes the
+  /// database directly, never the model.
+  final BackupService backup;
 
   /// Bumped after each proactive job (alarm, notification action, boot) so
   /// the open chat and lists reload what was written meanwhile.
@@ -88,7 +94,8 @@ class AppServices {
       };
 
   /// Public for tests; the app uses [open].
-  AppServices(this.db, this.scheduler, String modelPath)
+  AppServices(this.db, this.scheduler, String modelPath,
+      {BackupFileGateway? backupGateway})
       : _path = modelPath,
         tasks = TaskRepo(db),
         reminders = ReminderRepo(db),
@@ -98,7 +105,13 @@ class AppServices {
         preferences = _Preferences(db),
         pending = PendingRepo(db),
         review = ReviewRepo(db),
-        operations = OperationJournal(db) {
+        operations = OperationJournal(db),
+        backup = BackupService(
+          db: db,
+          reminders: ReminderRepo(db),
+          scheduler: scheduler,
+          gateway: backupGateway,
+        ) {
     // Every task/preference write (chat, Tasks page) syncs linked alarms.
     tasks.onRemindersChanged =
         preferences.onRemindersChanged = () => syncReminders();
@@ -139,6 +152,19 @@ class AppServices {
     } catch (_) {}
     await checkReminders();
     await armReview();
+    proactiveChanged.value++;
+  }
+
+  /// After a backup was imported: the restored preferences decide when the
+  /// evening review rings, the restored tasks need their alarms, and the open
+  /// screens have to show what came back.
+  Future<void> backupImported() async {
+    try {
+      await armReview();
+    } catch (_) {}
+    try {
+      await syncReminders();
+    } catch (_) {}
     proactiveChanged.value++;
   }
 
@@ -221,7 +247,7 @@ class AppServices {
       issue = 'Notifications could not be set up; reminders may not fire.';
     }
 
-    // Creates Documents/localmodels on every boot.
+    // Creates the app-private models directory on every boot.
     final models = await step('models folder', NativeBridge.modelsDir);
 
     final sel = await ModelSelection.open();
@@ -241,6 +267,8 @@ class AppServices {
     }
     final s = AppServices(db, sched, sel.pathIn(models.path, use))
       ..selection = sel;
+    // The backup carries the chosen model id, so it needs the same store.
+    s.backup.selection = sel;
     s.modelNote.value = note;
     s.modelFailure = failure;
     debugPrint('model boot: ${s.modelDiagnostics()}');
@@ -361,11 +389,9 @@ class AppServices {
         return false; // only allowlisted ChatML files
       }
       if (!_readable(_path)) {
-        // Before file access is granted the file can be listed but not read;
-        // that is not a corrupt download.
         modelFailure = 'unreadable:${spec.id}';
         modelNote.value = _failNote = 'Corenyth cannot read ${spec.fileName} '
-            'yet. Allow file access, then come back.';
+            'yet. Choose the downloaded file again in model setup.';
         return false;
       }
       if (!await sel.verify(spec, _path)) {
@@ -445,7 +471,7 @@ class AppServices {
         }
       }();
 
-  /// Re-checks storage access + the model file (also re-creates the folder if it vanished).
+  /// Re-checks the private model file (also re-creates the folder if it vanished).
   Future<ModelState> modelState() async {
     final d = await NativeBridge.modelsDir();
     final sel = selection;

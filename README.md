@@ -75,7 +75,7 @@ Once the app is running (with or without the local model loaded), you can intera
 Corenyth is built so your personal data cannot leave your phone:
 
 - **No `INTERNET` Permission in Release Builds:** The release `AndroidManifest.xml` declares zero network permissions. *(Note: Flutter automatically injects `INTERNET` into `debug` and `profile` builds to support local hot-reload over ADB; always inspect `app-release.apk` when verifying offline guarantees.)*
-- **User-Controlled Model Side-Loading:** The app never downloads weights in the background. You download the fine-tuned GGUF from the [Releases page](https://github.com/Souvik8426/Corenyth/releases) (or copy it from your computer) into `Documents/localmodels`.
+- **User-Controlled Model Side-Loading:** The app never downloads weights in the background. You download the fine-tuned GGUF from the [Releases page](https://github.com/Souvik8426/Corenyth/releases) (or copy it from your computer to Downloads), then use **Choose the downloaded file** in model setup.
 - **100% Local State:** Tasks, reminder plans, chat history, and personal memories live exclusively inside your device's SQLite database (`assistant.db`). There is no cloud account, telemetry server, or remote API fallback.
 - **Privacy-Preserving Diagnostics:** Native and session logs (`LlamaBridge`, turn diagnostics) record route selection, token counts, and inference timings—never your message text or personal memories.
 
@@ -201,7 +201,7 @@ flutter build apk --release
 
 ## Installing an On-Device Model
 
-Because Corenyth has no `INTERNET` permission, it never downloads model files behind the scenes. You place the `.gguf` file into `Documents/localmodels` yourself. The APK and the model are both attached to each [GitHub release](https://github.com/Souvik8426/Corenyth/releases).
+Because Corenyth has no `INTERNET` permission, it never downloads model files behind the scenes. Use **Choose the downloaded file** in model setup to import the `.gguf` into app-private storage. The APK and the model are both attached to each [GitHub release](https://github.com/Souvik8426/Corenyth/releases).
 
 ### Allowlisted Model
 
@@ -215,13 +215,11 @@ A retrained model has a new size and hash: update `corenythModel` in `lib/servic
 
 ### Setup Instructions
 
-1. **Launch Corenyth Once:** Open the app on your phone and grant storage access when prompted (*All files access* on Android 11+, or *Storage permission* on Android 7–10). This automatically creates `/sdcard/Documents/localmodels/`.
-2. **Place the Model File:** on the phone, tap **Download in browser** in the setup card (it opens the release asset), then in the **Files** app move `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` from `Download` to `Documents/localmodels`. Or, from your computer:
-   ```sh
-   adb push Qwen3-0.6B.Q4_0.gguf /sdcard/Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf
-   ```
-   (Or copy it to the phone any other way and move it into `Documents/localmodels/` with the **Files** app, using exactly that name.)
-3. **Verify & Load:** Return to Corenyth. The app checks the file size, computes its SHA-256 hash in a background isolate on first load (caching the verification result by size and modification timestamp), and loads the model into memory. If verification or loading fails, Corenyth uses the built-in `RuleEngine` and shows the reason in the status chip.
+1. **Download:** Open model setup and tap **Download in browser** to download `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` (about 364 MB). You can also transfer that file from a computer to Downloads.
+2. **Choose the file:** Tap **Choose the downloaded file**, then select that exact filename in the Android document picker. Corenyth shows copy progress while importing it into its private `filesDir/models` folder. No storage permission is required. A different filename is rejected; an incorrect size shows the incomplete-file message.
+3. **Verify & Load:** After copying, Corenyth automatically checks the size, computes the SHA-256 hash in a background isolate on first load (caching the verification result by size and modification timestamp), and loads the model. If verification or loading fails, built-in rules answer and the setup card shows the reason. Cancelling the picker leaves the installed model unchanged.
+
+Models and backups are app-private and are removed when app data is cleared or the app is uninstalled. Use the backup share sheet to save a portable backup elsewhere before uninstalling.
 
 See the [Model Install Guide](docs/guides/model-install.md) for full details on verification caching and fallback markers.
 
@@ -231,11 +229,9 @@ See the [Model Install Guide](docs/guides/model-install.md) for full details on 
 
 | Permission | Scope | Why Corenyth Needs It |
 |---|---|---|
-| `MANAGE_EXTERNAL_STORAGE` *(Android 11+)*<br>`WRITE_EXTERNAL_STORAGE` *(Android 7–10)* | Storage | Reads the `.gguf` model file you placed in `Documents/localmodels` (files created by a browser or `adb` in shared storage are otherwise hidden from scoped-storage apps). |
 | `POST_NOTIFICATIONS` | Notifications | Displays reminder alerts, preparation nudges, and follow-through check-ins with **Done** and **Snooze** buttons. |
 | `SCHEDULE_EXACT_ALARM` | Alarms | Schedules exact wall-clock reminders via `AlarmManager` so alerts fire on time even in Doze mode. |
 | `RECEIVE_BOOT_COMPLETED` | Boot / Time | Re-arms scheduled alarms and reconciles missed reminders after a phone reboot, app update, clock adjustment, or timezone change. |
-| `RECORD_AUDIO` | Microphone | Reserved in the manifest for upcoming on-device voice recognition (`sherpa-onnx`); **never requested at runtime** in `v0.1.0`. |
 
 ---
 
@@ -337,7 +333,7 @@ Being transparent about what works today and what is still in progress:
 - **Extended Date Expressions:** Phrases like *"today/tonight/tomorrow"*, *"morning/afternoon/evening"*, *"in N minutes/hours"*, weekdays, and named month dates work today. Relative expressions like *"next Friday"*, *"next week"*, or *"in 2 weeks"* are not parsed yet—Corenyth asks you for a specific date/time rather than guessing.
 - **Vector Embeddings / Mem0:** Personal memory currently uses local SQLite `FTS4` ranked by importance and recency. The `embedding` column in `memories` is reserved for future semantic search.
 - **ARMv8.2 Dot-Product Kernels:** Native builds currently target baseline `armv8-a` for compatibility across all 64-bit Android phones; optional `armv8.2-a+dotprod` kernels are planned for faster prompt processing on modern SoCs.
-- **Google Play Store Distribution:** Side-loading works out of the box. Publishing to Google Play will require either a `MANAGE_EXTERNAL_STORAGE` declaration or migrating model import to Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT`).
+- **Google Play Store Distribution:** Model import uses Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT`) and private storage. Broad storage and microphone permissions are not declared.
 
 See [Known Gaps](docs/development/known-gaps.md) for the complete technical breakdown.
 
@@ -356,7 +352,7 @@ Issues and pull requests are welcome! Before submitting a PR:
 
 ## License & Acknowledgements
 
-- **Repository License:** No open-source license file has been added to this repository yet (all rights reserved by default until a license is chosen).
+- **Repository License:** Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 Souvik Ruhidas.
 - **Third-Party Components:**
   - [llama.cpp](https://github.com/ggml-org/llama.cpp) by `ggml-org` (MIT License)
   - [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) by the Qwen team (Apache License 2.0); the released GGUF is a LoRA fine-tune of it, merged and quantized with [Unsloth](https://github.com/unslothai/unsloth)

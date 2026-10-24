@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../data/repos.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import 'glass_surface.dart';
 
 class ChatSidebar extends StatelessWidget {
   final List<ChatSummary> chats;
@@ -37,7 +40,7 @@ class ChatSidebar extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Material(
-      color: colorScheme.surface,
+      color: AppColors.transparent,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -121,7 +124,30 @@ class ChatSidebar extends StatelessWidget {
                         final chat = chats[index];
                         final isSelected = chat.id == selectedId;
 
-                        return ListTile(
+                        final tile = ListTile(
+                          contentPadding:
+                              const EdgeInsets.only(left: 10, right: 2),
+                          leading: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppColors.selectedIcon
+                                      : AppColors.glassFill,
+                                  borderRadius:
+                                      BorderRadius.circular(AppTheme.radiusSm),
+                                  border: Border.all(
+                                      color: isSelected
+                                          ? AppColors.selectedBorder
+                                          : AppColors.hairline)),
+                              child: Icon(Icons.chat_bubble_outline_rounded,
+                                  size: 18,
+                                  color: isSelected
+                                      ? AppColors.coreViolet
+                                      : AppColors.tertiaryText)),
+                          textColor: AppColors.muted,
+                          selectedColor: AppColors.ivory,
+                          selectedTileColor: AppColors.transparent,
                           key: ValueKey('chat-${chat.id}'),
                           selected: isSelected,
                           title: Text(
@@ -130,24 +156,44 @@ class ChatSidebar extends StatelessWidget {
                                 : chat.title.trim().isEmpty
                                     ? 'New chat'
                                     : chat.title,
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: chat.id == ConversationRepo.mainChatId
-                              ? const Text('Daily reviews and check-ins')
+                              ? const Text('Daily reviews and check-ins',
+                                  maxLines: 1, overflow: TextOverflow.ellipsis)
                               : null,
                           onTap: busy ? null : () => onSelect(chat.id),
-                          trailing: IconButton(
-                            key: ValueKey('delete-${chat.id}'),
-                            tooltip: 'Delete chat',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: busy ? null : () => onDelete(chat),
-                            constraints: const BoxConstraints(
-                              minWidth: 48,
-                              minHeight: 48,
+                          trailing:
+                              Row(mainAxisSize: MainAxisSize.min, children: [
+                            if (!isSelected)
+                              Text(
+                                  '${chat.updatedAt.toLocal().day}/${chat.updatedAt.toLocal().month}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                      color: AppColors.tertiaryText)),
+                            IconButton(
+                              key: ValueKey('delete-${chat.id}'),
+                              tooltip: 'Delete chat',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: busy ? null : () => onDelete(chat),
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
                             ),
-                          ),
+                          ]),
                         );
+                        return Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 2),
+                            child: isSelected
+                                ? GlassSurface(
+                                    // The drawer already filters the backdrop once.
+                                    blur: false,
+                                    radius: BorderRadius.circular(
+                                        AppTheme.radiusMd),
+                                    child: tile)
+                                : tile);
                       },
                     ),
             ),
@@ -155,16 +201,14 @@ class ChatSidebar extends StatelessWidget {
               const Divider(height: 1),
             if (onFeedback != null)
               ListTile(
-                leading:
-                    Icon(Icons.feedback_outlined, color: colorScheme.primary),
+                leading: Icon(Icons.feedback_outlined, color: AppColors.muted),
                 title: const Text('Send feedback'),
                 subtitle: const Text('Opens your mail app'),
                 onTap: onFeedback,
               ),
             if (onAddWidget != null) ...[
               ListTile(
-                leading:
-                    Icon(Icons.widgets_outlined, color: colorScheme.primary),
+                leading: Icon(Icons.widgets_outlined, color: AppColors.muted),
                 title: const Text('Add home screen widget'),
                 subtitle: const Text('Your tasks at a glance, one tap to chat'),
                 onTap: onAddWidget,

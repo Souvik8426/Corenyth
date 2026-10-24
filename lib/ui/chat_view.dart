@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../mascot/mascot_emotion.dart';
 import '../data/repos.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import 'glass_surface.dart';
 import 'mascot_emotion_scope.dart';
 import 'assistant_message.dart';
 import 'ghost_mascot.dart';
@@ -217,7 +219,7 @@ class _ChatViewState extends State<ChatView> {
                   child: Column(children: [
                 if (_turns.isNotEmpty)
                   SizedBox(
-                      height: 32,
+                      height: 48,
                       child: Row(children: [
                         IconButton(
                             tooltip: 'Previous exchange',
@@ -296,7 +298,8 @@ class _ChatViewState extends State<ChatView> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         child: ValueListenableBuilder<TextEditingValue>(
             valueListenable: widget.input,
-            builder: (context, value, _) => TextField(
+            builder: (context, value, _) => GlassSurface(
+                    child: TextField(
                   key: const ValueKey('chat-composer'),
                   autofocus: widget.autofocus,
                   controller: widget.input,
@@ -309,6 +312,12 @@ class _ChatViewState extends State<ChatView> {
                   },
                   decoration: InputDecoration(
                       hintText: 'Message Corenyth…',
+                      hintMaxLines: 1,
+                      constraints: const BoxConstraints(minHeight: 52),
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 12),
                       suffixIcon: IconButton.filled(
@@ -319,11 +328,14 @@ class _ChatViewState extends State<ChatView> {
                               ? widget.onSend
                               : null,
                           style: IconButton.styleFrom(
-                              backgroundColor: AppColors.lavender,
-                              foregroundColor: AppColors.surface),
+                              backgroundColor: AppColors.ivory,
+                              foregroundColor: AppColors.onIvory,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      AppTheme.radiusMd))),
                           icon: const Icon(Icons.arrow_upward_rounded,
                               size: 22))),
-                )),
+                ))),
       );
 
   Widget _welcome(BuildContext context) => SingleChildScrollView(
@@ -393,20 +405,29 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ),
             FractionallySizedBox(
-                widthFactor: user ? 0.88 : 1,
+                widthFactor: .84,
                 alignment: user ? Alignment.centerRight : Alignment.centerLeft,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                      color: user ? AppColors.surfaceRaised : AppColors.surface,
-                      borderRadius: BorderRadius.circular(24),
+                      color:
+                          user ? AppColors.userBubble : AppColors.surfaceRaised,
+                      borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(AppTheme.radiusLg),
+                          topRight: const Radius.circular(AppTheme.radiusLg),
+                          bottomLeft: Radius.circular(
+                              user ? AppTheme.radiusLg : AppTheme.radiusXs),
+                          bottomRight: Radius.circular(
+                              user ? AppTheme.radiusXs : AppTheme.radiusLg)),
                       border: Border.all(
-                          color: AppColors.lavender
-                              .withValues(alpha: user ? 0.08 : 0.12))),
+                          color: user
+                              ? AppColors.userBubbleBorder
+                              : AppColors.cardBorder)),
                   child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 11),
                       child: user
                           ? SelectableText(message.content,
-                              style: Theme.of(context).textTheme.bodyLarge)
+                              style: Theme.of(context).textTheme.bodyMedium)
                           : AssistantMessage(message.content)),
                 )),
             if (sentAt != null)

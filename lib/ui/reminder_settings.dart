@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/repos.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 
 /// Notification defaults. Each change saves immediately; a failed save shows
 /// an error and keeps the last saved values on screen.
@@ -103,7 +104,10 @@ class _ReminderSettingsState extends State<ReminderSettings> {
             child: Center(child: CircularProgressIndicator())),
       if (p != null) ...[
         SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+          tileColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
           title: const Text('Nudge mode'),
           subtitle:
               Text('Alerts ${p.leadMinutes.map((m) => '$m min').join(' and ')} '
@@ -134,7 +138,10 @@ class _ReminderSettingsState extends State<ReminderSettings> {
               ),
           ]),
         SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+          tileColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
           title: const Text('Follow-ups'),
           subtitle: Text('Ask how events went and review your day at '
               '${_time(p.reviewMinute)}. '
@@ -143,6 +150,7 @@ class _ReminderSettingsState extends State<ReminderSettings> {
           value: p.followUp,
           onChanged: _saving ? null : (v) => _save(p.copyWith(followUp: v)),
         ),
+        const Divider(height: 1),
         if (p.followUp)
           Row(children: [
             const Expanded(child: Text('Estimated event duration')),
@@ -159,8 +167,12 @@ class _ReminderSettingsState extends State<ReminderSettings> {
                   _saving ? null : (m) => _save(p.copyWith(followUpMinutes: m)),
             ),
           ]),
+        const Divider(height: 1),
         SwitchListTile(
-          contentPadding: EdgeInsets.zero,
+          tileColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
           title: const Text('Do not disturb'),
           subtitle: Text(p.hasQuietHours
               ? '${_time(p.quietStart!)} – ${_time(p.quietEnd!)}: early alerts and '
@@ -202,8 +214,8 @@ class _ReminderSettingsState extends State<ReminderSettings> {
       ],
       if (widget.onTest != null) ...[
         const SizedBox(height: 8),
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
           onPressed: _testing ? null : _test,
           child: const Text('Send a test notification'),
         ),

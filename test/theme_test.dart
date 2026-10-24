@@ -9,12 +9,12 @@ void main() {
     final theme = AppTheme.dark;
     expect(theme.brightness, Brightness.dark);
     expect(theme.scaffoldBackgroundColor, AppColors.background);
-    expect(theme.colorScheme.primary, AppColors.lavender);
+    expect(theme.colorScheme.primary, AppColors.coreViolet);
     expect(theme.textTheme.bodyMedium!.fontFamily, 'PlusJakartaSans');
     expect(theme.textTheme.bodyMedium!.color, AppColors.ivory);
     expect(theme.textTheme.bodySmall!.color, AppColors.muted);
     expect(theme.filledButtonTheme.style!.shape!.resolve({}),
-        isA<StadiumBorder>());
+        isA<RoundedRectangleBorder>());
   });
 
   testWidgets('questionnaire renders with the dark theme at phone width',

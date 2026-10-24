@@ -25,23 +25,21 @@ The spec lives in `lib/services/model_status.dart` (`corenythModel`, `modelCatal
 - `lib/services/app_services.dart`: `ensureModel` verifies and loads `modelPath`; on failure the rule engine answers. A fresh `LlamaChannelEngine` per load, so no stale path.
 - `lib/main.dart`: `ModelSetupCard` (install steps, then a read-only row for the model) and `ModelLoadDialog`.
 - `lib/ui/model_status_view.dart`: status chip.
-- `lib/services/native_bridge.dart` and `MainActivity.kt`: `modelsDir`, `requestStorageAccess`.
+- `lib/services/native_bridge.dart` and `MainActivity.kt`: `modelsDir`, `importModel` and copy progress (via `DocumentFiles.kt`).
 
 ## Where the file goes
 
-`Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` on shared storage. `MainActivity.modelsDir()` creates the folder when storage access is granted.
-
-## Storage access
-
-- Android 11+: `MANAGE_EXTERNAL_STORAGE` ("All files access"), opened from settings.
-- Android 6–10: `WRITE_EXTERNAL_STORAGE`, requested at runtime.
+`<filesDir>/models/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` in app-private storage. `MainActivity.modelsDir()` creates the directory when missing and reports access as granted. No broad storage permission or settings grant is needed. Clearing app data or uninstalling removes the imported model.
 
 ## User steps
 
-1. Open the app once and grant file access.
-2. Tap **Download in browser** in the setup card, then move the file from `Download` to `Documents/localmodels` with the Files app. Or from a computer: `adb push Qwen3-0.6B.Q4_0.gguf /sdcard/Documents/localmodels/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` (the Colab export is named `Qwen3-0.6B.Q4_0.gguf`; the target name must be exact).
-3. Or copy it to the phone another way and move it into `Documents/localmodels` with the Files app, keeping the exact name.
-4. Return to the app: it re-checks, verifies the hash and loads.
+1. Tap **Download in browser** in model setup to download `Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf` (about 364 MB). Alternatively transfer that file from a computer to the phone's Downloads folder.
+2. Tap **Choose the downloaded file** and select the exact filename in Android's document picker. A different name produces a clear error. The app copies the selected stream on a background thread and shows byte progress.
+3. After copying, the app automatically re-checks the size, verifies the hash and loads. An incorrect size shows the incomplete-file message; download the full file and choose it again.
+
+The native importer writes `<fileName>.part` in the private models directory and atomically renames it only after the copy completes. Cancellation returns null without changing the model. Failed copies remove the partial file and preserve any previous model. Picker, read and disk-space errors appear in setup. There is no need to move files into a special public directory.
+
+Backups use a separate app-private `backups` directory. Use the backup share sheet to save them elsewhere or transfer them to another device. Restore uses the document picker and reads a bounded copy in app cache.
 
 ## Loading and fallback
 

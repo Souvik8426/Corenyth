@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../data/repos.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import 'glass_surface.dart';
+import 'glass_dialog.dart';
+import 'user_avatar.dart';
 
 /// Returns true only after a profile write has been verified by a fresh read.
-Future<bool> showProfileEditor(BuildContext context, ProfileRepo profile) async =>
+Future<bool> showProfileEditor(
+        BuildContext context, ProfileRepo profile) async =>
     await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -12,7 +17,8 @@ Future<bool> showProfileEditor(BuildContext context, ProfileRepo profile) async 
       enableDrag: false,
       useSafeArea: true,
       builder: (_) => _ProfileEditor(profile: profile),
-    ) ?? false;
+    ) ??
+    false;
 
 class MemoriesPage extends StatefulWidget {
   const MemoriesPage({
@@ -56,7 +62,8 @@ class _MemoriesPageState extends State<MemoriesPage> {
   void didUpdateWidget(covariant MemoriesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.refreshToken != widget.refreshToken ||
-        oldWidget.memory != widget.memory || oldWidget.profile != widget.profile) {
+        oldWidget.memory != widget.memory ||
+        oldWidget.profile != widget.profile) {
       _load();
     }
   }
@@ -95,10 +102,11 @@ class _MemoriesPageState extends State<MemoriesPage> {
     final repo = widget.memory;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GlassAlertDialog(
         scrollable: true,
         title: const Text('Delete this memory?'),
-        content: Text('This removes the saved memory from this device.\n\n${memory.content}'),
+        content: Text(
+            'This removes the saved memory from this device.\n\n${memory.content}'),
         actions: [
           TextButton(
             style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -106,7 +114,9 @@ class _MemoriesPageState extends State<MemoriesPage> {
             child: const Text('Keep memory'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(minimumSize: const Size(48, 48), backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -114,15 +124,23 @@ class _MemoriesPageState extends State<MemoriesPage> {
       ),
     );
     if (!mounted || confirmed != true || _deleting != null) return;
-    setState(() { _deleting = memory.id; _actionError = null; });
+    setState(() {
+      _deleting = memory.id;
+      _actionError = null;
+    });
     var deleted = false;
     try {
-      if (!await repo.delete(memory.id)) throw StateError('Memory was not deleted');
+      if (!await repo.delete(memory.id))
+        throw StateError('Memory was not deleted');
       deleted = true;
       final rows = await repo.all();
-      if (rows.any((m) => m.id == memory.id)) throw StateError('Delete readback failed');
+      if (rows.any((m) => m.id == memory.id))
+        throw StateError('Delete readback failed');
       if (!mounted) return;
-      setState(() { _memories = rows; _deleting = null; });
+      setState(() {
+        _memories = rows;
+        _deleting = null;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -155,11 +173,14 @@ class _MemoriesPageState extends State<MemoriesPage> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final query = _search.text.trim().toLowerCase();
-    final categories = _memories.map((m) => m.category).toSet().toList()..sort();
-    final visible = _memories.where((m) =>
-        (_category == null || m.category == _category) &&
-        (m.content.toLowerCase().contains(query) ||
-            m.category.toLowerCase().contains(query))).toList();
+    final categories = _memories.map((m) => m.category).toSet().toList()
+      ..sort();
+    final visible = _memories
+        .where((m) =>
+            (_category == null || m.category == _category) &&
+            (m.content.toLowerCase().contains(query) ||
+                m.category.toLowerCase().contains(query)))
+        .toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -168,76 +189,100 @@ class _MemoriesPageState extends State<MemoriesPage> {
           Text('Context & memory', style: text.displayMedium),
           const SizedBox(height: 8),
           const Text('A little context for replies that feel more like you.',
-              style: TextStyle(color: AppColors.muted, height: 1.6)),
+              style: TextStyle(
+                  color: AppColors.muted, fontSize: 13, height: 1.45)),
           const SizedBox(height: 16),
-          Wrap(spacing: 16, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            const _Badge('On this device'),
-            IconButton(
-              tooltip: 'Refresh context',
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              onPressed: _loading || _deleting != null ? null : _load,
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-          ]),
-          const SizedBox(height: 24),
+          Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const _Badge('On this device'),
+                IconButton(
+                  tooltip: 'Refresh context',
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  onPressed: _loading || _deleting != null ? null : _load,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+              ]),
+          const SizedBox(height: 14),
           if (_loading)
-            const Center(child: CircularProgressIndicator(semanticsLabel: 'Loading context'))
+            const Center(
+                child: CircularProgressIndicator(
+                    semanticsLabel: 'Loading context'))
           else if (_loadError != null)
-            _Surface(child: Column(
+            _Surface(
+                child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_loadError!, style: text.titleMedium),
                 const SizedBox(height: 8),
-                const Text('Your saved data could not be read. Please try again.'),
+                const Text(
+                    'Your saved data could not be read. Please try again.'),
                 const SizedBox(height: 16),
                 OutlinedButton(onPressed: _load, child: const Text('Retry')),
               ],
             ))
           else ...[
-            _Surface(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Your profile', style: text.titleMedium),
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: _deleting == null ? _editProfile : null,
-                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit profile'),
-                ),
-                const SizedBox(height: 16),
-                Text(_profile?.name ?? 'No profile yet', style: text.titleLarge),
-                if (_profile?.occupation.isNotEmpty ?? false) ...[
-                  const SizedBox(height: 8),
-                  Text(_profile!.occupation),
-                ],
-                const SizedBox(height: 24),
-                Text('Assistant tone', style: text.bodySmall),
-                const SizedBox(height: 8),
-                Text(_profile == null ? 'Not set' : _title(_profile!.tone)),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _deleting == null ? _editProfile : null,
-                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                  child: const Text('Edit tone'),
-                ),
-              ],
-            )),
-            const SizedBox(height: 24),
-            Text('Learned memories', style: text.titleLarge),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _deleting == null ? _addMemory : null,
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add memory'),
-            ),
+            _Surface(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    UserAvatar(name: _profile?.name ?? ''),
+                    const SizedBox(width: 14),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text('Your profile', style: text.bodySmall),
+                          Text(_profile?.name ?? 'No profile yet',
+                              style: text.titleSmall),
+                          if (_profile?.occupation.isNotEmpty ?? false)
+                            Text(_profile!.occupation, style: text.bodySmall),
+                          Wrap(spacing: 6, children: [
+                            Text('Assistant tone', style: text.bodySmall),
+                            Text(
+                                _profile == null
+                                    ? 'Not set'
+                                    : _title(_profile!.tone),
+                                style: text.bodySmall
+                                    ?.copyWith(color: AppColors.coreViolet)),
+                          ]),
+                        ])),
+                  ]),
+                  Wrap(spacing: 8, children: [
+                    TextButton.icon(
+                        onPressed: _deleting == null ? _editProfile : null,
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Edit profile')),
+                    TextButton(
+                        onPressed: _deleting == null ? _editProfile : null,
+                        child: const Text('Edit tone')),
+                  ]),
+                ])),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('Learned memories', style: text.titleSmall),
+                    Text(
+                        '${_memories.length} saved ${_memories.length == 1 ? 'memory' : 'memories'}',
+                        style: text.bodySmall),
+                  ])),
+              OutlinedButton.icon(
+                  onPressed: _deleting == null ? _addMemory : null,
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Add memory')),
+            ]),
             const SizedBox(height: 8),
-            Text('${_memories.length} saved ${_memories.length == 1 ? 'memory' : 'memories'}',
-                style: text.bodySmall),
-            const SizedBox(height: 16),
-            const Text('Personal memories can shape replies. Other saved memories remain searchable.',
-                style: TextStyle(color: AppColors.muted, height: 1.6)),
+            const Text(
+                'Personal memories can shape replies. Other saved memories remain searchable.',
+                style: TextStyle(
+                    color: AppColors.muted, fontSize: 13, height: 1.45)),
             const SizedBox(height: 16),
             TextField(
               key: const Key('memory-search'),
@@ -266,39 +311,59 @@ class _MemoriesPageState extends State<MemoriesPage> {
             ]),
             const SizedBox(height: 16),
             if (_actionError != null) ...[
-              Semantics(liveRegion: true, child: Text(_actionError!, style: const TextStyle(color: AppColors.error))),
+              Semantics(
+                  liveRegion: true,
+                  child: Text(_actionError!,
+                      style: const TextStyle(color: AppColors.error))),
               const SizedBox(height: 16),
             ],
             if (visible.isEmpty)
-              _Surface(child: Column(
+              _Surface(
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_memories.isEmpty ? 'No memories yet' : 'No matching memories', style: text.titleMedium),
+                  Text(
+                      _memories.isEmpty
+                          ? 'No memories yet'
+                          : 'No matching memories',
+                      style: text.titleMedium),
                   const SizedBox(height: 8),
                   Text(_memories.isEmpty
                       ? 'Save something you want to keep, or return after a conversation closes.'
                       : 'Try another search or category.'),
                   if (query.isNotEmpty || _category != null)
-                    TextButton(onPressed: () => setState(() {
-                      _search.clear();
-                      _category = null;
-                    }), child: const Text('Clear filters')),
+                    TextButton(
+                        onPressed: () => setState(() {
+                              _search.clear();
+                              _category = null;
+                            }),
+                        child: const Text('Clear filters')),
                 ],
               )),
             for (final memory in visible) ...[
-              _Surface(child: Column(
+              _Surface(
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(spacing: 16, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                    _Badge(memory.category),
-                    IconButton(
-                      key: Key('delete-memory-${memory.id}'),
-                      tooltip: 'Delete memory: ${memory.content}',
-                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                      onPressed: _deleting == null ? () => _deleteMemory(memory) : null,
-                      icon: Icon(_deleting == memory.id ? Icons.hourglass_top_rounded : Icons.delete_outline_rounded),
-                    ),
-                  ]),
+                  Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _Badge(memory.category),
+                        IconButton(
+                          key: Key('delete-memory-${memory.id}'),
+                          tooltip: 'Delete memory: ${memory.content}',
+                          constraints:
+                              const BoxConstraints(minWidth: 48, minHeight: 48),
+                          onPressed: _deleting == null
+                              ? () => _deleteMemory(memory)
+                              : null,
+                          icon: Icon(_deleting == memory.id
+                              ? Icons.hourglass_top_rounded
+                              : Icons.delete_outline_rounded),
+                        ),
+                      ]),
                   const SizedBox(height: 16),
                   Text(memory.content, style: text.bodyLarge),
                 ],
@@ -307,8 +372,10 @@ class _MemoriesPageState extends State<MemoriesPage> {
             ],
           ],
           const SizedBox(height: 8),
-          const Text('Personal facts and explicit “remember” requests are saved on this device during the conversation. Refresh to see newly saved context. Mem0 is not connected in this version.',
-              style: TextStyle(color: AppColors.muted, height: 1.6)),
+          const Text(
+              'Personal facts and explicit “remember” requests are saved on this device during the conversation. Refresh to see newly saved context. Mem0 is not connected in this version.',
+              style: TextStyle(
+                  color: AppColors.muted, fontSize: 13, height: 1.45)),
           const SizedBox(height: 24),
         ],
       ),
@@ -325,7 +392,13 @@ class _ProfileEditor extends StatefulWidget {
 }
 
 class _ProfileEditorState extends State<_ProfileEditor> {
-  static const _tones = ['cheerful', 'mature', 'playful', 'calm', 'professional'];
+  static const _tones = [
+    'cheerful',
+    'mature',
+    'playful',
+    'calm',
+    'professional'
+  ];
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _occupation = TextEditingController();
@@ -335,7 +408,10 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   String? _error;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
@@ -345,7 +421,10 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final value = await widget.profile.get();
       if (!mounted) return;
@@ -357,20 +436,32 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() { _loading = false; _error = 'Could not load profile'; });
+      setState(() {
+        _loading = false;
+        _error = 'Could not load profile';
+      });
     }
   }
 
   Future<void> _save() async {
     if (_saving || !_form.currentState!.validate()) return;
-    final value = UserProfile(name: _name.text.trim(), occupation: _occupation.text.trim(), tone: _tone);
-    setState(() { _saving = true; _error = null; });
+    final value = UserProfile(
+        name: _name.text.trim(),
+        occupation: _occupation.text.trim(),
+        tone: _tone);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     var wrote = false;
     try {
       await widget.profile.save(value);
       wrote = true;
       final saved = await widget.profile.get();
-      if (saved == null || saved.name != value.name || saved.occupation != value.occupation || saved.tone != value.tone) {
+      if (saved == null ||
+          saved.name != value.name ||
+          saved.occupation != value.occupation ||
+          saved.tone != value.tone) {
         throw StateError('Profile readback failed');
       }
       if (!mounted) return;
@@ -388,76 +479,95 @@ class _ProfileEditorState extends State<_ProfileEditor> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: _SheetBody(child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('Edit your profile', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 8),
-        const Text('Choose how you introduce yourself and how the assistant replies.'),
-        const SizedBox(height: 24),
-        if (_loading)
-          const CircularProgressIndicator(semanticsLabel: 'Loading profile')
-        else if (_error == 'Could not load profile') ...[
-          Semantics(liveRegion: true, child: Text(_error!, style: const TextStyle(color: AppColors.error))),
-          const SizedBox(height: 16),
-          OutlinedButton(onPressed: _load, child: const Text('Retry')),
-        ] else Form(
-          key: _form,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                key: const Key('profile-name'),
-                controller: _name,
-                enabled: !_saving,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Name'),
-                validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter your name' : null,
-              ),
+        canPop: !_saving,
+        child: _SheetBody(
+            child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Edit your profile',
+                style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            const Text(
+                'Choose how you introduce yourself and how the assistant replies.'),
+            const SizedBox(height: 16),
+            if (_loading)
+              const CircularProgressIndicator(semanticsLabel: 'Loading profile')
+            else if (_error == 'Could not load profile') ...[
+              Semantics(
+                  liveRegion: true,
+                  child: Text(_error!,
+                      style: const TextStyle(color: AppColors.error))),
               const SizedBox(height: 16),
-              TextFormField(
-                key: const Key('profile-occupation'),
-                controller: _occupation,
-                enabled: !_saving,
-                decoration: const InputDecoration(labelText: 'Occupation (optional)'),
+              OutlinedButton(onPressed: _load, child: const Text('Retry')),
+            ] else
+              Form(
+                key: _form,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      key: const Key('profile-name'),
+                      controller: _name,
+                      enabled: !_saving,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                      validator: (value) => (value?.trim().isEmpty ?? true)
+                          ? 'Enter your name'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      key: const Key('profile-occupation'),
+                      controller: _occupation,
+                      enabled: !_saving,
+                      decoration: const InputDecoration(
+                          labelText: 'Occupation (optional)'),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Assistant tone',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 16),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final tone in _tones)
+                        ChoiceChip(
+                          label: Text(_title(tone)),
+                          selected: _tone == tone,
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          onSelected: _saving
+                              ? null
+                              : (_) => setState(() => _tone = tone),
+                        ),
+                    ]),
+                    const SizedBox(height: 16),
+                    if (_error != null) ...[
+                      Semantics(
+                          liveRegion: true,
+                          child: Text(_error!,
+                              style: const TextStyle(color: AppColors.error))),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
+                ),
               ),
-              const SizedBox(height: 24),
-              Text('Assistant tone', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 16),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final tone in _tones)
-                  ChoiceChip(
-                    label: Text(_title(tone)),
-                    selected: _tone == tone,
-                    materialTapTargetSize: MaterialTapTargetSize.padded,
-                    onSelected: _saving ? null : (_) => setState(() => _tone = tone),
-                  ),
-              ]),
-              const SizedBox(height: 24),
-              if (_error != null) ...[
-                Semantics(liveRegion: true, child: Text(_error!, style: const TextStyle(color: AppColors.error))),
-                const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Row(children: [
+              if (!_loading && _error != 'Could not load profile') ...[
+                Expanded(
+                    child: FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: Text(_saving ? 'Saving…' : 'Save profile'))),
+                const SizedBox(width: 10),
               ],
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-                child: Text(_saving ? 'Saving…' : 'Save profile'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-          child: const Text('Cancel'),
-        ),
-      ],
-    )),
-  );
+              OutlinedButton(
+                  onPressed:
+                      _saving ? null : () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel')),
+            ]),
+          ],
+        )),
+      );
 }
 
 class _AddMemorySheet extends StatefulWidget {
@@ -484,13 +594,18 @@ class _AddMemorySheetState extends State<_AddMemorySheet> {
 
   Future<void> _save() async {
     if (_saving || !_form.currentState!.validate()) return;
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     var wrote = false;
     try {
-      final id = await widget.memory.add(_content.text.trim(), category: _category.text.trim());
+      final id = await widget.memory
+          .add(_content.text.trim(), category: _category.text.trim());
       wrote = true;
       final rows = await widget.memory.all();
-      if (!rows.any((m) => m.id == id)) throw StateError('Memory readback failed');
+      if (!rows.any((m) => m.id == id))
+        throw StateError('Memory readback failed');
       if (!mounted) return;
       Navigator.of(context).pop(rows);
     } catch (_) {
@@ -506,56 +621,67 @@ class _AddMemorySheetState extends State<_AddMemorySheet> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_saving,
-    child: _SheetBody(child: Form(
-      key: _form,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Save a memory', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 8),
-          const Text('Keep something worth remembering on this device.'),
-          const SizedBox(height: 24),
-          TextFormField(
-            key: const Key('memory-content'),
-            controller: _content,
-            enabled: !_saving,
-            minLines: 3,
-            maxLines: 8,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(labelText: 'Memory', alignLabelWithHint: true),
-            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter a memory' : null,
+        canPop: !_saving,
+        child: _SheetBody(
+            child: Form(
+          key: _form,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Save a memory',
+                  style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 8),
+              const Text('Keep something worth remembering on this device.'),
+              const SizedBox(height: 24),
+              TextFormField(
+                key: const Key('memory-content'),
+                controller: _content,
+                enabled: !_saving,
+                minLines: 3,
+                maxLines: 8,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                    labelText: 'Memory', alignLabelWithHint: true),
+                validator: (value) =>
+                    (value?.trim().isEmpty ?? true) ? 'Enter a memory' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                key: const Key('memory-category'),
+                controller: _category,
+                enabled: !_saving,
+                decoration: const InputDecoration(
+                    labelText: 'Category',
+                    helperText: 'For example: fact, preference, or goal'),
+                validator: (value) =>
+                    (value?.trim().isEmpty ?? true) ? 'Enter a category' : null,
+              ),
+              const SizedBox(height: 24),
+              if (_error != null) ...[
+                Semantics(
+                    liveRegion: true,
+                    child: Text(_error!,
+                        style: const TextStyle(color: AppColors.error))),
+                const SizedBox(height: 16),
+              ],
+              Wrap(spacing: 16, runSpacing: 8, children: [
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  style:
+                      FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: Text(_saving ? 'Saving…' : 'Save memory'),
+                ),
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Cancel'),
+                ),
+              ]),
+            ],
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            key: const Key('memory-category'),
-            controller: _category,
-            enabled: !_saving,
-            decoration: const InputDecoration(labelText: 'Category', helperText: 'For example: fact, preference, or goal'),
-            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter a category' : null,
-          ),
-          const SizedBox(height: 24),
-          if (_error != null) ...[
-            Semantics(liveRegion: true, child: Text(_error!, style: const TextStyle(color: AppColors.error))),
-            const SizedBox(height: 16),
-          ],
-          Wrap(spacing: 16, runSpacing: 8, children: [
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-              child: Text(_saving ? 'Saving…' : 'Save memory'),
-            ),
-            TextButton(
-              onPressed: _saving ? null : () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-              child: const Text('Cancel'),
-            ),
-          ]),
-        ],
-      ),
-    )),
-  );
+        )),
+      );
 }
 
 class _SheetBody extends StatelessWidget {
@@ -563,18 +689,19 @@ class _SheetBody extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.viewInsetsOf(context).bottom),
-      child: child,
-    ),
-  );
+  Widget build(BuildContext context) => GlassSheet(
+          child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+              18, 0, 18, 26 + MediaQuery.viewInsetsOf(context).bottom),
+          child: child,
+        ),
+      ));
 }
 
-String _title(String value) => value.isEmpty
-    ? value
-    : '${value[0].toUpperCase()}${value.substring(1)}';
+String _title(String value) =>
+    value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
 
 class _Surface extends StatelessWidget {
   const _Surface({required this.child});
@@ -582,15 +709,15 @@ class _Surface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: AppColors.lavender.withValues(alpha: 0.12)),
-    ),
-    child: child,
-  );
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: child,
+      );
 }
 
 class _Badge extends StatelessWidget {
@@ -599,11 +726,15 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    decoration: BoxDecoration(
-      color: AppColors.surfaceRaised,
-      borderRadius: BorderRadius.circular(999),
-    ),
-    child: Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.gold)),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        ),
+        child: Text(label,
+            style: Theme.of(context)
+                .textTheme
+                .labelMedium
+                ?.copyWith(color: AppColors.success)),
+      );
 }

@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'data/db.dart';
 import 'data/repos.dart';
@@ -14,6 +15,7 @@ import 'services/app_services.dart';
 import 'services/proactive.dart';
 import 'services/reminder_scheduler.dart';
 import 'ui/reminder_settings.dart';
+import 'ui/backup_settings.dart';
 import 'package:path/path.dart' as p;
 
 import 'services/model_status.dart';
@@ -22,6 +24,8 @@ import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'ui/chat_view.dart';
 import 'ui/app_shell.dart';
+import 'ui/glass_surface.dart';
+import 'ui/glass_dialog.dart';
 import 'ui/chat_sidebar.dart';
 import 'ui/tasks_page.dart';
 import 'ui/memories_page.dart';
@@ -387,7 +391,7 @@ class _AssistantHomeState extends State<AssistantHome>
   Future<void> _addWidget() async {
     final compact = await showDialog<bool>(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (context) => GlassSimpleDialog(
         title: const Text('Choose your widget'),
         children: [
           SimpleDialogOption(
@@ -422,7 +426,7 @@ class _AssistantHomeState extends State<AssistantHome>
     if (_busy || _chatBusy) return;
     final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => GlassAlertDialog(
               title: const Text('Delete chat?'),
               content: Text(
                   'Delete “${chat.title.trim().isEmpty ? 'New chat' : chat.title}” and its messages? Your tasks and memories are kept.'),
@@ -461,22 +465,39 @@ class _AssistantHomeState extends State<AssistantHome>
   void _settings() => showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => SafeArea(
-            child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(children: [
-                  ModelSetupCard(widget.services),
-                  const SizedBox(height: 24),
-                  ReminderSettings(widget.services.preferences,
-                      onTest: widget.services.testNotification),
-                ]))),
+        showDragHandle: false,
+        builder: (_) => GlassSheet(
+            child: SafeArea(
+                child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(children: [
+                      ModelSetupCard(widget.services),
+                      const SizedBox(height: 24),
+                      ReminderSettings(widget.services.preferences,
+                          onTest: widget.services.testNotification),
+                      const SizedBox(height: 24),
+                      BackupSettings(widget.services.backup,
+                          onImported: _imported),
+                    ])))),
       );
+
+  /// A backup was imported: the open chat may be gone, so the main chat is
+  /// opened again and the lists are reloaded.
+  Future<void> _imported() async {
+    await widget.services.backupImported();
+    if (!mounted) return;
+    setState(() {
+      _refresh++;
+      _setSelected(ConversationRepo.mainChatId);
+    });
+    await _load();
+  }
 
   @override
   Widget build(BuildContext context) => MascotEmotionScope(
       emotion: _mascotEmotion,
       child: AppShell(
+        profileName: _name,
         onProfile: _profile,
         onSettings: _settings,
         selectedDestination: _destination,
@@ -919,8 +940,7 @@ class _ChatPageState extends State<ChatPage> {
         if (widget.closeOnEnd)
           Row(children: [
             const Padding(
-                padding: EdgeInsets.all(12),
-                child: Text('Ask Corenyth')),
+                padding: EdgeInsets.all(12), child: Text('Ask Corenyth')),
             const Spacer(),
             IconButton(
                 tooltip: 'Close chat',
@@ -963,7 +983,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// Step-by-step model install guide, optionally presented as a compact status.
-/// Re-checks whenever the app resumes (the user leaves to download/move the file).
+/// Re-checks whenever the app resumes after downloading or choosing a file.
 class ModelSetupCard extends StatefulWidget {
   final AppServices services;
   final bool compact;
@@ -974,10 +994,12 @@ class ModelSetupCard extends StatefulWidget {
 
 class _ModelSetupCardState extends State<ModelSetupCard>
     with WidgetsBindingObserver {
-  static const _folder = 'Documents/localmodels';
   ModelState? _state;
   bool _checking = false;
   bool _checkFailed = false;
+  bool _importing = false;
+  int _bytesCopied = 0;
+  String? _importError;
 
   @override
   void initState() {
@@ -1006,8 +1028,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     }
   }
 
-  Future<void> _check() async {
-    if (_checking) return;
+  Future<void> _check({bool loadImported = false}) async {
+    if (_checking || _importing) return;
     _checking = true;
     try {
       final s = await widget.services.modelState();
@@ -1018,7 +1040,9 @@ class _ModelSetupCardState extends State<ModelSetupCard>
       });
       // Preserve the existing automatic model load when the complete file is ready.
       if (s == ModelState.ready &&
-          widget.services.modelLoad.value == ModelLoad.idle) _load();
+          (loadImported || widget.services.modelLoad.value == ModelLoad.idle)) {
+        _load();
+      }
     } catch (_) {
       if (mounted) setState(() => _checkFailed = true);
     } finally {
@@ -1026,16 +1050,56 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     }
   }
 
+  Future<void> _import() async {
+    if (_importing) return;
+    String? importedPath;
+    setState(() {
+      _importing = true;
+      _state = ModelState.missing;
+      _bytesCopied = 0;
+      _importError = null;
+    });
+    try {
+      importedPath = await NativeBridge.importModel(
+          widget.services.selectedModel.fileName, onProgress: (bytes) {
+        if (mounted) setState(() => _bytesCopied = bytes);
+      });
+    } on PlatformException catch (e) {
+      if (mounted) {
+        setState(() => _importError = switch (e.code) {
+              'no_picker' => 'No file picker is available on this device.',
+              'wrong_file' =>
+                'Choose ${widget.services.selectedModel.fileName}. The selected file has a different name.',
+              'no_space' =>
+                'Not enough space to copy the model. Free some storage and try again.',
+              _ =>
+                'That file could not be copied. Choose the downloaded file again.',
+            });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _importError = 'The model could not be imported. Try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _importing = false);
+        await _check(loadImported: importedPath != null);
+      }
+    }
+  }
+
   void _showDetails() => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-          child: FractionallySizedBox(
-              heightFactor: 0.85,
-              child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: ModelSetupCard(widget.services)))));
+      showDragHandle: false,
+      builder: (_) => GlassSheet(
+          child: SafeArea(
+              child: FractionallySizedBox(
+                  heightFactor: 0.85,
+                  child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: ModelSetupCard(widget.services))))));
 
   void _load() {
     final sv = widget.services;
@@ -1050,8 +1114,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
   /// choice to make: only Corenyth's fine-tuned 0.6B may load.
   Widget _picker(bool loading) {
     final m = widget.services.selectedModel;
-    final installed = checkModelSpec(
-            p.dirname(widget.services.modelPath), m, granted: true) ==
+    final installed = checkModelSpec(p.dirname(widget.services.modelPath), m,
+            granted: true) ==
         ModelState.ready;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Model', style: Theme.of(context).textTheme.titleSmall),
@@ -1063,8 +1127,7 @@ class _ModelSetupCardState extends State<ModelSetupCard>
             '${installed ? 'installed' : 'not installed'}'),
       ),
       if (!installed)
-        Text('Copy ${m.fileName} into $_folder to use it '
-            '(for example: adb push <file> /sdcard/$_folder/${m.fileName}).'),
+        Text('Download ${m.fileName}, then choose it below to import it.'),
     ]);
   }
 
@@ -1140,6 +1203,14 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                                     child: Text(load == ModelLoad.failed
                                         ? 'Retry loading'
                                         : 'Load model'))),
+                          if (_importError != null)
+                            Text(_importError!,
+                                style: const TextStyle(color: AppColors.gold)),
+                          if (load == ModelLoad.failed)
+                            TextButton(
+                                onPressed: _import,
+                                child: const Text(
+                                    'Choose the downloaded file again')),
                           const SizedBox(height: 16),
                           _picker(load == ModelLoad.loading),
                         ])));
@@ -1169,38 +1240,40 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(s == ModelState.incomplete
-                  ? 'A file named ${want.fileName} is in $_folder, but it is not ${want.expectedBytes} bytes '
-                      '(unfinished copy, or a different file). Replace it with the file from step 2.'
+                  ? 'The imported ${want.fileName} is incomplete: it is not ${want.expectedBytes} bytes '
+                      '(unfinished download, or a different file). Choose the complete file from step 1 again.'
                   : 'Until it is installed the assistant uses simple built-in rules.'),
               step(
                   1,
-                  'Allow file access so the app can use $_folder.',
-                  s == ModelState.noAccess
-                      ? FilledButton(
-                          onPressed: NativeBridge.requestStorageAccess,
-                          child: const Text('Grant access'))
-                      : const Text('Done.',
-                          style: TextStyle(color: AppColors.success))),
-              step(
-                  2,
-                  'Download ${want.fileName} (about ${want.approxMiB} MB) from the Corenyth release page, '
-                  'or from a computer: adb push <file> /sdcard/$_folder/${want.fileName}. '
-                  'Keep the file name exactly.',
+                  'Download ${want.fileName} (about ${want.approxMiB} MB).',
                   want.url.isEmpty
                       ? null
                       : TextButton(
-                          onPressed: () => NativeBridge.openUrl(want.url)
-                              .catchError((_) {}),
+                          onPressed: () =>
+                              NativeBridge.openUrl(want.url).catchError((_) {}),
                           child: const Text('Download in browser'))),
               step(
-                  3,
-                  'A browser download lands in Downloads: open the Files app > Downloads, '
-                  'long-press the file, choose Move to... and pick Documents > localmodels.'),
+                  2,
+                  'Choose the downloaded file. Corenyth copies it into private storage.',
+                  FilledButton(
+                      onPressed: _importing ? null : _import,
+                      child: const Text('Choose the downloaded file'))),
+              if (_importing) ...[
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                    value: (_bytesCopied / want.expectedBytes).clamp(0.0, 1.0)),
+                Text(
+                    'Copying: ${(_bytesCopied / (1024 * 1024)).toStringAsFixed(1)} MB'),
+              ],
+              if (_importError != null)
+                Text(_importError!,
+                    style: const TextStyle(color: AppColors.gold)),
               step(
-                  4,
-                  'Come back here. The app re-checks by itself and loads the model right away.',
+                  3,
+                  'The app checks the imported file and loads the model automatically.',
                   TextButton(
-                      onPressed: _check, child: const Text('Check again'))),
+                      onPressed: _importing ? null : _check,
+                      child: const Text('Check again'))),
               const SizedBox(height: 16),
               ValueListenableBuilder<ModelLoad>(
                   valueListenable: sv.modelLoad,
@@ -1223,12 +1296,26 @@ class ModelLoadDialog extends StatelessWidget {
         final busy = v == ModelLoad.idle || v == ModelLoad.loading;
         return PopScope(
             canPop: !busy,
-            child: AlertDialog(
+            child: GlassAlertDialog(
+              backgroundColor: AppColors.transparent,
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              titleTextStyle: Theme.of(context).textTheme.titleLarge,
+              alignment: Alignment.center,
               icon: busy
                   ? const ModelLoadingIndicator()
                   : v == ModelLoad.loaded
-                      ? const Icon(Icons.check_circle,
-                          color: AppColors.success, size: 40)
+                      ? Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                              color: AppColors.successFill,
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusMd),
+                              border:
+                                  Border.all(color: AppColors.successBorder)),
+                          child: const Icon(Icons.check_rounded,
+                              color: AppColors.success, size: 24))
                       : const Icon(Icons.error_outline,
                           color: AppColors.error, size: 40),
               title: Text(busy
@@ -1241,7 +1328,7 @@ class ModelLoadDialog extends StatelessWidget {
                   : v == ModelLoad.loaded
                       ? 'The assistant is now using the local model.'
                       : 'The assistant keeps using its built-in rules. '
-                          'Check that the model file in Documents/localmodels is the complete file.'),
+                          'Check that the imported model is complete. Download it again if needed.'),
               actions: busy
                   ? null
                   : [

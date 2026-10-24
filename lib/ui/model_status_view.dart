@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/model_status.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import 'glass_surface.dart';
 
 class ModelStatusView extends StatelessWidget {
   final ModelState? modelState;
@@ -50,42 +52,69 @@ class ModelStatusView extends StatelessWidget {
         : (load == ModelLoad.loaded || modelState == ModelState.ready)
             ? 'RAM and latency not measured on this device.'
             : null;
+    final indicator = SizedBox(
+        width: 16,
+        height: 16,
+        child: Center(
+            child: Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: load == ModelLoad.loaded
+                        ? AppColors.success
+                        : AppColors.tertiaryText))));
+    final copy = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.ivory)),
+          if (lastAnswerSource != null)
+            Text('Last answer: $lastAnswerSource',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(height: 14 / 12)),
+          if (detail != null)
+            Text(detail,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: AppColors.tertiaryText, height: 14 / 12)),
+        ]);
+    final action = TextButton(
+        onPressed: onTap,
+        style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+        child: Text(modelState == ModelState.ready ? 'Details' : 'Set up'));
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Container(
-          padding: const EdgeInsets.only(left: 14, right: 4, top: 4, bottom: 4),
-          decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                  color: AppColors.lavender.withValues(alpha: 0.10))),
-          child: Row(children: [
-            Icon(Icons.offline_bolt_outlined,
-                size: 16,
-                color: load == ModelLoad.loaded
-                    ? AppColors.lavender
-                    : AppColors.gold),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                  Text(label, style: Theme.of(context).textTheme.bodySmall),
-                  if (lastAnswerSource != null)
-                    Text('Last answer: $lastAnswerSource',
-                        style: Theme.of(context).textTheme.labelSmall),
-                  if (detail != null)
-                    Text(detail,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppColors.gold.withValues(alpha: 0.85))),
-                ])),
-            TextButton(
-                onPressed: onTap,
-                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                child: Text(
-                    modelState == ModelState.ready ? 'Details' : 'Set up')),
-          ]),
-        ));
+        child: GlassSurface(
+            radius: BorderRadius.circular(AppTheme.radiusMd),
+            child: Padding(
+                padding: const EdgeInsets.only(
+                    left: 15, right: 5, top: 5, bottom: 5),
+                child: LayoutBuilder(builder: (context, bounds) {
+                  if (bounds.maxWidth < 450 &&
+                      MediaQuery.textScalerOf(context).scale(14) > 18) {
+                    return Column(mainAxisSize: MainAxisSize.min, children: [
+                      Row(children: [
+                        indicator,
+                        const SizedBox(width: 8),
+                        Expanded(child: copy)
+                      ]),
+                      Align(alignment: Alignment.centerRight, child: action),
+                    ]);
+                  }
+                  return Row(children: [
+                    indicator,
+                    const SizedBox(width: 8),
+                    Expanded(child: copy),
+                    action
+                  ]);
+                }))));
   }
 }
