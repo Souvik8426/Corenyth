@@ -23,7 +23,8 @@ class NativeBridge {
   /// the user then adds it from the home screen's widget picker.
   static Future<bool> pinWidget({bool compact = false}) async {
     try {
-      return await _ch.invokeMethod<bool>('pinWidget', {'compact': compact}) ?? false;
+      return await _ch.invokeMethod<bool>('pinWidget', {'compact': compact}) ??
+          false;
     } on MissingPluginException {
       return false;
     } catch (e) {
@@ -32,15 +33,38 @@ class NativeBridge {
     }
   }
 
-  /// Public `Documents/localmodels`. Creates it when storage access is granted, so
-  /// calling this on every boot also re-creates it if the user deleted it.
+  /// App-private models directory, created when missing. Always granted on Android.
   static Future<({String path, bool granted})> modelsDir() async {
     final m = (await _ch.invokeMapMethod<String, Object?>('modelsDir'))!;
     return (path: m['path'] as String, granted: m['granted'] as bool);
   }
 
-  /// Opens the system screen / prompt for storage access (Android 11+: "All files access").
-  static Future<void> requestStorageAccess() => _ch.invokeMethod('requestStorageAccess');
+  static bool _importing = false;
+
+  /// Copies a picked document into private storage as [fileName]. Null on cancel.
+  /// Progress counts bytes copied; callers check the final size before loading.
+  /// Throws PlatformException: no_picker, wrong_file, read_failed or no_space.
+  static Future<String?> importModel(String fileName,
+      {void Function(int bytesCopied)? onProgress}) async {
+    if (_importing) {
+      throw PlatformException(
+          code: 'read_failed', message: 'A model import is already running.');
+    }
+    _importing = true;
+    _ch.setMethodCallHandler((call) async {
+      if (call.method == 'importProgress') {
+        final args = call.arguments as Map;
+        onProgress?.call((args['bytesCopied'] as num).toInt());
+      }
+    });
+    try {
+      return await _ch
+          .invokeMethod<String>('importModel', {'fileName': fileName});
+    } finally {
+      _ch.setMethodCallHandler(null);
+      _importing = false;
+    }
+  }
 
   /// Hands an https URL to the user's browser (the app itself has no INTERNET permission).
   static Future<void> openUrl(String url) => _ch.invokeMethod('openUrl', url);
@@ -108,6 +132,8 @@ NativeBackupException nativeBackupError(PlatformException e) =>
         switch (e.code) {
           'no_picker' => 'No file picker is available on this device.',
           'read_failed' => 'That file could not be read.',
+          'no_space' =>
+            'Not enough space to copy the backup. Free some storage and try again.',
           'no_app' => 'No app on this device can receive the backup.',
           'bad_path' => 'The backup file is gone.',
           _ => 'The backup could not be opened.',

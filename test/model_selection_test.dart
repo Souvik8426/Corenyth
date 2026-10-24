@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -209,6 +210,92 @@ void main() {
       loadOk = (_) => false;
       expect(await app.ensureModel(), isFalse);
       expect(app.modelLoad.value.name, 'failed');
+    });
+
+    testWidgets('setup imports with progress then reports an incomplete file',
+        (t) async {
+      const native = MethodChannel('assistant/native');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final imported = Completer<String?>();
+      messenger.setMockMethodCallHandler(native, (call) async {
+        if (call.method == 'modelsDir') return {'path': models.path, 'granted': true};
+        if (call.method == 'importModel') {
+          expect(call.arguments, {'fileName': corenythModel.fileName});
+          return imported.future;
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(native, null));
+      await t.pumpWidget(MaterialApp(
+          home: Scaffold(body: SingleChildScrollView(child: ModelSetupCard(app)))));
+      await t.pumpAndSettle();
+      expect(find.text('Download in browser'), findsOneWidget);
+      expect(find.textContaining('Documents'), findsNothing);
+      await t.tap(find.text('Choose the downloaded file'));
+      await t.pump();
+      final reply = Completer<void>();
+      await messenger.handlePlatformMessage(native.name,
+          const StandardMethodCodec().encodeMethodCall(
+              const MethodCall('importProgress', {'bytesCopied': 1024 * 1024})),
+          (_) => reply.complete());
+      await reply.future;
+      await t.pump();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('Copying: 1.0 MB'), findsOneWidget);
+      File(p.join(models.path, corenythModel.fileName)).writeAsBytesSync([1, 2]);
+      imported.complete(p.join(models.path, corenythModel.fileName));
+      await t.pumpAndSettle();
+      expect(find.textContaining('is incomplete'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(loads, isEmpty, reason: 'incomplete files must never load');
+    });
+
+    testWidgets('a complete import automatically retries a failed model load',
+        (t) async {
+      const native = MethodChannel('assistant/native');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(native, (call) async {
+        if (call.method == 'modelsDir') return {'path': models.path, 'granted': true};
+        if (call.method == 'importModel') {
+          fakeInstall(sel, models.path, corenythModel);
+          return p.join(models.path, corenythModel.fileName);
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(native, null));
+      app.modelLoad.value = ModelLoad.failed;
+      await t.pumpWidget(MaterialApp(
+          home: Scaffold(body: SingleChildScrollView(child: ModelSetupCard(app)))));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Choose the downloaded file'));
+      // Hash cache and crash marker use real file I/O, outside the widget clock.
+      for (var i = 0; i < 30; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump(const Duration(milliseconds: 20));
+        if (app.modelLoad.value == ModelLoad.loaded) break;
+      }
+      expect(loads, [corenythModel.fileName]);
+      expect(app.modelLoad.value, ModelLoad.loaded);
+      expect(find.text('The assistant is now using the local model.'), findsOneWidget);
+    });
+
+    testWidgets('setup explains a wrong filename and allows retry', (t) async {
+      const native = MethodChannel('assistant/native');
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(native, (call) async {
+        if (call.method == 'modelsDir') return {'path': models.path, 'granted': true};
+        if (call.method == 'importModel') throw PlatformException(code: 'wrong_file');
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(native, null));
+      await t.pumpWidget(MaterialApp(
+          home: Scaffold(body: SingleChildScrollView(child: ModelSetupCard(app)))));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Choose the downloaded file'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('The selected file has a different name'), findsOneWidget);
+      expect(t.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNotNull);
+      expect(loads, isEmpty);
     });
 
     testWidgets('details show the one model and no download button', (t) async {

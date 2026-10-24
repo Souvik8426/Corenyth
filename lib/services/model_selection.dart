@@ -7,8 +7,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'model_status.dart';
 
-/// Persists the chosen catalog model id under the app DB directory (private),
-/// not in public `Documents/localmodels`.
+/// Persists the chosen catalog model id under the private app DB directory.
 class ModelSelection {
   final String dir;
 
@@ -40,7 +39,7 @@ class ModelSelection {
     await File(_path).writeAsString(spec.id);
   }
 
-  /// Absolute path for [spec] under the public models folder.
+  /// Absolute path for [spec] under the app-private models folder.
   String pathIn(String modelsDir, [ModelSpec? spec]) =>
       p.join(modelsDir, (spec ?? selected).fileName);
 

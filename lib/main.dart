@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'data/db.dart';
 import 'data/repos.dart';
@@ -982,7 +983,7 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 /// Step-by-step model install guide, optionally presented as a compact status.
-/// Re-checks whenever the app resumes (the user leaves to download/move the file).
+/// Re-checks whenever the app resumes after downloading or choosing a file.
 class ModelSetupCard extends StatefulWidget {
   final AppServices services;
   final bool compact;
@@ -993,10 +994,12 @@ class ModelSetupCard extends StatefulWidget {
 
 class _ModelSetupCardState extends State<ModelSetupCard>
     with WidgetsBindingObserver {
-  static const _folder = 'Documents/localmodels';
   ModelState? _state;
   bool _checking = false;
   bool _checkFailed = false;
+  bool _importing = false;
+  int _bytesCopied = 0;
+  String? _importError;
 
   @override
   void initState() {
@@ -1025,8 +1028,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     }
   }
 
-  Future<void> _check() async {
-    if (_checking) return;
+  Future<void> _check({bool loadImported = false}) async {
+    if (_checking || _importing) return;
     _checking = true;
     try {
       final s = await widget.services.modelState();
@@ -1037,11 +1040,52 @@ class _ModelSetupCardState extends State<ModelSetupCard>
       });
       // Preserve the existing automatic model load when the complete file is ready.
       if (s == ModelState.ready &&
-          widget.services.modelLoad.value == ModelLoad.idle) _load();
+          (loadImported || widget.services.modelLoad.value == ModelLoad.idle)) {
+        _load();
+      }
     } catch (_) {
       if (mounted) setState(() => _checkFailed = true);
     } finally {
       _checking = false;
+    }
+  }
+
+  Future<void> _import() async {
+    if (_importing) return;
+    String? importedPath;
+    setState(() {
+      _importing = true;
+      _state = ModelState.missing;
+      _bytesCopied = 0;
+      _importError = null;
+    });
+    try {
+      importedPath = await NativeBridge.importModel(
+          widget.services.selectedModel.fileName, onProgress: (bytes) {
+        if (mounted) setState(() => _bytesCopied = bytes);
+      });
+    } on PlatformException catch (e) {
+      if (mounted) {
+        setState(() => _importError = switch (e.code) {
+              'no_picker' => 'No file picker is available on this device.',
+              'wrong_file' =>
+                'Choose ${widget.services.selectedModel.fileName}. The selected file has a different name.',
+              'no_space' =>
+                'Not enough space to copy the model. Free some storage and try again.',
+              _ =>
+                'That file could not be copied. Choose the downloaded file again.',
+            });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _importError = 'The model could not be imported. Try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _importing = false);
+        await _check(loadImported: importedPath != null);
+      }
     }
   }
 
@@ -1083,8 +1127,7 @@ class _ModelSetupCardState extends State<ModelSetupCard>
             '${installed ? 'installed' : 'not installed'}'),
       ),
       if (!installed)
-        Text('Copy ${m.fileName} into $_folder to use it '
-            '(for example: adb push <file> /sdcard/$_folder/${m.fileName}).'),
+        Text('Download ${m.fileName}, then choose it below to import it.'),
     ]);
   }
 
@@ -1160,6 +1203,14 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                                     child: Text(load == ModelLoad.failed
                                         ? 'Retry loading'
                                         : 'Load model'))),
+                          if (_importError != null)
+                            Text(_importError!,
+                                style: const TextStyle(color: AppColors.gold)),
+                          if (load == ModelLoad.failed)
+                            TextButton(
+                                onPressed: _import,
+                                child: const Text(
+                                    'Choose the downloaded file again')),
                           const SizedBox(height: 16),
                           _picker(load == ModelLoad.loading),
                         ])));
@@ -1189,23 +1240,12 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(s == ModelState.incomplete
-                  ? 'A file named ${want.fileName} is in $_folder, but it is not ${want.expectedBytes} bytes '
-                      '(unfinished copy, or a different file). Replace it with the file from step 2.'
+                  ? 'The imported ${want.fileName} is incomplete: it is not ${want.expectedBytes} bytes '
+                      '(unfinished download, or a different file). Choose the complete file from step 1 again.'
                   : 'Until it is installed the assistant uses simple built-in rules.'),
               step(
                   1,
-                  'Allow file access so the app can use $_folder.',
-                  s == ModelState.noAccess
-                      ? FilledButton(
-                          onPressed: NativeBridge.requestStorageAccess,
-                          child: const Text('Grant access'))
-                      : const Text('Done.',
-                          style: TextStyle(color: AppColors.success))),
-              step(
-                  2,
-                  'Download ${want.fileName} (about ${want.approxMiB} MB) from the Corenyth release page, '
-                  'or from a computer: adb push <file> /sdcard/$_folder/${want.fileName}. '
-                  'Keep the file name exactly.',
+                  'Download ${want.fileName} (about ${want.approxMiB} MB).',
                   want.url.isEmpty
                       ? null
                       : TextButton(
@@ -1213,14 +1253,27 @@ class _ModelSetupCardState extends State<ModelSetupCard>
                               NativeBridge.openUrl(want.url).catchError((_) {}),
                           child: const Text('Download in browser'))),
               step(
-                  3,
-                  'A browser download lands in Downloads: open the Files app > Downloads, '
-                  'long-press the file, choose Move to... and pick Documents > localmodels.'),
+                  2,
+                  'Choose the downloaded file. Corenyth copies it into private storage.',
+                  FilledButton(
+                      onPressed: _importing ? null : _import,
+                      child: const Text('Choose the downloaded file'))),
+              if (_importing) ...[
+                const SizedBox(height: 8),
+                LinearProgressIndicator(
+                    value: (_bytesCopied / want.expectedBytes).clamp(0.0, 1.0)),
+                Text(
+                    'Copying: ${(_bytesCopied / (1024 * 1024)).toStringAsFixed(1)} MB'),
+              ],
+              if (_importError != null)
+                Text(_importError!,
+                    style: const TextStyle(color: AppColors.gold)),
               step(
-                  4,
-                  'Come back here. The app re-checks by itself and loads the model right away.',
+                  3,
+                  'The app checks the imported file and loads the model automatically.',
                   TextButton(
-                      onPressed: _check, child: const Text('Check again'))),
+                      onPressed: _importing ? null : _check,
+                      child: const Text('Check again'))),
               const SizedBox(height: 16),
               ValueListenableBuilder<ModelLoad>(
                   valueListenable: sv.modelLoad,
@@ -1275,7 +1328,7 @@ class ModelLoadDialog extends StatelessWidget {
                   : v == ModelLoad.loaded
                       ? 'The assistant is now using the local model.'
                       : 'The assistant keeps using its built-in rules. '
-                          'Check that the model file in Documents/localmodels is the complete file.'),
+                          'Check that the imported model is complete. Download it again if needed.'),
               actions: busy
                   ? null
                   : [

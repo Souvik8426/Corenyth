@@ -117,7 +117,7 @@ void main() {
   });
 
   test('checkModel: access, missing, unfinished, complete', () {
-    final dir = Directory.systemTemp.createTempSync('localmodels');
+    final dir = Directory.systemTemp.createTempSync('private_models');
     addTearDown(() => dir.deleteSync(recursive: true));
     final path = '${dir.path}/m.gguf';
     ModelState st({bool granted = true}) =>

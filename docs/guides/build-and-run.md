@@ -39,7 +39,7 @@ flutter run -d <device-id>
 
 Use the Android device ID rather than `chrome`. Native activity or resource changes require a rebuild/restart; hot reload alone does not update installed widgets.
 
-Install the model before testing model-backed replies. See [model-install.md](model-install.md).
+Install the model before testing model-backed replies: tap **Download in browser** in model setup, then **Choose the downloaded file**. The app copies it into private storage, checks it and loads automatically; no storage permission is required. See [model-install.md](model-install.md).
 
 ## Debug logs
 

@@ -247,7 +247,7 @@ class AppServices {
       issue = 'Notifications could not be set up; reminders may not fire.';
     }
 
-    // Creates Documents/localmodels on every boot.
+    // Creates the app-private models directory on every boot.
     final models = await step('models folder', NativeBridge.modelsDir);
 
     final sel = await ModelSelection.open();
@@ -389,11 +389,9 @@ class AppServices {
         return false; // only allowlisted ChatML files
       }
       if (!_readable(_path)) {
-        // Before file access is granted the file can be listed but not read;
-        // that is not a corrupt download.
         modelFailure = 'unreadable:${spec.id}';
         modelNote.value = _failNote = 'Corenyth cannot read ${spec.fileName} '
-            'yet. Allow file access, then come back.';
+            'yet. Choose the downloaded file again in model setup.';
         return false;
       }
       if (!await sel.verify(spec, _path)) {
@@ -473,7 +471,7 @@ class AppServices {
         }
       }();
 
-  /// Re-checks storage access + the model file (also re-creates the folder if it vanished).
+  /// Re-checks the private model file (also re-creates the folder if it vanished).
   Future<ModelState> modelState() async {
     final d = await NativeBridge.modelsDir();
     final sel = selection;

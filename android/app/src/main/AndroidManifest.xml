@@ -1,19 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- No INTERNET permission on purpose: normal operation is fully offline. The model is
-         downloaded by the user's browser and placed in Documents/localmodels (see README). -->
-    <!-- Read/create Documents/localmodels: Android 11+ needs All files access (granted in Settings),
-         Android 6-10 uses the legacy runtime permission. -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
+    <!-- No INTERNET permission: the user's browser downloads the model, then the
+         system document picker imports it into app-private storage. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/> <!-- for the future ASR step -->
 
     <application
         android:label="Corenyth"
-        android:icon="@mipmap/ic_launcher"
-        android:requestLegacyExternalStorage="true">
+        android:icon="@mipmap/ic_launcher">
+
+        <!-- Only private backup archives can be shared, with a temporary read grant. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.backups"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                       android:resource="@xml/backup_paths"/>
+        </provider>
 
         <activity
             android:name=".MainActivity"

@@ -31,7 +31,7 @@ class BackupService {
   final BackupFileGateway gateway;
 
   /// Where the folder that holds backups lives. Overridden in tests; the app
-  /// uses the real `Documents/localmodels` folder.
+  /// uses an app-private `backups` folder.
   final Future<String> Function() folderResolver;
 
   /// True while a backup or an import runs. The UI disables its buttons and
@@ -58,20 +58,19 @@ class BackupService {
         gateway = gateway ?? const NativeBackupFileGateway(),
         folderResolver = folderResolver ?? _defaultFolder;
 
-  /// The models folder, where the backup is written: the same place the
-  /// model file lives, so it is one folder the user already knows.
+  /// Backups live beside the private models directory and are exported by sharing.
   static Future<String> _defaultFolder() async {
     final dir = await NativeBridge.modelsDir();
-    return dir.path;
+    return p.join(p.dirname(dir.path), 'backups');
   }
 
-  /// The backup file the app writes (`Documents/localmodels/backup.corenyth`).
+  /// The app-private backup archive, offered to other apps via the share sheet.
   Future<String> backupPath() async =>
       p.join(await folderResolver(), backupFileName);
 
   // --- export -----------------------------------------------------------
 
-  /// Writes every saved row into `backup.corenyth` in the models folder.
+  /// Writes every saved row into `backup.corenyth` in the private backups folder.
   ///
   /// The archive is built in memory and written through a temporary file, so
   /// a failed export never leaves a half-written backup behind.
@@ -85,8 +84,8 @@ class BackupService {
       final folder = await folderResolver();
       if (!await _ensureFolder(folder)) {
         throw const BackupException(
-            'Corenyth cannot write to the models folder yet. Allow file '
-            'access in Android settings, then try again.');
+            'Corenyth could not create its backups folder. Check available '
+            'storage space, then try again.');
       }
       final data = await _snapshot();
       final manifest = BackupManifest(
@@ -130,7 +129,7 @@ class BackupService {
     if (!await _ensureFolder(folder)) {
       throw const BackupException(
           'A recovery copy of your data could not be saved, so nothing was '
-          'imported. Allow file access in Android settings and try again.');
+          'imported. Check available storage space and try again.');
     }
     final stamp = _timestamp(DateTime.now().toUtc());
     final target = p.join(folder, 'corenyth-recovery-$stamp.corenyth');
@@ -155,7 +154,7 @@ class BackupService {
   }
 
   /// Creates the folder when it is missing. False when the app may not write
-  /// there (no storage access).
+  /// there (for example, when storage is full).
   Future<bool> _ensureFolder(String folder) async {
     try {
       final dir = Directory(folder);

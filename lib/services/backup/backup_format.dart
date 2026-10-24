@@ -15,7 +15,7 @@ const String backupFormatTag = 'corenyth-backup';
 /// wrote the file.
 const String backupAppVersion = '0.2.0+2';
 
-/// File name of a backup inside the models folder.
+/// File name of a backup inside the private backups folder.
 const String backupFileName = 'backup.corenyth';
 
 /// The two entries a backup archive contains, and nothing else.
