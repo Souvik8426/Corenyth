@@ -352,7 +352,7 @@ Issues and pull requests are welcome! Before submitting a PR:
 
 ## License & Acknowledgements
 
-- **Repository License:** No open-source license file has been added to this repository yet (all rights reserved by default until a license is chosen).
+- **Repository License:** Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 Souvik Ruhidas.
 - **Third-Party Components:**
   - [llama.cpp](https://github.com/ggml-org/llama.cpp) by `ggml-org` (MIT License)
   - [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) by the Qwen team (Apache License 2.0); the released GGUF is a LoRA fine-tune of it, merged and quantized with [Unsloth](https://github.com/unslothai/unsloth)
