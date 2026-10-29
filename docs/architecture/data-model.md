@@ -1,7 +1,7 @@
 # Data model
 
 One SQLite file, `assistant.db`, in the app's databases directory (`getDatabasesPath()`). The Android widget reads the
-same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 8
+same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 9
 (`lib/data/db.dart`). v2 added `assistant_profile`; v3 added `chats` (backfilled from existing messages) and
 `reminders.sync`; v4 added `reminders.kind`, `tasks.alert_plan` and `assistant_preferences`; v5 added
 `pending_clarifications`; v6 adds event details, daily schedules, global task questions, message metadata,
@@ -126,3 +126,7 @@ questions use the task's `awaiting` field instead. Typed target picks use `pick:
 - `relevantForContext` retrieves active relevant facts with bounded preference fallback for planning and prose prompts. Durable personal facts are excluded from replayed chat history so deleted/replaced facts are not restored through that path.
 - `TaskRepo.relevantTasks` ranks relevant tasks and explicit older IDs before the context cap. Mutable task facts remain sourced from task rows.
 - Memory is local SQLite; Mem0 and an embedding runtime are not connected.
+
+## v9 message moods
+
+`message_moods` links a model-origin mood reading to its user conversation row. It stores chat ID, optional mood/confidence, intensity, source and timestamp; deleting the message cascades to its mood record. Missing readings retain unknown provenance and display the calm fallback.

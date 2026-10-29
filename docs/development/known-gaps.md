@@ -2,7 +2,7 @@
 
 ## Reliability acceptance
 
-The current candidate is **not accepted for broad language reliability**. Actual Qwen3-0.6B host runs recorded 97 passes / 0 failures / 5 incomplete on development cases, but 12 passes / 18 failures / 4 incomplete on held-out cases. The latter fails the proposed accuracy gate. Model-unavailable development coverage is 87 passes / 10 failures / 5 incomplete. Incomplete checks are not passes. See [reliability status](reliability-status.md) and the [P5 report](../archive/plans/reliability-workflow/P5-report.md).
+The current candidate is **not accepted for broad language reliability**. Actual Qwen3-0.6B host runs recorded 97 passes / 0 failures / 5 incomplete on development cases, but 12 passes / 18 failures / 4 incomplete on held-out cases. The latter fails the proposed accuracy gate. The historical model-unavailable development result was 87 passes / 10 failures / 5 incomplete. The 29 October checkout run recorded 83 passes / 14 failures / 5 incomplete; see the dated results in [reliability status](reliability-status.md). Incomplete checks are not passes. See [reliability status](reliability-status.md) and the [P5 report](../archive/plans/reliability-workflow/P5-report.md).
 
 The release APK was built and checked for absence of INTERNET permission, but was not installed on the phone. Real phone delivery, latency/RAM and the multi-turn corpus remain open gates.
 
@@ -11,9 +11,9 @@ The release APK was built and checked for absence of INTERNET permission, but wa
 - **Tone is followed only loosely.** The stock 0.6B ignores the tone setting and copies the prompt's example replies. The fine-tuned 0.6B picks replies of the right kind but often from another tone's set (Professional gave "That's alright, I'm listening."; Playful gave no emoji). Next step: larger, mutually exclusive tone banks and a tone-accuracy metric.
 - **The app needs the fine-tuned file.** With no stock model allowed and no download URL, a fresh install has no model until the GGUF is side-loaded (`adb push`); until then the rule engine answers.
 - **Fine-tuned model validation is optimistic.** Its validation rows come from the same generator as training; the frozen corpus has not been rerun with it. Phone checks so far are a short manual script.
-- **"I have a call on Sunday"** still gets the 9 AM default: "call" does not count as an event, so only meetings/appointments etc. ask for their time.
+- **Day-only calls:** the supported “I have a call on Sunday” form now asks for its time and retains Sunday through the answer, covered by a session regression test. Broader call phrasing and restart/device behavior still need qualification.
 - **Model ids for tasks that are not pending** are refused by the safety check, and the rules' fallback message can be clumsy ("How long should I postpone it?").
-- **Latency.** One model call per turn now. On the test phone a warm turn took about 3–4 s, 6–8 s when the task list changed, about 15–17 s for the first message after load. The ≤4 s target needs a shorter prompt (after fine-tuning) and faster kernels.
+- **Latency.** A normal semantic plan includes its reply in one call; fallback prose and optional mood readings can add inference. Deterministic replies now reach the display callback before an optional awaited mood reading. On the test phone a warm turn took about 3–4 s, 6–8 s when the task list changed, about 15–17 s for the first message after load. The ≤4 s target needs a shorter prompt (after fine-tuning) and faster kernels.
 
 ## Not built yet
 
@@ -68,3 +68,7 @@ The release APK was built and checked for absence of INTERNET permission, but wa
 - Headless cold start, lock-screen notification actions, exact alarm permission changes, battery restrictions, reboot and timezone recovery need real-phone checks. Native jobs have a nine-second deadline and an event-title fallback.
 - A daily occurrence already stored before a timezone change retains its absolute timestamp; subsequent daily occurrences use local wall time. Missed alerts older than twelve hours are not replayed.
 - The global related-context scan is bounded to 200 recent user messages. Multiple commitments or several outcomes in one sentence may require separate messages. Mocked tests do not establish model accuracy; the measured host held-out result remains below acceptance.
+
+## Core policy limits (29 October 2026)
+
+Scope detection is conservative and pattern-based, with session-local repeat state. It does not recognize all unrelated questions or persist refusal state after restart. Pending drafts and arithmetic bypass evaluation. The concise-output cap covers selected chat response branches, not all generated prose. No phone latency improvement has been measured. Indexed memory deduplication, WAL policy validation, prompt compression and a complete multi-turn corpus runner remain outstanding.

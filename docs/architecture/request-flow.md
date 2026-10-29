@@ -19,6 +19,14 @@ user turn + operation ID
 
 The legacy interpreter is the default. `CORENYTH_INTERPRETER=unified` selects the coordinator and plan-v2 contract for comparison. Both share validation, execution, receipts and journaling; only the selected interpreter executes a turn.
 
+## Scope and concise replies
+
+`CorePolicy` runs before interpretation when no missing-time draft is active and the request is not arithmetic. It conservatively recognizes selected out-of-scope forms and returns the core-functionality response without plan, prose or mood inference. Recognized core keywords and personal-profile questions pass through. Unrecognized phrasing remains available to the interpreter; this is not a complete semantic classifier.
+
+The refused topic is held in the session instance, using normalized word overlap to allow an immediate similar repeat. An unrelated policy-evaluated request resets it. The record is not persisted across restart. Pending drafts and arithmetic bypass policy evaluation. A repeat permits the normal local-model path; successful answering still depends on model availability and existing validation.
+
+Selected conversational chat responses are capped at 360 characters, with a sentence/word boundary where possible and an optional ellipsis. Requests containing “explain”, “in detail”, “tell me more” or “detailed”, and allowed repeated requests, bypass the cap. This backstop does not cover every prose path and never truncates execution receipts or database lists.
+
 ## Interpretation and context
 
 App-grounded routes handle explicit memory commands, pending target/time answers, arithmetic, completion-state questions, certain calendar moves and confirmation questions. Follow-through routes handle daily schedules, event details/outcomes, progress reports, briefings and cancellation clarification. These routes build candidates or pending changes rather than directly performing domain writes.
@@ -33,13 +41,13 @@ Remaining requests can call the local model for a grammar-constrained semantic p
 - Model-generated action titles and list ranges must agree with the request. Invalid or rejected plans use the rules fallback; unavailable-model language coverage is degraded.
 - A plan is rejected only when it is unsafe or impossible, not merely different from what the rules would do. A `#id` the model picks from Current tasks is accepted when that task's own words are in the message (`"#4 water the plants"` style refs too). A ref that names nothing falls back to the one task the message names. Postponing reads the user's own last "by/for …" duration when the model reworded it.
 - A message that asks to add or remind ("Add a task to clean my room") never becomes `complete` or `delete`, whatever the model says.
-- An event the user only mentions with a day and no time ("I have a meeting tomorrow") is not saved at a guessed 9 AM. The app asks its time and keeps the day (`ClarifyDraft.day`). The answer may carry the topic ("3pm, it's about the budget"); the topic is stored on the event.
+- An event the user only mentions with a day and no time ("I have a meeting tomorrow", or the supported day-only call form "I have a call on Sunday") is not saved at a guessed 9 AM. The app asks its time and keeps the day (`ClarifyDraft.day`). The answer may carry the topic ("3pm, it's about the budget"); the topic is stored on the event.
 
 ## Validation, execution and replies
 
 `validatePlan` checks authorization and field/target evidence for both rule and model candidates. The executor reports committed/replayed/read-only/no-write/failed results and scheduler status. Confirmations follow persisted state and receipts, not an unvalidated model success sentence. “Scheduled” means accepted by the scheduler, not proof that a person saw an alarm.
 
-Every plan carries a required `reply`: the model's own words in the user's tone, written in the same call as the plan (one model call per turn).
+Every plan carries a required `reply`: the model's own words in the user's tone, written in the same call as the plan (the normal plan-and-reply path uses one call).
 
 - **Chat:** the plan's reply is the answer when it passes `safeReply`, is not groundless (no task, date or schedule claims) and does not parrot the user. Only an unusable reply triggers the separate bounded reply call over recent turns.
 - **Writes** (create, complete, delete, postpone): the app's exact confirmation comes first, then the model's line is appended when it passes `isSafeFollowUp` (no digits, no day/time words, no claims of acting, no parroting). Example: "Marked #10 buy bread done. Nice, one less thing to do!"
@@ -47,6 +55,8 @@ Every plan carries a required `reply`: the model's own words in the user's tone,
 - Clarifications, refusals and list/recall answers keep the app's text.
 
 Other conversational wording (outcomes, hypotheticals, complaints) is still a separate bounded reply call over supplied facts, with the same rejections and a deterministic fallback. These checks do not guarantee conversational quality. The chat displays the final validated response rather than an executable draft.
+
+When no inference has run, a validated deterministic response is sent to the display callback before optional `_moodOnlyCall` inference. Assistant-message persistence, final callback and completion still follow that awaited call. This improves first display; it does not make the turn asynchronous or establish a device latency result. Mechanical inputs and scope refusals skip the mood-only call. The budget allows one plan and up to two reply calls, so one call per turn is not a universal guarantee.
 
 The operation journal persists validated actions and receipts. Retrying a committed operation recovers existing stamped rows rather than creating another reminder or resolving “in ten minutes” against a later restart clock. Startup recovery skips active/recent operations. A new request receives a distinct operation ID.
 

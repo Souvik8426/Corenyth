@@ -4,6 +4,8 @@
 
 <h1 align="center">Corenyth</h1>
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/Souvik8426/badge.svg)](https://hub.xerj.org/contributors/Souvik8426)
+
 <p align="center">
   <b>A local-first personal assistant that lives entirely on your Android phone.</b><br>
   Tasks, exact reminders, contextual follow-through, and personal memory—powered by an on-device LLM.<br>

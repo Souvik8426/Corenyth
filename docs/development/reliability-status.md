@@ -1,6 +1,22 @@
-# Reliability status — 19 October 2026
+# Reliability status
 
 **Broad reliability acceptance was rejected.** The repairs below are implemented, but unseen phrasing still fails. This is a review candidate, not a claim that the assistant is fully fixed. The candidate was not installed on the phone.
+
+## Update — 29 October 2026: scope, clarification and first display
+
+Implemented conversation-local scope handling, repeated-request allowance, selected-chat concision, reference-only memory framing, and day-only-call time clarification. Deterministic confirmations can reach the display callback before optional mood inference; turn completion still awaits that inference. See [request flow](../architecture/request-flow.md) for boundaries.
+
+| Check | Recorded result |
+|---|---|
+| Complete legacy suite | 503 passed, 2 skipped |
+| Complete unified suite | 503 passed, 2 skipped (before the final scope similarity refinement) |
+| Final targeted policy/routing/temporal checks | 78 passed |
+| Static analysis | No errors or warnings; existing informational lints remain |
+| Frozen corpus integrity | Passed |
+| Rules-only development state evaluation | 83 passed, 14 failed, 5 incomplete |
+| Current tuned-model and device qualification | Not run; no phone connected or GGUF found in checked locations |
+
+The rules-only run is saved as [recorded state](../../eval/results/rules-dev-2026-10-29.json) and [scored checks](../../eval/results/rules-dev-2026-10-29-score.json). It preceded the final scope similarity/profile refinement and concise-output changes, so it is a dated checkpoint rather than final-source qualification. The old result files were preserved. Unit-test success does not resolve corpus failures or incomplete checks. No new held-out accuracy or phone performance result is claimed.
 
 ## Update — 20 October 2026: model-driven replies and a fine-tuned 0.6B
 

@@ -10,6 +10,7 @@ import '../data/repos.dart';
 import '../mascot/mascot_emotion.dart';
 import 'authorization.dart';
 import 'calculator.dart';
+import 'core_policy.dart';
 import 'engine.dart';
 import 'follow_through.dart';
 import 'rule_engine.dart';
@@ -265,6 +266,8 @@ class AssistantSession {
   ToolCall? _memoryEffect;
   String? _modelAuth;
   bool _dryRun = false, _pickStored = false;
+  final _corePolicy = CorePolicy();
+  bool _scopeRefused = false;
   var _budget = _ModelBudget();
   var _auth = const AuthorizationReading(Authorization.statement, '');
   static final _rand = Random();
@@ -497,13 +500,19 @@ class AssistantSession {
         reply = '$reply $_modelLine';
         _diag['reply'] = 'model_line';
       }
+      // The committed confirmation is available immediately; optional mood
+      // reading must not delay its first display. Final persistence and turn
+      // ownership still settle before another turn can use this session.
+      if (_budget.plan + _budget.reply == 0 && !_cancelled) {
+        onText?.call(reply);
+      }
       // A turn the model never saw (deterministic routes such as the grounded
       // task questions) otherwise has no reading of the user's message at
       // all. One budgeted reply-kind call supplies it on the loaded-model
       // path: its mood envelope is the reading; its generated text is
       // discarded (the reply above is final and already validated). Mechanical
       // inputs (#id picks, bare times, arithmetic) never pay this call.
-      if (_budget.plan + _budget.reply == 0 &&
+      if (!_scopeRefused && _budget.plan + _budget.reply == 0 &&
           !_dryRun &&
           !_cancelled &&
           engineInUse == engine.name &&
@@ -604,6 +613,15 @@ class AssistantSession {
 
   Future<CandidatePlan> _plan(String text, void Function(String)? onText,
       Map<String, int> timing) async {
+    _scopeRefused = await _draft() == null &&
+        calculate(text) == null && _corePolicy.refuse(text);
+    if (_scopeRefused) {
+      _routeId = RouteId.rules;
+      _diag['route'] = 'scope';
+      _diag['route_id'] = _routeId!.name;
+      return CandidatePlan(interpreter: _mode, route: _routeId!,
+          call: _say(CorePolicy.refusal), authorization: _auth);
+    }
     final explicit = RuleEngine.isExplicitRemember(text);
     final memo = _memoryCandidate(text, explicit);
     if (memo != null) {
@@ -1599,6 +1617,17 @@ class AssistantSession {
   Future<ToolCall> _adjust(ToolCall c) async {
     final a = c.args, due = a['due'];
     final r = c.tool.startsWith('create_') ? _fallback.readWhen(_said) : null;
+    if (c.tool == 'create_task' && due is DateTime &&
+        r != null && r.dated && !r.timed &&
+        RegExp(r'^call(?: with .+)?$', caseSensitive: false)
+            .hasMatch((a['title'] as String).trim())) {
+      final draft = ClarifyDraft(tool: c.tool, title: a['title'] as String,
+          day: due.toIso8601String().substring(0, 10));
+      _diag['clarify'] = 'event_time';
+      _note = null;
+      await _setDraft(draft);
+      return _say(draft.prompt);
+    }
     final rel = r?.anchor?.relation;
     final deadline = r != null &&
         r.role == TemporalRole.deadline &&
@@ -2157,12 +2186,14 @@ class AssistantSession {
         // One call per turn: the plan already carries the toned answer.
         if (planned != null && safeReply(planned, text)) {
           _diag['reply'] = 'model';
-          return _say(planned.trim());
+          return _say(_corePolicy.concise(planned.trim(), text));
         }
         final said = await _converse(text, const [], planned ?? '',
             'Small talk or a general message. Reply naturally to what the user actually said, in one or two sentences.',
             history: await _chatHistory());
-        if (said.isNotEmpty && !_groundless(said, open)) return _say(said);
+        if (said.isNotEmpty && !_groundless(said, open)) {
+          return _say(_corePolicy.concise(said, text));
+        }
         return planned == null ? null : _say(planned);
       case 'list':
         if (command()) return null;
@@ -2431,7 +2462,8 @@ class AssistantSession {
         at != null &&
         reading.dated &&
         !reading.timed &&
-        isEventTitle(title)) {
+        (isEventTitle(title) ||
+            RegExp(r'^call(?: with .+)?$', caseSensitive: false).hasMatch(title.trim()))) {
       return askTime('event_time', '', day: at);
     }
     final problem = RuleEngine.timeProblem(reading, reminder, _now());

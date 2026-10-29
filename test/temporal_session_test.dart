@@ -86,6 +86,14 @@ void main() {
     return s;
   }
 
+  test('day-only call asks time and keeps the Sunday date', () async {
+    final s = await open(false);
+    expect(await s.handle('I have a call on Sunday'), contains('What time'));
+    expect(await tasks.list(), isEmpty);
+    await s.handle('3pm');
+    expect((await tasks.list()).single.dueAt, t(15, 0, 25));
+  });
+
   /// Enabled rows straight from SQLite: [ReminderRepo.upcoming] filters by
   /// the wall clock, and these tests run at the plan's fixed 07:41.
   Future<List<Reminder>> enabled() async =>

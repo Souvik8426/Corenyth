@@ -40,6 +40,8 @@ docs/
 
 | Doc | Covers |
 |---|---|
+| [architecture-next-steps.md](development/architecture-next-steps.md) | Source-grounded implementation sequence after the Mem0/Hermes study |
+| [architecture-study-mem0-hermes.md](development/architecture-study-mem0-hermes.md) | Memory and agent architecture research; proposed gains require validation |
 | [reliability-status.md](development/reliability-status.md) | Implemented repairs, recorded test and corpus results, open acceptance gates |
 | [known-gaps.md](development/known-gaps.md) | What is not built yet, and known rough edges |
 | [device-evaluation.md](development/device-evaluation.md) | Checking real model behavior and notification delivery on a phone |

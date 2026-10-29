@@ -97,6 +97,16 @@ void main() {
     model = _Model();
   });
 
+  test('scope refusal skips all inference and immediate repeat is allowed', () async {
+    final s = await started();
+    addTearDown(s.close);
+    expect(await s.handle('Explain this code'), contains('not in my core functionality'));
+    expect(model.calls, 0);
+    await s.handle('Please explain the code');
+    expect(model.calls, greaterThan(0));
+    expect(await tasks.list(), isEmpty);
+  });
+
   test('screenshot: catch-up typo recalls every pending task, sets no alarm',
       () async {
     await tasks.create('pay rent', due: _now.subtract(const Duration(days: 2)));
@@ -133,8 +143,8 @@ void main() {
     final s = await started();
     final reply = await s.handle('What is the capital of France?');
     expect(memory.searches, 0);
-    expect(reply, contains("can't look that up"));
-    expect(s.lastDiagnostics['intent'], 'recall');
+    expect(reply, contains("not in my core functionality"));
+    expect(model.calls, 0);
     model.output = '{"intent":"chat","reply":"Hi! How can I help?"}';
     expect(await s.handle('hi'), 'Hi! How can I help?');
   });
