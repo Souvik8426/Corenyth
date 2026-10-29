@@ -1,0 +1,5 @@
+Analyzing Corenyth...                                           
+
+warning • The URI 'package:flutter_lints/flutter.yaml' included in '/Users/kawaiii_neko/Documents/GitHub/Corenyth/analysis_options.yaml' can't be found when analyzing '/Users/kawaiii_neko/Documents/GitHub/Corenyth' • analysis_options.yaml:1:10 • include_file_not_found
+
+1 issue found. (ran in 3.9s)

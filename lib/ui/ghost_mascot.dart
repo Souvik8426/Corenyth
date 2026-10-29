@@ -129,7 +129,7 @@ class _GhostMascotState extends State<GhostMascot>
   @override
   Widget build(BuildContext context) => Semantics(
         image: true,
-        label: 'Corenyth ghost mascot',
+        label: '${_emotion.mood.name}, Corenyth ghost mascot',
         value: _emotion.mood.name,
         child: RepaintBoundary(
           child: SizedBox(
@@ -203,6 +203,13 @@ class _GhostPainter extends CustomPainter {
 
     final t = animated ? clock.value * 42 : 0.0;
 
+    // Small stages cannot spare the pixels a full-swing pose needs (1 px of
+    // an 18 px mascot is ~13 logical units), so posture amplitudes scale
+    // down with the canvas while colours and eye shapes keep their mood
+    // legibility. At 132 px and up the factor is 1: nothing changes.
+    final poseScale =
+        ((size.width - 24.0) / (132.0 - 24.0)).clamp(0.0, 1.0);
+
     // Harmonic oscillators that all divide the 42-second loop cleanly,
     // ensuring continuous phase across mood transitions without resetting clock.
     final waveCalm = (1 - math.cos(t * 2 * math.pi / 2.8)) / 2; // 15 cycles
@@ -210,8 +217,16 @@ class _GhostPainter extends CustomPainter {
     final waveFast = (1 - math.cos(t * 2 * math.pi / 1.68)) / 2; // 25 cycles
     final waveSlow = (1 - math.cos(t * 2 * math.pi / 4.2)) / 2; // 10 cycles
     final waveCurious = (1 - math.cos(t * 2 * math.pi / 3.0)) / 2; // 14 cycles
-    final swaySignal = animated ? math.sin(t * 2 * math.pi / 3.5) : 0.0; // 12 cycles
+    final swaySignal =
+        animated ? math.sin(t * 2 * math.pi / 3.5) * poseScale : 0.0; // 12 cycles
     final searchSignal = animated ? math.sin(t * 2 * math.pi / 2.8) : 0.0;
+    // Concerned micro-wobble: two incommensurate gentle harmonics summing to
+    // well under 1.2 logical px, reading as hesitant restlessness rather than
+    // jitter. Uses the never-resetting clock, so it stays phase-continuous.
+    final wobble = animated
+        ? math.sin(t * 2 * math.pi / (42.0 / 29.0)) * 0.65 +
+            math.sin(t * 2 * math.pi / (42.0 / 23.0)) * 0.35
+        : 0.0;
 
     final activeTotal = happy + excited + supportive + concerned + curious;
     final calmShare = math.max(0.0, 1.0 - activeTotal) + wCalm * 0.15;
@@ -228,35 +243,46 @@ class _GhostPainter extends CustomPainter {
     // Single-trigger celebratory bounce when entering excited.
     final b = animated ? bounce.value : 0.0;
     final bounceActive = (b > 0.0 && b < 1.0) ? 1.0 : 0.0;
-    final bounceHop =
-        bounceActive * math.sin(b * math.pi * 2.0) * (1.0 - b) * (1.0 - b);
+    final bounceHop = bounceActive *
+        math.sin(b * math.pi * 2.0) *
+        (1.0 - b) *
+        (1.0 - b) *
+        poseScale;
     final bounceLift = bounceActive *
         math.sin(b * math.pi) *
         (1.0 - 0.35 * b) *
-        (0.6 + 0.4 * excited.clamp(0.0, 1.0));
+        (0.6 + 0.4 * excited.clamp(0.0, 1.0)) *
+        poseScale;
 
     // Posture: tilt, stance lift/settle, horizontal lean, and squash/stretch.
-    final postureTilt = (happy * 0.088) -
-        (excited * 0.105) -
-        (supportive * 0.102) +
-        (curious * 0.118) +
-        swaySignal * (happy * 0.025 + excited * 0.04 + curious * 0.045);
+    final postureTilt = ((happy * 0.088) -
+            (excited * 0.105) -
+            (supportive * 0.102) +
+            (curious * 0.118) +
+            (concerned * wobble * 0.0075) +
+            swaySignal * (happy * 0.025 + excited * 0.04 + curious * 0.045)) *
+        poseScale;
 
-    final postureDx = (curious * 3.8) -
-        (supportive * 1.2) +
-        swaySignal * (happy * 1.8 + excited * 2.6 + curious * 3.4);
+    final postureDx = ((curious * 4.6) -
+            (supportive * 1.2) +
+            (concerned * wobble * 1.0) +
+            swaySignal * (happy * 1.8 + excited * 2.6 + curious * 3.4)) *
+        poseScale;
 
-    final postureDy = -(happy * 4.2) -
-        (excited * 7.5) +
-        (supportive * 4.2) +
-        (concerned * 2.6) -
-        (curious * 2.2) -
-        (bounceLift * 11.0) +
-        (bounceHop * 4.0);
+    final postureDy = (-(happy * 4.2) -
+            (excited * 7.5) +
+            (supportive * 4.2) +
+            (concerned * 2.6) +
+            (concerned * wobble * 0.8) -
+            (curious * 2.2) -
+            (bounceLift * 11.0) +
+            (bounceHop * 4.0)) *
+        poseScale;
 
     final floatAmplitude = 6.5 *
+        poseScale *
         ((calmShare * 1.0 +
-                happy * 1.18 +
+                happy * 1.26 +
                 excited * 1.35 +
                 supportive * 0.65 +
                 concerned * 0.32 +
@@ -264,20 +290,22 @@ class _GhostPainter extends CustomPainter {
             waveNorm);
     final floatDy = -floatAmplitude * blendedWave;
 
-    final stretchAmount = ((calmShare * 0.055 +
-                happy * 0.068 +
-                excited * 0.095 +
-                supportive * 0.032 +
-                concerned * 0.016 +
-                curious * 0.048) /
-            waveNorm) *
-        blendedWave;
+    final stretchAmount = (((calmShare * 0.055 +
+                    happy * 0.068 +
+                    excited * 0.095 +
+                    supportive * 0.032 +
+                    concerned * 0.016 +
+                    curious * 0.048) /
+                waveNorm) *
+            blendedWave) *
+        poseScale;
 
     final scaleX = 1.0 +
         (happy * 0.022) -
         (excited * 0.028) +
-        (supportive * 0.032) +
-        (concerned * 0.008) -
+        (supportive * 0.052 * poseScale) -
+        (concerned * 0.010 * poseScale) +
+        (excited * 0.018 * waveFast * poseScale) -
         (stretchAmount * 0.35) -
         (bounceLift * 0.045) +
         (bounceHop * 0.04);
@@ -285,8 +313,9 @@ class _GhostPainter extends CustomPainter {
     final scaleY = 1.0 +
         (happy * 0.012) +
         (excited * 0.045) -
-        (supportive * 0.022) -
-        (concerned * 0.014) +
+        (supportive * 0.020 * poseScale) -
+        (concerned * 0.020 * poseScale) -
+        (excited * 0.018 * waveFast * poseScale) +
         (curious * 0.015) +
         stretchAmount +
         (bounceLift * 0.065) -
@@ -296,7 +325,12 @@ class _GhostPainter extends CustomPainter {
     canvas.scale(size.width / 231.0);
 
     // Subtle ambient aura behind the ghost for warm/comforting states,
-    // strictly inside the 231 x 311.85 logical canvas bounds.
+    // strictly inside the 231 x 311.85 logical canvas bounds. The gradient
+    // reaches zero alpha exactly at the oval's widest extent (its taller
+    // axis lies entirely beyond that radius), so the fill is invisible on
+    // the oval boundary and anti-aliasing cannot bleed onto the border at
+    // any render size.
+    const auraHalfW = 104.0, auraHalfH = 128.0;
     final auraStrength =
         (excited * 0.34 + happy * 0.18 + supportive * 0.20 + curious * 0.14)
             .clamp(0.0, 0.42);
@@ -315,11 +349,12 @@ class _GhostPainter extends CustomPainter {
         curious: curious,
       );
       final auraCenter = Offset(
-        (115.4 + postureDx).clamp(95.0, 135.0),
-        (152.0 + postureDy + floatDy * 0.5).clamp(125.0, 178.0),
+        (115.4 + postureDx).clamp(auraHalfW, 231.0 - auraHalfW),
+        (152.0 + postureDy + floatDy * 0.5).clamp(auraHalfH, 311.0 - auraHalfH),
       );
       canvas.drawOval(
-        Rect.fromCenter(center: auraCenter, width: 216, height: 274),
+        Rect.fromCenter(
+            center: auraCenter, width: auraHalfW * 2, height: auraHalfH * 2),
         Paint()
           ..shader = RadialGradient(
             colors: [
@@ -328,7 +363,7 @@ class _GhostPainter extends CustomPainter {
               auraColor.withValues(alpha: 0),
             ],
             stops: const [0.0, 0.58, 1.0],
-          ).createShader(Rect.fromCircle(center: auraCenter, radius: 138)),
+          ).createShader(Rect.fromCircle(center: auraCenter, radius: auraHalfW)),
       );
     }
 
@@ -338,7 +373,7 @@ class _GhostPainter extends CustomPainter {
     const pivotY = 160.0;
     const baseFit = 0.86;
     canvas.translate(
-      pivotX + postureDx.clamp(-6.5, 6.5),
+      pivotX + postureDx.clamp(-7.0, 7.0),
       pivotY + 6.0 + (postureDy + floatDy).clamp(-15.5, 12.0),
     );
     canvas.rotate(postureTilt.clamp(-0.14, 0.14));
@@ -554,6 +589,21 @@ class _GhostPainter extends CustomPainter {
       curious: curious,
     );
 
+    // Warm cheek blush for joyful states, drawn in code and softly blurred.
+    // The discs sit well inside the body silhouette and are clipped to it
+    // anyway, so the blur can never reach the canvas border at any size.
+    final blushStrength = (happy * 0.30 + excited * 0.12).clamp(0.0, 0.36);
+    if (blushStrength > 0.02) {
+      canvas.save();
+      canvas.clipPath(_bodyPath);
+      _blushPaint
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8)
+        ..color = const Color(0xFFFF9EC4).withValues(alpha: blushStrength);
+      canvas.drawCircle(const Offset(54.5, 150.0), 11.5, _blushPaint);
+      canvas.drawCircle(const Offset(176.3, 150.0), 11.5, _blushPaint);
+      canvas.restore();
+    }
+
     for (final side in [-1.0, 1.0]) {
       _paintEye(
         canvas: canvas,
@@ -591,72 +641,72 @@ class _GhostPainter extends CustomPainter {
     // Emotional eye position offsets (curious is asymmetric; supportive draws
     // slightly closer and softer; excited lifts high).
     final moodDx = (excited * side * 1.8) -
-        (supportive * side * 2.8) -
-        (concerned * side * 1.0) +
-        (curious * (isRight ? 5.2 : 4.2));
-    final moodDy = -(happy * 3.2) -
-        (excited * 6.5) +
-        (supportive * 4.5) +
-        (concerned * 2.2) +
-        (curious * (isRight ? -6.5 : 4.2));
+        (supportive * side * 3.4) -
+        (concerned * side * 1.2) +
+        (curious * (isRight ? 6.0 : 3.2));
+    final moodDy = -(happy * 4.0) -
+        (excited * 7.5) +
+        (supportive * 5.2) +
+        (concerned * 2.8) +
+        (curious * (isRight ? -7.2 : 4.8));
 
     // Keep combined emotional offset + pointer gaze strictly inside the head.
     final cx = (baseX + moodDx + gaze.dx).clamp(52.0, 179.0);
     final cy = (baseY + moodDy + gaze.dy).clamp(84.0, 154.0);
 
     final rx = (20.0 +
-            (happy * 3.6) +
-            (excited * 3.8) +
-            (supportive * 1.6) +
-            (concerned * 2.2) +
-            (curious * (isRight ? 3.8 : -1.8)))
+            (happy * 4.2) +
+            (excited * 4.6) +
+            (supportive * 2.0) +
+            (concerned * 1.4) +
+            (curious * (isRight ? 4.6 : -2.6)))
         .clamp(14.0, 26.0);
 
     final baseRy = (30.0 -
-            (happy * 3.5) +
-            (excited * 4.2) -
-            (supportive * 3.8) -
+            (happy * 4.2) +
+            (excited * 5.0) -
+            (supportive * 4.4) -
             (concerned * 10.5) +
-            (curious * (isRight ? 4.0 : -9.0)))
+            (curious * (isRight ? 5.0 : -10.5)))
         .clamp(14.0, 36.0);
     final ry = math.max(2.6, baseRy * blink);
 
-    final eyeTilt = -(happy * side * 0.06) -
-        (excited * side * 0.08) +
-        (supportive * side * 0.16) +
-        (curious * 0.085);
+    final eyeTilt = -(happy * side * 0.075) -
+        (excited * side * 0.09) +
+        (supportive * side * 0.19) +
+        (curious * 0.11);
 
     // Shape parameters in normalized eye coordinates:
     // topArch: 1.0 is standard oval top; lower values flatten the top lid.
     final topArch = (1.0 +
-            (happy * 0.08) +
-            (excited * 0.10) -
-            (supportive * 0.08) -
-            (concerned * 0.38) +
-            (curious * (isRight ? 0.12 : -0.30)))
-        .clamp(0.48, 1.22);
+            (happy * 0.10) +
+            (excited * 0.12) -
+            (supportive * 0.10) -
+            (concerned * 0.44) +
+            (curious * (isRight ? 0.14 : -0.36)))
+        .clamp(0.44, 1.26);
 
     // topOuterDrop: positive values slope the outer upper lid gently downward
     // (supportive empathy), negative values lift the outer lid (happy/excited).
     final topOuterDrop = (supportive * 0.48) -
-        (happy * 0.10) -
-        (excited * 0.12) -
-        (curious * (isRight ? 0.12 : -0.05));
+        (happy * 0.14) -
+        (excited * 0.16) -
+        (curious * (isRight ? 0.16 : -0.08));
 
     // bottomSmileArch: 0.0 is standard oval bottom (+1.0 * ry);
     // approaching 1.0 arches the lower lid upward into a delighted crescent.
     final smileArch =
-        (happy * 0.96 + excited * 0.22 + supportive * 0.14).clamp(0.0, 1.05);
+        (happy * 1.0 + excited * 0.30 + supportive * 0.18).clamp(0.0, 1.05);
 
     final cornerInY = ((happy * 0.24) -
-            (supportive * 0.12) +
-            (concerned * 0.04) +
+            (supportive * 0.14) -
+            (concerned * 0.12) +
             (curious * (isRight ? 0.0 : 0.05))) *
         ry;
     final cornerOutY = ((happy * 0.16) -
             (excited * 0.10) +
-            (supportive * 0.26) +
-            (concerned * 0.04) -
+            (supportive * 0.28) +
+            (concerned * 0.10) -
             (curious * (isRight ? 0.06 : 0.0))) *
         ry;
 
@@ -722,7 +772,8 @@ class _GhostPainter extends CustomPainter {
       final waist = 3.6 * starWeight;
       final sx = (gaze.dx * 0.18).clamp(-3.0, 3.0);
       final sy = -2.0 + (gaze.dy * 0.18).clamp(-3.0, 3.0);
-      final star = Path()
+      final star = _starPath..reset();
+      star
         ..moveTo(sx, sy - starRy)
         ..quadraticBezierTo(sx + waist, sy - waist, sx + starRx, sy)
         ..quadraticBezierTo(sx + waist, sy + waist, sx, sy + starRy)
@@ -732,7 +783,7 @@ class _GhostPainter extends CustomPainter {
       eyePath = Path.combine(PathOperation.difference, eyePath, star);
     }
 
-    canvas.drawPath(eyePath, Paint()..color = eyeColor);
+    canvas.drawPath(eyePath, _eyePaint..color = eyeColor);
 
     // Subtle composed focus pupil/cutout for concerned/curious/supportive to
     // keep small sizes (18px/30px) and welcome size (132px) rich and readable.
@@ -759,12 +810,12 @@ class _GhostPainter extends CustomPainter {
 
     // Soft expressive brow contour above the eye that fades in smoothly for
     // active moods (0 alpha in calm) to reinforce sympathy, focus, or curiosity.
-    final browAlpha = ((supportive * 0.78) +
-            (concerned * 0.82) +
-            (curious * (isRight ? 0.82 : 0.58)) +
-            (happy * 0.38) +
-            (excited * 0.48))
-        .clamp(0.0, 0.85);
+    final browAlpha = ((supportive * 0.84) +
+            (concerned * 0.88) +
+            (curious * (isRight ? 0.86 : 0.64)) +
+            (happy * 0.42) +
+            (excited * 0.52))
+        .clamp(0.0, 0.88);
     if (browAlpha > 0.02) {
       final browY = topPeakY -
           8.5 -
@@ -775,12 +826,14 @@ class _GhostPainter extends CustomPainter {
       final browInY = browY +
           (happy * 3.0) +
           (excited * 3.5) -
-          (supportive * 4.5) +
+          (supportive * 5.5) -
+          (concerned * 3.2) +
           (curious * (isRight ? 3.5 : 0.5));
       final browOutY = browY +
           (happy * 3.5) +
           (excited * 2.5) +
-          (supportive * 8.5) +
+          (supportive * 9.5) +
+          (concerned * 2.5) +
           (curious * (isRight ? 2.0 : 1.0));
       final browPeakY = browY -
           (happy * 4.5) -
@@ -794,11 +847,7 @@ class _GhostPainter extends CustomPainter {
         ..quadraticBezierTo(0, browPeakY, outX * 0.88, browOutY);
       canvas.drawPath(
         browPath,
-        Paint()
-          ..color = eyeColor.withValues(alpha: browAlpha)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4.6
-          ..strokeCap = StrokeCap.round,
+        _browPaint..color = eyeColor.withValues(alpha: browAlpha),
       );
     }
 
@@ -853,3 +902,14 @@ class _GhostPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _GhostPainter oldDelegate) => true;
 }
+
+  // Expression painting runs every animation frame, so the hot-path Paint
+  // and Path objects below are reused members rather than per-frame
+  // allocations.
+  final Paint _eyePaint = Paint();
+  final Paint _browPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeWidth = 4.6;
+  final Paint _blushPaint = Paint();
+  final Path _starPath = Path();

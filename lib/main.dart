@@ -1,5 +1,8 @@
+import 'assistant/personalities.dart';
 import 'mascot/mascot_emotion.dart';
+import 'mascot/mood_store.dart';
 import 'ui/mascot_emotion_scope.dart';
+import 'ui/stream_coalescer.dart';
 import 'ui/model_loading_indicator.dart';
 import 'dart:async';
 import 'dart:ui' show PlatformDispatcher;
@@ -602,7 +605,7 @@ class _WelcomeQuestionnaireState extends State<WelcomeQuestionnaire> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _occupation = TextEditingController();
-  String _tone = 'cheerful';
+  String _tone = 'friendly';
   bool _saving = false;
 
   @override
@@ -665,21 +668,15 @@ class _WelcomeQuestionnaireState extends State<WelcomeQuestionnaire> {
                           decoration: const InputDecoration(
                               labelText: 'Choose my tone',
                               border: OutlineInputBorder()),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'mature', child: Text('Mature')),
-                            DropdownMenuItem(
-                                value: 'cheerful', child: Text('Cheerful')),
-                            DropdownMenuItem(
-                                value: 'playful', child: Text('Playful')),
-                            DropdownMenuItem(
-                                value: 'calm', child: Text('Calm')),
-                            DropdownMenuItem(
-                                value: 'professional',
-                                child: Text('Professional')),
+                          items: [
+                            for (final tone in Personalities.names)
+                              DropdownMenuItem(
+                                  value: tone,
+                                  child: Text(
+                                      '${tone[0].toUpperCase()}${tone.substring(1)}'))
                           ],
                           onChanged: (value) =>
-                              setState(() => _tone = value ?? 'cheerful'),
+                              setState(() => _tone = value ?? 'friendly'),
                         ),
                         const SizedBox(height: 22),
                         FilledButton(
@@ -737,6 +734,12 @@ class _ChatPageState extends State<ChatPage> {
   String? _fallback;
   var state = SessionState.idle;
 
+  /// The one owner of this conversation's mascot emotion (never an
+  /// interpretation of message text). Rebuilt per conversation; its history
+  /// comes from the stored per-turn mood records.
+  MoodController? _moods;
+  StreamCoalescer? _coalescer;
+
   @override
   void initState() {
     super.initState();
@@ -751,6 +754,9 @@ class _ChatPageState extends State<ChatPage> {
       _error = null;
       _fallback = null;
       log.clear();
+      _moods?.dispose();
+      _moods = null;
+      _streaming = null;
     });
     try {
       await shutdown();
@@ -759,8 +765,11 @@ class _ChatPageState extends State<ChatPage> {
       final messages = await widget.services.conversations.messages(id);
       if (!mounted) return;
       _conversationId = id;
+      final store = MoodController(
+          conversationId: id, history: await _storedMoods(id, messages));
       setState(() {
         log.addAll(messages);
+        _moods = store;
         _loading = false;
       });
       _publishEmotion();
@@ -775,25 +784,72 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  /// Stored per-turn mood records of this conversation, keyed by user message
+  /// row id. Messages with no record (old conversations, proactive rows)
+  /// display unknown/calm; loading never invokes inference, and a row with
+  /// invalid optional metadata is skipped — it never makes the conversation
+  /// unloadable.
+  Future<Map<int, TurnMood>> _storedMoods(
+      String id, List<Message> messages) async {
+    Map<int, Map<String, Object?>> rows;
+    try {
+      rows = await widget.services.moods.rowsForChat(id);
+    } catch (_) {
+      return const {}; // unreadable records: unknown/calm, never a guess
+    }
+    final out = <int, TurnMood>{};
+    for (final m in messages) {
+      final rowId = m.id;
+      if (rowId == null || !rows.containsKey(rowId)) continue;
+      final record = TurnMood.fromDbRow(rows[rowId]!, conversationId: id);
+      if (record != null) out[rowId] = record;
+    }
+    return out;
+  }
+
   /// Re-reads the stored messages (check-ins written in the background)
-  /// without touching the session; skipped while a reply is running.
+  /// without touching the session; skipped while a reply is running. Stored
+  /// mood records are re-read with them, so rows written by another engine
+  /// (the background proactive isolate) resolve their identities too.
   Future<void> refresh() async {
     final id = _conversationId;
     if (id == null || _sending || _loading) return;
     try {
       final messages = await widget.services.conversations.messages(id);
       if (!mounted || _sending || _loading || id != _conversationId) return;
+      final store = _moods;
+      if (store != null) {
+        try {
+          final rows = await widget.services.moods.rowsForChat(id);
+          for (final m in messages) {
+            final rowId = m.id;
+            if (rowId == null || !rows.containsKey(rowId)) continue;
+            final record = TurnMood.fromDbRow(rows[rowId]!, conversationId: id);
+            if (record != null) store.adopt(rowId, record);
+          }
+        } catch (_) {} // existing history stays; the next refresh retries
+      }
       setState(() => log
         ..clear()
         ..addAll(messages));
-      _publishEmotion();
       _scrollToEnd();
     } catch (_) {} // the shown log stays; the next refresh retries
   }
 
+  /// The home mascot's emotion: the latest submitted turn's stored reading.
+  /// Selected history changes arrive through [ChatView.onEmotionChanged];
+  /// this only seeds it after a (re)load, so browsing history is preserved.
   void _publishEmotion() {
-    widget.onEmotionChanged
-        ?.call(const MascotEmotionInterpreter().interpret(log));
+    final store = _moods;
+    if (store == null) return;
+    TurnMood? latest;
+    for (final m in log.reversed) {
+      if (m.role == 'user' && m.kind == null) {
+        latest = store.moodFor(m.id);
+        break;
+      }
+    }
+    widget.onEmotionChanged?.call(latest?.display ?? MascotEmotion.calm);
   }
 
   Future<void> _onModelLoad() async {
@@ -848,6 +904,15 @@ class _ChatPageState extends State<ChatPage> {
       _streaming = null;
     });
     widget.onBusyChanged?.call(true);
+    // Live model output is batched to a small interval: real streamed chunks
+    // arrive merged, never a typewriter reveal of a finished answer.
+    final coalescer = StreamCoalescer((live) {
+      if (!mounted) return;
+      setState(() => _streaming = live.isEmpty ? null : live);
+      _scrollToEnd();
+    });
+    _coalescer = coalescer;
+    final moods = _moods;
     try {
       if (state == SessionState.idle) await _open();
       final current = session;
@@ -856,18 +921,50 @@ class _ChatPageState extends State<ChatPage> {
           current.current != SessionState.listening) return;
       input.clear();
       setState(() => log.add(Message('user', text)));
-      _publishEmotion();
       _scrollToEnd();
-      final reply = await current.handle(text, onText: (text) {
-        if (mounted) {
-          setState(() => _streaming = text);
-          _scrollToEnd();
-        }
-      });
+      // handle() stamps lastOperationId synchronously and its first await
+      // yields before any model event, so opening the mood window right
+      // after the call covers exactly this turn's events.
+      final sent = current.handle(
+        text,
+        onText: (text) {
+          if (mounted) {
+            coalescer.cancel(); // the final answer supersedes any draft
+            setState(() => _streaming = text);
+            _scrollToEnd();
+          }
+        },
+        onStream: coalescer.add,
+        onMood: (mood) {
+          if (mounted && moods != null) {
+            setState(() => moods.accept(mood));
+          }
+        },
+      );
+      moods?.beginTurn(current.lastOperationId ?? '');
+      final reply = await sent;
       widget.services.recordTurn(current);
       if (mounted) {
         // '' = cancelled before any reply: drop the streamed draft, add nothing.
         setState(() {
+          // Reconcile this send's optimistic user message with the row the
+          // session persisted for it, before the live state clears: the
+          // accepted mood is keyed by that row id, so the completed exchange
+          // keeps the emotion the streaming view showed. Positional, never a
+          // text match — it is the message this very call appended (guarded
+          // by _sending), so identical consecutive texts stay distinct.
+          final rowId = current.lastUserRowId;
+          if (rowId != null &&
+              log.isNotEmpty &&
+              log.last.role == 'user' &&
+              log.last.id == null) {
+            final last = log.removeLast();
+            log.add(Message('user', last.content,
+                id: rowId,
+                createdAt: last.createdAt,
+                taskId: last.taskId,
+                kind: last.kind));
+          }
           if (reply.isNotEmpty) log.add(Message('assistant', reply));
           _streaming = null;
           _fallback = current.lastFallbackReason;
@@ -876,7 +973,13 @@ class _ChatPageState extends State<ChatPage> {
         _scrollToEnd();
         widget.onChanged?.call();
       }
+      if (reply.isEmpty) {
+        moods?.cancelPending(); // stopped/failed: no reading outlives evidence
+      } else {
+        moods?.endTurn(); // late events for this turn are stale from here
+      }
     } catch (_) {
+      moods?.cancelPending();
       if (mounted)
         setState(() {
           _streaming = null;
@@ -885,6 +988,8 @@ class _ChatPageState extends State<ChatPage> {
               : 'Could not finish that message. Check your tasks before retrying.';
         });
     } finally {
+      coalescer.cancel();
+      _coalescer = null;
       if (mounted) {
         setState(() {
           _sending = false;
@@ -898,6 +1003,11 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _stop() async {
     if (_stopping) return;
     setState(() => _stopping = true);
+    // A queued flush must not land after the user pressed stop: the draft is
+    // withdrawn now and late native events are dropped by the engine's
+    // listener removal, never resurrecting the stopped reply.
+    _coalescer?.cancel();
+    _moods?.cancelPending(); // a stopped turn keeps no mood
     try {
       await session?.cancel();
     } catch (_) {
@@ -929,6 +1039,8 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     widget.services.modelLoad.removeListener(_onModelLoad);
     _subscription?.cancel();
+    _coalescer?.cancel();
+    _moods?.dispose();
     unawaited(shutdown());
     input.dispose();
     _scroll.dispose();
@@ -977,9 +1089,20 @@ class _ChatPageState extends State<ChatPage> {
                     ready: state == SessionState.listening ||
                         state == SessionState.idle,
                     streamingText: _streaming,
+                    moods: _displayMoods,
+                    // The live reading covers exactly the active turn: after
+                    // it ends the stored row decides, so reopening and paging
+                    // history resolve through identities, not the pendulum.
+                    pendingEmotion: _sending ? _moods?.pending.display : null,
                     onStop: _stopping ? null : _stop,
                     onSend: _send)),
       ]);
+
+  /// Display emotions by user message row id: the store's accepted records.
+  Map<int, MascotEmotion> get _displayMoods => {
+        for (final e in (_moods?.history ?? const <int, TurnMood>{}).entries)
+          if (e.value.emotion != null) e.key: e.value.display,
+      };
 }
 
 /// Step-by-step model install guide, optionally presented as a compact status.
@@ -1078,8 +1201,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
       }
     } catch (_) {
       if (mounted) {
-        setState(() =>
-            _importError = 'The model could not be imported. Try again.');
+        setState(
+            () => _importError = 'The model could not be imported. Try again.');
       }
     } finally {
       if (mounted) {

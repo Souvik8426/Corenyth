@@ -30,7 +30,7 @@ void main() {
       });
     });
     {
-      expect(await migrated.getVersion(), 8);
+      expect(await migrated.getVersion(), dbVersion);
       // v7 durable operation identity & data preservation:
       final legacyTask =
           (await migrated.query('tasks', where: "title = 'legacy'")).single;

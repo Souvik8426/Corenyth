@@ -263,7 +263,9 @@ void main() {
         r,
         allOf(contains('Current tasks:\n#1 buy milk'), contains('Pending:'),
             isNot(contains('stale list'))));
-    expect(r.length, lessThan(3000), reason: 'well inside a 2048-token window');
+    // The mood-envelope instruction grew the fixed prompt; ~3550 chars
+      // is still ~890 tokens, well inside the 2048-token window.
+    expect(r.length, lessThan(4200), reason: 'well inside a 2048-token window');
 
     const ch = MethodChannel('assistant/llm');
     final messenger =
@@ -276,7 +278,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(ch, null));
     await LlamaChannelEngine('m').complete(p);
     expect(seen!.arguments['grammar'], semanticGrammar);
-    expect(seen!.arguments['maxTokens'], 120);
+    expect(seen!.arguments['maxTokens'], 140);
   });
 
   test('"that one" means the last task; after a list it asks which', () async {

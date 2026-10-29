@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:assistant/assistant/authorization.dart';
+import 'package:assistant/data/db.dart';
 import 'package:assistant/assistant/engine.dart';
 import 'package:assistant/assistant/session.dart';
 import 'package:assistant/assistant/tools.dart';
@@ -550,7 +551,7 @@ void main() {
         });
       });
 
-      expect(await legacy.getVersion(), 8);
+      expect(await legacy.getVersion(), dbVersion);
 
       final taskRows = await legacy.query('tasks', where: "title = 'ancient task'");
       expect(taskRows.single['op_id'], isNull);

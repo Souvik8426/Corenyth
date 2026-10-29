@@ -2,24 +2,31 @@ import 'package:assistant/data/repos.dart';
 import 'package:assistant/mascot/mascot_emotion.dart';
 import 'package:assistant/ui/chat_view.dart';
 import 'package:assistant/ui/ghost_mascot.dart';
+import 'package:assistant/ui/mascot_emotion_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('exchange paging changes emotion and streaming preserves history',
+  testWidgets(
+      'exchange paging shows stored moods; the live draft shows the pending one',
       (t) async {
     final input = TextEditingController();
     final scroll = ScrollController();
     addTearDown(input.dispose);
     addTearDown(scroll.dispose);
     final messages = [
-      Message('user', 'I feel happy'),
+      Message('user', 'I feel happy', id: 11),
       Message('assistant', 'Wonderful!'),
-      Message('user', 'I feel sad'),
+      Message('user', 'I feel sad', id: 22),
       Message('assistant', 'I am here.')
     ];
+    // The conversation's mood store is the only source: no text is ever
+    // re-interpreted here. Row 22 has no record and displays unknown/calm.
+    final moods = {
+      11: const MascotEmotion(MascotMood.happy, 0.8),
+    };
     MascotEmotion? viewed;
-    Widget scene({String? stream}) => MaterialApp(
+    Widget scene({String? stream, MascotEmotion? pending}) => MaterialApp(
         builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
             child: child!),
@@ -32,6 +39,8 @@ void main() {
                 busy: false,
                 ready: true,
                 streamingText: stream,
+                moods: moods,
+                pendingEmotion: pending,
                 onEmotionChanged: (value) => viewed = value,
                 onSend: () {})));
     await t.pumpWidget(scene());
@@ -45,12 +54,19 @@ void main() {
     await t.tap(find.byTooltip('Previous exchange'));
     await t.pumpAndSettle();
     expect(find.text('Exchange 1 of 2'), findsOneWidget);
-    expect(viewed?.mood, MascotMood.happy);
-    await t.pumpWidget(scene(stream: 'Another thought'));
+    expect(viewed?.mood, MascotMood.happy,
+        reason: 'the selected exchange shows its stored mood');
+    // Streaming while browsing history never moves the selection and never
+    // re-interprets text: the exchange keeps its stored mood.
+    await t.pumpWidget(
+        scene(stream: 'Another thought', pending: const MascotEmotion(
+            MascotMood.concerned, 0.6)));
     await t.pumpAndSettle();
     expect(find.text('Exchange 1 of 3'), findsOneWidget);
-    // New submission returns to the latest exchange, even when browsing history.
-    messages.add(Message('user', 'I am worried'));
+    expect(viewed?.mood, MascotMood.happy);
+    // New submission returns to the latest exchange, even when browsing
+    // history; the new row has no stored mood yet -> unknown/calm.
+    messages.add(Message('user', 'I am worried', id: 33));
     await t.pumpWidget(scene());
     await t.pumpAndSettle();
     expect(find.text('Exchange 3 of 3'), findsOneWidget,
@@ -60,7 +76,20 @@ void main() {
             .toString());
     expect(t.widget<PageView>(find.byType(PageView)).controller!.page,
         closeTo(2, 0.01));
-    expect(viewed?.mood, MascotMood.concerned);
+    expect(viewed?.mood, MascotMood.calm);
+    // On the live draft exchange the scope shows the store's pending display.
+    await t.pumpWidget(
+        scene(stream: 'More', pending: const MascotEmotion(
+            MascotMood.concerned, 0.6)));
+    await t.pumpAndSettle();
+    expect(find.text('Exchange 3 of 3'), findsOneWidget,
+        reason: 'the draft merges into the last user exchange');
+    expect(
+        t.widget<MascotEmotionScope>(find.byType(MascotEmotionScope).last)
+            .emotion
+            .mood,
+        MascotMood.concerned,
+        reason: 'the draft shows the pending reading, not an inference');
     expect(find.byType(GhostMascot), findsWidgets);
     expect(t.takeException(), isNull);
   });

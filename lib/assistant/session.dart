@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../data/repos.dart';
+import '../mascot/mascot_emotion.dart';
 import 'authorization.dart';
 import 'calculator.dart';
 import 'engine.dart';
@@ -121,6 +122,9 @@ class AssistantSession {
   /// Durable operation identity per submitted turn; null = not journaled.
   final OperationJournal? operations;
 
+  /// Per-turn mood persistence; null (tests) keeps moods in memory only.
+  final MoodRepo? moods;
+
   /// Conversation id (`conversations.session_id` / `chats.id`).
   final String id;
   final state = StreamController<SessionState>.broadcast();
@@ -143,6 +147,49 @@ class AssistantSession {
   /// The operation id of the last submitted turn; [handle] with the same id
   /// and message is a retry of that turn.
   String? lastOperationId;
+
+  /// `conversations.id` of the user message row the last submitted turn
+  /// persisted, or null when no row was created (a replayed retry, or a turn
+  /// that failed before the transcript write). The caller's optimistic user
+  /// message reconciles with this id at completion, so its mood record —
+  /// keyed by the same row — stays attached without matching by text or
+  /// picking the newest row globally.
+  int? lastUserRowId;
+
+  /// Live turn plumbing, wired by [handle]:
+  /// [_streamSink] takes the cumulative user-visible reply text as the model
+  /// produces it (real streamed output, not a post-hoc typewriter reveal);
+  /// [_moodSink] takes the turn's validated mood record once the model's
+  /// mood envelope has arrived. Both stop with the turn; nothing fires after
+  /// cancellation, and a final callback supersedes the draft.
+  void Function(String liveText)? _streamSink;
+  void Function(TurnMood mood)? _moodSink;
+
+  /// `conversations.id` of this turn's user message row (the mood anchor).
+  int? _userRowId;
+
+  /// The in-flight mood persistence write of this turn, if any. The turn's
+  /// completion awaits it, so a crash after [handle] resolves cannot lose the
+  /// reading: by then the row is committed or its failure was swallowed with
+  /// the display already updated.
+  Future<void>? _moodSave;
+
+  /// True once this turn's mood event has been emitted (first wins).
+  bool _moodEmitted = false;
+
+  /// The last live text sent this turn; '' = none (or the draft was cleared).
+  String _liveSent = '';
+
+  /// True once the streaming gate found an established violation: the checks
+  /// the final text must pass are monotone over cumulative text, so a
+  /// decidable failure cannot recover. Undecidable suffixes (numbers or
+  /// action-verb words still arriving) are held, not judged.
+  bool _streamBlocked = false;
+
+  /// The running turn's timing map and clock, for first-visible-text and
+  /// mood-arrival measurements written from deep inside the routes.
+  Map<String, int>? _timing;
+  final Stopwatch _turnClock = Stopwatch();
 
   /// Appended to this turn's reply (disclosed defaults, a replaced draft).
   String? _note;
@@ -239,6 +286,7 @@ class AssistantSession {
     this.review,
     this.modelDiagnostics,
     this.operations,
+    this.moods,
     Interpreter? interpreter,
   })  : id = conversationId ?? ConversationRepo.newChatId(),
         clock = clock ?? DateTime.now,
@@ -282,8 +330,13 @@ class AssistantSession {
 
   /// Handles one finalized utterance (typed now, ASR transcript later).
   /// [onText] gets the cumulative reply text (streamed from the model when it
-  /// answers in prose, then the final reply). Returns '' when [cancel]led
-  /// before any action ran.
+  /// answers in prose, then the final reply). [onStream] gets the cumulative
+  /// visible reply while the model is still generating — chunks replace the
+  /// caller's draft, and the final [onText] supersedes them. [onMood] gets
+  /// the turn's validated mood record as soon as the model's mood envelope
+  /// completes (before the reply is finished); it fires at most once per
+  /// turn and never after [cancel]. Returns '' when [cancel]led before any
+  /// action ran.
   ///
   /// [operationId]: omit for a new message (a fresh id is made; see
   /// [lastOperationId]). Passing an earlier turn's id with the same message
@@ -293,7 +346,10 @@ class AssistantSession {
   /// with a used id is rejected. A newly sent similar message is never a
   /// retry.
   Future<String> handle(String text,
-      {void Function(String)? onText, String? operationId}) {
+      {void Function(String)? onText,
+      void Function(String)? onStream,
+      void Function(TurnMood mood)? onMood,
+      String? operationId}) {
     text = text.trim();
     if (text.isEmpty) return Future.value('');
     if (_s != SessionState.listening || _closeRequested || _active != null) {
@@ -304,7 +360,10 @@ class AssistantSession {
     lastFallbackReason = null;
     lastTiming = const {};
     lastTurn = null;
+    lastUserRowId = null;
     _resetTurn(text);
+    _streamSink = onStream;
+    _moodSink = onMood;
     _op = operationId ?? _newOpId();
     lastOperationId = _op;
     final op = _turn(text, onText);
@@ -312,6 +371,8 @@ class AssistantSession {
     return op.whenComplete(() {
       _active = null;
       _turnNow = null;
+      _streamSink = null;
+      _moodSink = null;
     });
   }
 
@@ -330,6 +391,19 @@ class AssistantSession {
     _leadMin = null;
     _said = text;
     _turnNow = _now();
+    _userRowId = null;
+    _moodEmitted = false;
+    _liveSent = '';
+    _streamBlocked = false;
+    _moodSave = null;
+    _timing = null;
+    // A reset turn has nowhere to stream to: compareInterpreters' dry runs
+    // must never leak live events into a previous handle's caller.
+    _streamSink = null;
+    _moodSink = null;
+    _turnClock
+      ..reset()
+      ..start();
     _diag = {};
     _mode = mode ?? interpreter;
     _dryRun = dryRun;
@@ -354,6 +428,7 @@ class AssistantSession {
     _go(SessionState.processing);
     final total = Stopwatch()..start();
     final timing = <String, int>{};
+    _timing = timing;
     final journal = operations;
     journal?.registerActive(_op);
     try {
@@ -369,7 +444,8 @@ class AssistantSession {
         return await _replay(prior, onText);
       }
       if (prior == null) {
-        await conversations.add(id, 'user', text);
+        _userRowId = await conversations.add(id, 'user', text);
+        lastUserRowId = _userRowId;
         await journal?.begin(_op, id, hash);
       }
       _diag['interpreter'] = _mode.name;
@@ -421,6 +497,20 @@ class AssistantSession {
         reply = '$reply $_modelLine';
         _diag['reply'] = 'model_line';
       }
+      // A turn the model never saw (deterministic routes such as the grounded
+      // task questions) otherwise has no reading of the user's message at
+      // all. One budgeted reply-kind call supplies it on the loaded-model
+      // path: its mood envelope is the reading; its generated text is
+      // discarded (the reply above is final and already validated). Mechanical
+      // inputs (#id picks, bare times, arithmetic) never pay this call.
+      if (_budget.plan + _budget.reply == 0 &&
+          !_dryRun &&
+          !_cancelled &&
+          engineInUse == engine.name &&
+          engine is! RuleEngine &&
+          !_mechanicalRoutes.contains(_routeId)) {
+        await _moodOnlyCall(text);
+      }
       await conversations.add(id, 'assistant', reply);
       await journal?.mark(_op, status,
           receipt: jsonEncode({...?lastTurn?.toJson(), 'reply': reply}));
@@ -430,8 +520,17 @@ class AssistantSession {
       return reply;
     } finally {
       timing['total'] = total.elapsedMilliseconds;
+      try {
+        await _moodSave; // the mood row is committed before the turn settles
+      } catch (_) {}
       lastTiming = Map.unmodifiable(timing);
+      _timing = null;
       _diag['model_calls'] = '${_budget.plan}p${_budget.reply}r';
+      if (_moodEmitted) {
+        _diag['mood'] = 'emitted';
+      } else if (_budget.plan + _budget.reply > 0) {
+        _diag['mood'] = 'unknown'; // model ran, no valid envelope came back
+      }
       try {
         _diag.addAll(modelDiagnostics?.call() ?? const {});
       } catch (_) {} // diagnostics never fail a turn
@@ -465,6 +564,39 @@ class AssistantSession {
     try {
       await journal?.mark(_op, OperationJournal.abandoned);
       if (_pickStored) await _storePick(null);
+    } catch (_) {}
+  }
+
+  /// Inputs whose answer is purely mechanical; spending a model call to read
+  /// a mood from "#3" or "in 20 minutes" would only add latency.
+  static const _mechanicalRoutes = {
+    RouteId.calculator,
+    RouteId.pendingPick,
+    RouteId.pendingAnswer,
+  };
+
+  /// One bounded call for turns no other route inferred: only its mood
+  /// envelope is consumed, so the live draft is never touched and a finished
+  /// reply is never rewritten. Nothing here can change the turn's outcome.
+  Future<void> _moodOnlyCall(String text) async {
+    if (_cancelled) return;
+    final p = Prompt(PromptKind.reply, text,
+        tone: (await profile.get())?.tone,
+        now: _now(),
+        context: 'Goal: a mascot mood reading of the user\'s current message. '
+            'The reply text is not shown or used.',
+        personalContext: buildPersonalContext(
+            await profile.get() ?? const UserProfile(), const []));
+    try {
+      await _complete(p, onRaw: (chunk) {
+        if (_cancelled) return;
+        if (_moodEmitted) return;
+        final reading = planStreamView(chunk).mood;
+        if (reading != null) _emitMood(reading, source: 'model:reply');
+      });
+    } on PlatformException {
+      // cancelled (by the user or after the envelope) or native failure:
+      // the mood stays whatever it already is
     } catch (_) {}
   }
 
@@ -826,7 +958,8 @@ class AssistantSession {
     // An event's time question may be answered with its topic too.
     final about = draft.day == null
         ? null
-        : RegExp(r"^(.+?)[,;.]?\s+(?:and\s+)?(?:it'?s\s+|it is\s+)?about\s+(.+?)[.!]*$",
+        : RegExp(
+                r"^(.+?)[,;.]?\s+(?:and\s+)?(?:it'?s\s+|it is\s+)?about\s+(.+?)[.!]*$",
                 caseSensitive: false)
             .firstMatch(text.trim());
     if (about != null && _fallback.isTimeAnswer(draft, about.group(1)!)) {
@@ -1283,8 +1416,14 @@ class AssistantSession {
   }
 
   /// Sends [p] to the model within this turn's [_ModelBudget]: null when the
-  /// budget for its kind is spent. An identical prompt reuses its output.
-  Future<String?> _complete(Prompt p) async {
+  /// budget for its kind is spent. An identical prompt reuses its output (a
+  /// cache hit — the callbacks of the original call do not replay).
+  /// [onRaw] receives the cumulative raw output while the model generates;
+  /// [onText] the cumulative user-visible respond text, when the contract has
+  /// one.
+  Future<String?> _complete(Prompt p,
+      {void Function(String raw)? onRaw,
+      void Function(String visible)? onText}) async {
     final key = '${p.kind.name}\u0000${p.contract}\u0000${p.render()}';
     final seen = _budget._seen[key];
     if (seen != null) return seen;
@@ -1295,9 +1434,84 @@ class AssistantSession {
       if (_budget.reply >= _ModelBudget.maxReply) return null;
       _budget.reply++;
     }
-    final raw = await engine.complete(p);
+    final raw = await engine.completeStreaming(p, onText: onText, onRaw: onRaw);
     _budget._seen[key] = raw;
     return raw;
+  }
+
+  /// Publishes one live-draft update: cumulative visible reply text (''
+  /// withdraws the draft). Records the first-visible-text latency once.
+  void _sendLive(String text) {
+    if (text == _liveSent) return;
+    _liveSent = text;
+    final t = _timing;
+    if (text.isNotEmpty && t != null && !t.containsKey('first_text')) {
+      t['first_text'] = _turnClock.elapsedMilliseconds;
+    }
+    _streamSink?.call(text);
+  }
+
+  /// The streaming gate shared by the plan and reply paths: given one
+  /// cumulative chunk of visible reply text and [passes] — the same checks
+  /// the completed answer must pass — returns the text to publish (cumulative
+  /// replace; '' withdraws), or null when nothing new may be shown.
+  ///
+  /// Guarantees: an *established* violation (ungrounded completed number,
+  /// action claim, JSON, oversized text, echo) permanently blocks the stream —
+  /// these checks only ever flip from pass to fail as text grows, so nothing
+  /// that later fails was ever displayed. An *undecidable* suffix (a number or
+  /// claim-verb word still arriving) is held, not judged: 'Those 1' waits,
+  /// then 'Those 12 ideas' is released whole when 12 is grounded. Held tails
+  /// surface at finalization, when the authoritative answer replaces the
+  /// draft. Write plans never reach this gate at all: their replies stay
+  /// buffered until the operation commits.
+  String? _streamedDraft(String cumulative, bool Function(String) passes) {
+    if (_streamBlocked) return null;
+    final hold = undecidableSuffixLength(cumulative);
+    final decidable = cumulative.substring(0, cumulative.length - hold);
+    if (decidable.isEmpty) return null;
+    if (passes(decidable)) return decidable;
+    _streamBlocked = true;
+    return '';
+  }
+
+  /// Emits this turn's mood at most once (the first valid reading wins),
+  /// reports its arrival latency, and stores it against the turn's user
+  /// message row. A storage failure never affects the reply.
+  void _emitMood(MoodReading reading, {required String source}) {
+    if (_moodEmitted) return;
+    _moodEmitted = true;
+    final t = _timing;
+    if (t != null && !t.containsKey('mood')) {
+      t['mood'] = _turnClock.elapsedMilliseconds;
+    }
+    final record = TurnMood(
+      source: source,
+      conversationId: id,
+      turnId: _op,
+      generationId: '$_op/$source#${_budget.plan}p${_budget.reply}r',
+      emotion: reading.mood == null
+          ? null
+          : MascotEmotion(reading.mood!, reading.intensity),
+      confidence: reading.confidence,
+      messageRowId: _userRowId,
+    );
+    _moodSink?.call(record);
+    _diag['mood'] = '${reading.mood?.name ?? 'unknown'}($source)';
+    final repo = moods;
+    final row = _userRowId;
+    if (repo != null && row != null) {
+      _moodSave = repo
+          .save(
+            messageId: row,
+            chatId: id,
+            source: source,
+            mood: reading.mood?.name,
+            intensity: reading.intensity,
+            confidence: reading.confidence,
+          )
+          .catchError((_) {}); // display already updated; retried next turn
+    }
   }
 
   /// A short reply from the local model about facts the app read, in the
@@ -1305,6 +1519,12 @@ class AssistantSession {
   /// ungrounded number, parroting the message, or not a plain reply falls
   /// back to [fallback]. [history]: recent turns from [_chatHistory].
   /// A dry run ([compareInterpreters]) never calls the model here.
+  ///
+  /// The reply is streamed into the live draft as it grows: each cumulative
+  /// chunk is shown only while it still passes the same checks the final text
+  /// must pass, so no unverified claim is ever displayed. A chunk that fails
+  /// a check stops the stream and withdraws the draft; the final reply (or
+  /// the fallback) is decided afterwards exactly as before.
   Future<String> _converse(
       String text, List<String> facts, String fallback, String goal,
       {List<Message> history = const []}) async {
@@ -1320,6 +1540,7 @@ class AssistantSession {
     if (_cancelled) throw ToolError('cancelled');
     final context = ['Goal: $goal', ...facts].join('\n');
     final p = Prompt(PromptKind.reply, text,
+        tone: (await profile.get())?.tone,
         now: _now(),
         context: context,
         history: history,
@@ -1328,7 +1549,26 @@ class AssistantSession {
             await _personalMemories(text)));
     String? raw;
     try {
-      raw = await _complete(p);
+      if (_liveSent.isNotEmpty) _sendLive(''); // a replaced draft starts clean
+      final grounding = '$context\n$text';
+      raw = await _complete(p, onRaw: (chunk) {
+        if (_cancelled) return;
+        if (!_moodEmitted) {
+          final reading = planStreamView(chunk).mood;
+          if (reading != null) _emitMood(reading, source: 'model:reply');
+        }
+        final v = visibleRespondText(chunk);
+        if (v == null || v.isEmpty) return;
+        final next = _streamedDraft(
+            v,
+            (t) =>
+                safeReply(t, grounding) &&
+                !echoes(t, text) &&
+                !echoes(t, _said));
+        if (next == null) return;
+        _sendLive(next);
+        _diag['stream'] = next.isEmpty ? 'withheld' : 'reply';
+      });
       if (raw == null) _diag['reply_budget'] = 'spent';
     } on PlatformException catch (e) {
       if (e.code == 'llama_cancelled') _cancelled = true;
@@ -1465,7 +1705,9 @@ class AssistantSession {
       String text,
       Future<ExecutionReceipt> Function(ToolCall) run) async {
     try {
-      if (_subject != null && c.tool.startsWith('create_') && _lastTask != null) {
+      if (_subject != null &&
+          c.tool.startsWith('create_') &&
+          _lastTask != null) {
         await run(ToolCall(
             'set_event_details', {'id': _lastTask, 'subject': _subject}));
       }
@@ -1696,8 +1938,9 @@ class AssistantSession {
         tasks: open.isEmpty
             ? '(none)'
             : [
-                for (final t in open.take(_taskCap).toList()
-                  ..sort((a, b) => a.id.compareTo(b.id)))
+                for (final t
+                    in open.take(_taskCap).toList()
+                      ..sort((a, b) => a.id.compareTo(b.id)))
                   _line(t),
                 if (open.length > _taskCap)
                   '(and ${open.length - _taskCap} more)',
@@ -1728,7 +1971,30 @@ class AssistantSession {
     _diag['prompt'] = promptIdentity(contract);
     final Semantic s;
     try {
-      final raw = await _complete(p);
+      // Streamed: the mood envelope (first field of the contract) is emitted
+      // as soon as it completes, and a chat plan's reply prose flows into the
+      // live draft while the plan is still generating. Only `chat` streams:
+      // its reply is the answer itself and passes the same checks now that
+      // the final text must pass later. Write/list/recall plans buffer —
+      // their reply is a follow-up the app appends after its own exact
+      // confirmation, and never a success claim (nothing has committed yet).
+      final raw = await _complete(p, onRaw: (chunk) {
+        if (_cancelled) return;
+        final view = planStreamView(chunk);
+        if (view.mood != null) {
+          _emitMood(view.mood!, source: 'model:$contract');
+        }
+        if (view.intent != 'chat' || view.replyText == null) return;
+        final next = _streamedDraft(
+            view.replyText!,
+            (t) =>
+                safeReply(t, text) &&
+                !echoes(t, text) &&
+                !_groundless(t, open));
+        if (next == null) return;
+        _sendLive(next);
+        _diag['stream'] = next.isEmpty ? 'withheld' : 'plan';
+      });
       if (raw == null) {
         lastFallbackReason = 'the model was already asked this turn';
         _diag['fallback'] = 'model_budget';
@@ -2210,8 +2476,7 @@ class AssistantSession {
     var modelPicked = false;
     // The prompt offers "#id" from Current tasks: a model-picked id stands
     // when that task's own words are in the message, as if the user named it.
-    if (id != null &&
-        !RegExp('(?:#|\\b)${id.group(1)}\\b').hasMatch(text)) {
+    if (id != null && !RegExp('(?:#|\\b)${id.group(1)}\\b').hasMatch(text)) {
       final picked =
           open.where((t) => t.id == int.parse(id!.group(1)!)).toList();
       if (picked.length != 1 || !_grounded(picked.single.title, text)) {
@@ -2233,9 +2498,8 @@ class AssistantSession {
     if (tool == 'edit_task') {
       final w = s.when;
       // The user's own "by 30 minutes" wins when the model reworded it.
-      final by =
-          RegExp(r'^.*\b(?:by|for)\s+(.+?)[.!?]*$', caseSensitive: false)
-              .firstMatch(text);
+      final by = RegExp(r'^.*\b(?:by|for)\s+(.+?)[.!?]*$', caseSensitive: false)
+          .firstMatch(text);
       final d = (w == null || !_mentioned(w, text)
               ? null
               : RuleEngine.parseDuration(w)) ??

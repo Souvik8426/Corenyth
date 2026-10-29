@@ -67,13 +67,13 @@ void main() {
     await tester.enterText(find.byType(TextField).last, 'Designer');
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Playful').last);
+    await tester.tap(find.text('Friendly').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save & start'));
     await tester.pumpAndSettle();
     expect(saved?.name, 'Ari');
     expect(saved?.occupation, 'Designer');
-    expect(saved?.tone, 'playful');
+    expect(saved?.tone, 'friendly');
   });
 
   test('parseToolCall accepts valid and rejects malformed output', () {

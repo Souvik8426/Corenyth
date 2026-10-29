@@ -58,7 +58,8 @@ void main() {
       (t) async {
     await t.pumpWidget(
         const MaterialApp(home: Scaffold(body: Center(child: GhostMascot()))));
-    expect(find.bySemanticsLabel('Corenyth ghost mascot'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Corenyth ghost mascot')),
+        findsOneWidget);
     await t.pump(const Duration(milliseconds: 800));
     final mouse = await t.createGesture(kind: ui.PointerDeviceKind.mouse);
     await mouse.addPointer(location: const Offset(650, 100));
@@ -132,7 +133,7 @@ void main() {
   testWidgets(
       'all six expressions are pairwise distinct at 132, 30 and 18 without border clipping',
       (t) async {
-    for (final size in [132.0, 30.0, 18.0]) {
+    for (final size in [230.0, 132.0, 30.0, 18.0]) {
       final snapshots = <MascotMood, Uint8List>{};
       final key = GlobalKey();
       for (final entry in _allEmotions.entries) {
@@ -262,6 +263,50 @@ void main() {
       _pixelDiffCount(calmBytes, strongHappy),
       greaterThan(_pixelDiffCount(calmBytes, mildHappy)),
     );
+  });
+
+  testWidgets('every mood scales from a subtle hint to the full expression',
+      (t) async {
+    final key = GlobalKey();
+    Future<Uint8List> capture(MascotEmotion emotion) async {
+      await t.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            backgroundColor: AppColors.transparent,
+            body: Center(
+              child: MascotEmotionScope(
+                emotion: emotion,
+                child: RepaintBoundary(
+                  key: key,
+                  child: GhostMascot(size: 132, animated: false),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await t.pump();
+      return _captureBytes(t, key);
+    }
+
+    final calm = await capture(MascotEmotion.calm);
+    for (final mood in MascotMood.values.skip(1)) {
+      final hint = await capture(MascotEmotion(mood, 0.2));
+      final full = await capture(MascotEmotion(mood, 1.0));
+      expect(
+        _pixelDiffCount(calm, hint),
+        greaterThan(0),
+        reason:
+            '${mood.name} at intensity 0.2 should already read as a hint of the mood',
+      );
+      expect(
+        _pixelDiffCount(calm, full),
+        greaterThan(_pixelDiffCount(calm, hint)),
+        reason:
+            '${mood.name} at intensity 1.0 should exceed its low-intensity hint',
+      );
+    }
   });
 
   testWidgets(

@@ -184,6 +184,7 @@ class BackupService {
           proactiveEvents: await rows('proactive_events'),
           reviewItems: await rows('review_items'),
           operations: await rows('operations'),
+          messageMoods: await rows('message_moods'),
           profile:
               profileRows.isEmpty ? null : profileRows.first.cast<String, Object?>(),
           preferences: prefRows.isEmpty
@@ -289,6 +290,11 @@ class BackupService {
     final data = parseBackupData(dataRaw, errors);
     if (data == null) {
       throw BackupException(errors.join('\n'));
+    }
+    if (manifest.formatVersion != data.formatVersion) {
+      throw BackupException('The backup disagrees with itself: the manifest '
+          'says format version ${manifest.formatVersion} while its data says '
+          '${data.formatVersion}. It was not read.');
     }
     return BackupPreview(manifest, data, sourcePath);
   }

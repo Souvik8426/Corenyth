@@ -57,6 +57,14 @@ class ChatView extends StatefulWidget {
   final Widget? status;
   final VoidCallback? onStop;
   final String? streamingText;
+
+  /// Stored mood per user message row id (the conversation's mood store is
+  /// the only source; this view never interprets text). A message row with
+  /// no record displays unknown/calm.
+  final Map<int, MascotEmotion> moods;
+
+  /// The live turn's display emotion while its draft is on screen.
+  final MascotEmotion? pendingEmotion;
   final ValueChanged<MascotEmotion>? onEmotionChanged;
   const ChatView(
       {required this.name,
@@ -70,6 +78,8 @@ class ChatView extends StatefulWidget {
       this.autofocus = false,
       this.onStop,
       this.streamingText,
+      this.moods = const {},
+      this.pendingEmotion,
       this.onEmotionChanged,
       super.key});
   @override
@@ -92,8 +102,42 @@ class _ChatViewState extends State<ChatView> {
   }
 
   int get _users => widget.messages.where((m) => m.role == 'user').length;
-  MascotEmotion get _emotion => const MascotEmotionInterpreter().interpret(
-      widget.messages.take(_turns.isEmpty ? 0 : _turns[_selected].end));
+
+  /// The selected exchange's mood from the store. The active turn's display
+  /// value ([ChatView.pendingEmotion]) applies to the latest exchange as soon
+  /// as the model's mood envelope arrives — before any reply text exists —
+  /// while stored moods answer for every exchange by its user row id.
+  /// Nothing is interpreted from text; unknown stays neutral.
+  MascotEmotion get _emotion {
+    if (_turns.isEmpty) return MascotEmotion.calm;
+    final isLatest = _selected == _turns.length - 1;
+    if (isLatest && widget.pendingEmotion != null) {
+      return widget.pendingEmotion!;
+    }
+    final turn = _turns[_selected];
+    final first = turn.messages.first;
+    final row = first.role == 'user' && first.kind == null ? first.id : null;
+    return (row == null ? null : widget.moods[row]) ?? MascotEmotion.calm;
+  }
+
+  /// The last emotion value handed to [ChatView.onEmotionChanged].
+  MascotEmotion? _published;
+
+  /// Publishes the effective selected emotion whenever it changes — including
+  /// while the selected page stays the same (a live mood arriving, turn
+  /// finalization). Deferred past the frame (never a parent setState during
+  /// build), deduplicated by value so identical updates cause no loop, and
+  /// re-checked at fire time so a stale callback cannot override a newer
+  /// conversation or selection.
+  void _publish() {
+    final emotion = _emotion;
+    if (_published == emotion) return;
+    _published = emotion;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _emotion != emotion) return;
+      widget.onEmotionChanged?.call(emotion);
+    });
+  }
 
   @override
   void initState() {
@@ -102,6 +146,7 @@ class _ChatViewState extends State<ChatView> {
     _selected = math.max(0, _turns.length - 1);
     _userTurns = _users;
     _pages = PageController(initialPage: _selected);
+    _publish();
   }
 
   @override
@@ -122,12 +167,13 @@ class _ChatViewState extends State<ChatView> {
         if (!mounted) return;
         if (_pages.hasClients) _pages.jumpToPage(next);
         setState(() => _selected = next);
-        widget.onEmotionChanged?.call(_emotion);
+        _publish();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _pendingPage = null;
         });
       });
     }
+    _publish();
   }
 
   void _view(int index) {
@@ -136,7 +182,7 @@ class _ChatViewState extends State<ChatView> {
       _selected = index;
       _overscroll = 0;
     });
-    widget.onEmotionChanged?.call(_emotion);
+    _publish();
   }
 
   Future<void> _go(int index) async {
@@ -428,7 +474,7 @@ class _MessageBubble extends StatelessWidget {
                       child: user
                           ? SelectableText(message.content,
                               style: Theme.of(context).textTheme.bodyMedium)
-                          : AssistantMessage(message.content)),
+                          : _AssistantBubbleContent(message.content)),
                 )),
             if (sentAt != null)
               Padding(
@@ -443,5 +489,29 @@ class _MessageBubble extends StatelessWidget {
               ),
           ]),
     );
+  }
+}
+
+/// One assistant message whose Markdown subtree is rebuilt only when its text
+/// changes: live stream updates must not re-parse every older message.
+/// Inherited changes (theme, selection) still reach the cached subtree.
+class _AssistantBubbleContent extends StatefulWidget {
+  final String text;
+  const _AssistantBubbleContent(this.text);
+  @override
+  State<_AssistantBubbleContent> createState() =>
+      _AssistantBubbleContentState();
+}
+
+class _AssistantBubbleContentState extends State<_AssistantBubbleContent> {
+  String? _text;
+  Widget? _cached;
+  @override
+  Widget build(BuildContext context) {
+    if (_cached == null || _text != widget.text) {
+      _text = widget.text;
+      _cached = AssistantMessage(widget.text);
+    }
+    return _cached!;
   }
 }

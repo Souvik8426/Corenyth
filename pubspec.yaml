@@ -19,6 +19,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   sqflite_common_ffi: ^2.4.3
+  flutter_lints: ^5.0.0
+
 flutter:
   uses-material-design: true
   assets:
@@ -46,7 +48,14 @@ flutter_launcher_icons:
   adaptive_icon_foreground_inset: 0
   min_sdk_android: 24
 
+# Host test builds of package:sqlite3 (a dev-only dependency through
+# sqflite_common_ffi) link the operating system's SQLite, which ships the FTS4
+# module the app's schema relies on. The precompiled binaries the package
+# downloads by default compile FTS5 only, which made fresh-create and memory
+# retrieval tests fail on the host with "no such module: fts4". Android itself
+# is unaffected: the app talks to the platform SQLite through sqflite, never
+# through this package, so no build hook runs for the shipped app.
 hooks:
   user_defines:
     sqlite3:
-      source: sqlite3
+      source: system

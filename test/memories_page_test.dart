@@ -151,7 +151,7 @@ void main() {
     expect(profile.writes, 0);
     await tester.enterText(find.byKey(const Key('profile-name')), '  Grace  ');
     await tester.enterText(find.byKey(const Key('profile-occupation')), '');
-    for (final tone in ['Cheerful', 'Mature', 'Playful', 'Calm', 'Professional']) {
+    for (final tone in ['Loving', 'Professional', 'Caring', 'Friendly']) {
       expect(find.widgetWithText(ChoiceChip, tone), findsOneWidget);
     }
     await _tap(tester, find.widgetWithText(ChoiceChip, 'Professional'));

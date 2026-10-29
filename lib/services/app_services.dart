@@ -47,6 +47,9 @@ class AppServices {
   final PendingRepo pending;
   final ReviewRepo review;
   final OperationJournal operations;
+
+  /// Stored per-turn mascot mood records (schema v9).
+  final MoodRepo moods;
   final ReminderScheduler scheduler;
 
   /// Backup and restore of the user's saved context. It reads and writes the
@@ -106,6 +109,7 @@ class AppServices {
         pending = PendingRepo(db),
         review = ReviewRepo(db),
         operations = OperationJournal(db),
+        moods = MoodRepo(db),
         backup = BackupService(
           db: db,
           reminders: ReminderRepo(db),
@@ -516,6 +520,7 @@ class AppServices {
       review: review,
       modelDiagnostics: modelDiagnostics,
       operations: operations,
+      moods: moods,
     );
   }
 }

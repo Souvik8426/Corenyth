@@ -75,7 +75,14 @@ void main() {
     expect(text, contains('first item'));
     expect(text, contains('Image: remote cat'));
     expect(find.byType(Table), findsOneWidget);
-    expect(find.byType(Image), findsNothing);
+    // Markdown images never become Image widgets (the imageBuilder shows
+    // a label); the bubble's own branding asset is the only Image.
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Image &&
+            !(w.image is AssetImage &&
+                (w.image as AssetImage).assetName.endsWith('corenyth-logo-dark.png'))),
+        findsNothing);
     expect(t.takeException(), isNull);
   });
 
@@ -167,6 +174,13 @@ void main() {
     expect(text, contains('Image: a cat'));
     expect(text, isNot(contains('base64')));
     expect(text, isNot(contains('x.y')));
-    expect(find.byType(Image), findsNothing);
+    // Markdown images never become Image widgets (the imageBuilder shows
+    // a label); the bubble's own branding asset is the only Image.
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Image &&
+            !(w.image is AssetImage &&
+                (w.image as AssetImage).assetName.endsWith('corenyth-logo-dark.png'))),
+        findsNothing);
   });
 }

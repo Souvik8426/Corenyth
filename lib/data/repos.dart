@@ -795,14 +795,21 @@ class Message {
   final String role, content;
   final DateTime? createdAt;
 
+  /// The `conversations` row id, when the message came from the database.
+  /// The stable identity a per-turn mood record anchors to (never text or
+  /// timestamps, which are not unique).
+  final int? id;
+
   /// Set on proactive check-ins: the task it is about and its kind
   /// (e.g. 'nudge', 'follow_up', 'daily', 'review').
   final int? taskId;
   final String? kind;
-  Message(this.role, this.content, {this.createdAt, this.taskId, this.kind});
+  Message(this.role, this.content,
+      {this.id, this.createdAt, this.taskId, this.kind});
 
   Message._row(Map<String, Object?> m)
       : this(m['role'] as String, m['content'] as String,
+            id: m['id'] as int?,
             createdAt: _dt(m['created_at']),
             taskId: m['task_id'] as int?,
             kind: m['kind'] as String?);
@@ -976,6 +983,46 @@ class ConversationRepo {
         orderBy: 'id DESC',
         limit: n);
     return r.reversed.map(Message._row).toList();
+  }
+}
+
+/// Per-turn mascot mood records (schema v9, see `_createMessageMoods`).
+/// Rows are keyed by the user message's `conversations` id; the mood values
+/// themselves are primitives here — the typed record lives in
+/// `lib/mascot/mascot_emotion.dart` ([TurnMood.fromDbRow]), keeping this
+/// repository free of the mascot import.
+class MoodRepo {
+  final Database db;
+  MoodRepo(this.db);
+
+  /// Upserts the mood of one submitted user turn. [mood] null = unknown.
+  Future<void> save({
+    required int messageId,
+    required String chatId,
+    required String source,
+    String? mood,
+    double intensity = 0.25,
+    double? confidence,
+  }) async {
+    await db.insert(
+        'message_moods',
+        {
+          'message_id': messageId,
+          'chat_id': chatId,
+          'mood': mood,
+          'intensity': intensity,
+          'confidence': confidence,
+          'source': source,
+          'created_at': _now(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Every stored mood row of one chat, keyed by message id.
+  Future<Map<int, Map<String, Object?>>> rowsForChat(String chatId) async {
+    final rows = await db.query('message_moods',
+        where: 'chat_id = ?', whereArgs: [chatId]);
+    return {for (final r in rows) r['message_id'] as int: r};
   }
 }
 

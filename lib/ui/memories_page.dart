@@ -1,3 +1,4 @@
+import '../assistant/personalities.dart';
 import 'package:flutter/material.dart';
 
 import '../data/repos.dart';
@@ -392,17 +393,11 @@ class _ProfileEditor extends StatefulWidget {
 }
 
 class _ProfileEditorState extends State<_ProfileEditor> {
-  static const _tones = [
-    'cheerful',
-    'mature',
-    'playful',
-    'calm',
-    'professional'
-  ];
+  static const _tones = Personalities.names;
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _occupation = TextEditingController();
-  String _tone = 'cheerful';
+  String _tone = 'friendly';
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -431,7 +426,7 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       _name.text = value?.name ?? '';
       _occupation.text = value?.occupation ?? '';
       setState(() {
-        _tone = value?.tone ?? 'cheerful';
+        _tone = Personalities.canonical(value?.tone);
         _loading = false;
       });
     } catch (_) {

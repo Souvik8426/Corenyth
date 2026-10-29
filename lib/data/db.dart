@@ -6,7 +6,7 @@ import 'package:sqflite/sqflite.dart';
 const dbFileName = 'assistant.db';
 
 /// Current schema version. Every upgrade is additive (see each `_create…`).
-const dbVersion = 8;
+const dbVersion = 9;
 
 /// [version] below [dbVersion] only for migration tests (e.g. a v6 file).
 Future<Database> openAppDb(
@@ -64,6 +64,7 @@ Future<Database> openAppDb(
     await _createFollowThrough(db);
     await _createOperations(db);
     await _createMemoryProvenance(db);
+    await _createMessageMoods(db);
   }, onUpgrade: (db, oldVersion, newVersion) async {
     if (oldVersion < 2) await _createProfileTable(db);
     if (oldVersion < 3) {
@@ -75,7 +76,25 @@ Future<Database> openAppDb(
     if (oldVersion < 6 && newVersion >= 6) await _createFollowThrough(db);
     if (oldVersion < 7 && newVersion >= 7) await _createOperations(db);
     if (oldVersion < 8 && newVersion >= 8) await _createMemoryProvenance(db);
+    if (oldVersion < 9 && newVersion >= 9) await _createMessageMoods(db);
   });
+}
+
+/// v9 per-turn mascot mood records, keyed by the `conversations` row of the
+/// user message the turn submitted (see [MoodRepo]). `mood` null = the model
+/// reported no listed mood (unknown provenance) — the UI renders calm and
+/// never infers one from text. Additive: old rows simply have no record and
+/// display unknown/calm without any inference. Deleting a chat cascades.
+Future<void> _createMessageMoods(DatabaseExecutor db) async {
+  await db.execute('''CREATE TABLE message_moods(
+    message_id INTEGER PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    chat_id TEXT NOT NULL,
+    mood TEXT,
+    intensity REAL NOT NULL DEFAULT 0.25,
+    confidence REAL,
+    source TEXT NOT NULL,
+    created_at INTEGER NOT NULL)''');
+  await db.execute('CREATE INDEX message_moods_chat ON message_moods(chat_id)');
 }
 
 /// v8 memory provenance, status, and superseding support. Additive columns.

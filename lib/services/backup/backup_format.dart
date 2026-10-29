@@ -1,11 +1,16 @@
 import 'dart:convert';
 
+import '../../mascot/mascot_emotion.dart';
+
 /// Version of the backup format this build writes and accepts.
 ///
 /// Bump it whenever the data shape changes. [BackupData.formatVersion] carries
 /// the same number, so a later build can migrate older backups instead of
 /// guessing what a field meant.
-const int backupFormatVersion = 1;
+/// v2 adds `messageMoods` (per-turn mascot mood records). Version 1 archives
+/// still restore: their mood section is simply absent, so every restored
+/// conversation displays unknown/calm until new turns are recorded.
+const int backupFormatVersion = 2;
 
 /// Tag every Corenyth backup carries in its manifest. A file without it is
 /// not a Corenyth backup, whatever else it may contain.
@@ -33,7 +38,16 @@ const int maxBackupEntryBytes = 32 * 1024 * 1024;
 const int maxBackupRows = 200000;
 
 /// How one stored column maps onto the backup JSON.
-enum _Kind { int, intOrNull, text, textOrNull, bool, double, intList }
+enum _Kind {
+  int,
+  intOrNull,
+  text,
+  textOrNull,
+  bool,
+  double,
+  doubleOrNull,
+  intList
+}
 
 class _Col {
   final String column;
@@ -194,7 +208,33 @@ const _tables = <_Table>[
     ],
     ['op_id'],
   ),
+  _Table(
+    'message_moods',
+    'messageMoods',
+    [
+      _Col('message_id', 'messageId', _Kind.int),
+      _Col('chat_id', 'chatId', _Kind.text),
+      _Col('mood', 'mood', _Kind.textOrNull),
+      _Col('intensity', 'intensity', _Kind.double),
+      _Col('confidence', 'confidence', _Kind.doubleOrNull),
+      _Col('source', 'source', _Kind.text),
+      _Col('created_at', 'createdAt', _Kind.int),
+    ],
+    ['message_id'],
+    check: _checkMood,
+  ),
 ];
+
+void _checkMood(Map<String, Object?> r, List<String> errors) {
+  final mood = r['mood'];
+  if (mood != null && (mood is! String || !moodContractMoods.contains(mood))) {
+    errors.add('Mood ${r['message_id']}: "$mood" is not a mascot mood.');
+  }
+  final intensity = r['intensity'];
+  if (intensity is! num || intensity < 0.0 || intensity > 1.0) {
+    errors.add('Mood ${r['message_id']}: intensity must be between 0 and 1.');
+  }
+}
 
 void _checkTask(Map<String, Object?> r, List<String> errors) {
   final status = r['status'];
@@ -265,6 +305,10 @@ class BackupManifest {
 
   /// Parses the manifest, adding a readable reason to [errors] on failure.
   /// Returns null when the manifest cannot be used.
+  ///
+  /// Version policy matches [parseBackupData]: every supported format version
+  /// (1..[backupFormatVersion]) stays readable; newer ones are rejected with
+  /// a readable reason, never guessed at.
   static BackupManifest? parse(Object? raw, List<String> errors) {
     if (raw is! Map) {
       errors.add('The manifest is not a JSON object.');
@@ -280,9 +324,14 @@ class BackupManifest {
       errors.add('The backup does not say which format version it uses.');
       return null;
     }
-    if (version != backupFormatVersion) {
+    if (version > backupFormatVersion) {
       errors.add('This backup uses format version $version; this version of '
-          'Corenyth reads version $backupFormatVersion only.');
+          'Corenyth reads version $backupFormatVersion and older.');
+      return null;
+    }
+    if (version < 1) {
+      errors.add('This backup uses format version $version, which is not a '
+          'Corenyth backup format.');
       return null;
     }
     final appVersion = map['appVersion'];
@@ -343,6 +392,7 @@ class BackupData {
   final List<Map<String, Object?>> proactiveEvents;
   final List<Map<String, Object?>> reviewItems;
   final List<Map<String, Object?>> operations;
+  final List<Map<String, Object?>> messageMoods;
 
   BackupData({
     this.formatVersion = backupFormatVersion,
@@ -358,6 +408,7 @@ class BackupData {
     this.proactiveEvents = const [],
     this.reviewItems = const [],
     this.operations = const [],
+    this.messageMoods = const [],
   });
 
   /// Rows of one table by its JSON key.
@@ -371,6 +422,7 @@ class BackupData {
         'proactiveEvents' => proactiveEvents,
         'reviewItems' => reviewItems,
         'operations' => operations,
+        'messageMoods' => messageMoods,
         _ => const [],
       };
 
@@ -379,6 +431,7 @@ class BackupData {
         'chats': chats.length,
         'conversations': conversations.length,
         'memories': memories.length,
+        'messageMoods': messageMoods.length,
         'operations': operations.length,
         'pendingClarifications': pendingClarifications.length,
         'preferences': preferences == null ? 0 : 1,
@@ -481,9 +534,14 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
     errors.add('The backup data does not say which format version it uses.');
     return null;
   }
-  if (version != backupFormatVersion) {
+  if (version > backupFormatVersion) {
     errors.add('This backup uses format version $version; this version of '
-        'Corenyth reads version $backupFormatVersion only.');
+        'Corenyth reads version $backupFormatVersion and older.');
+    return null;
+  }
+  if (version < 1) {
+    errors.add('This backup uses format version $version, which is not a '
+        'Corenyth backup format.');
     return null;
   }
 
@@ -491,6 +549,11 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
   for (final spec in _tables) {
     final value = map[spec.key];
     if (value == null) {
+      // A version-1 archive has no mood section; everything else is required.
+      if (version < 2 && spec.key == 'messageMoods') {
+        rows[spec.key] = const [];
+        continue;
+      }
       errors.add('The backup has no "${spec.key}" section.');
       return null;
     }
@@ -548,7 +611,8 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
       pendingClarifications: rows['pendingClarifications']!,
       proactiveEvents: rows['proactiveEvents']!,
       reviewItems: rows['reviewItems']!,
-      operations: rows['operations']!);
+      operations: rows['operations']!,
+      messageMoods: rows['messageMoods']!);
 
   _checkRelations(data, errors);
   if (errors.isNotEmpty) return null;
@@ -603,6 +667,12 @@ Map<String, Object?>? _parseRow(
           return null;
         }
         row[col.column] = value.toDouble();
+      case _Kind.doubleOrNull:
+        if (value != null && value is! num) {
+          errors.add('A ${spec.key} entry has a non-numeric "${col.key}".');
+          return null;
+        }
+        row[col.column] = (value as num?)?.toDouble();
       case _Kind.intList:
         if (value is! List) {
           errors.add('A ${spec.key} entry has a non-list "${col.key}".');
@@ -648,6 +718,7 @@ void _checkRelations(BackupData d, List<String> errors) {
   final chatIds = _idsOf(d.chats, 'id');
   final memoryIds = _idsOf(d.memories, 'id');
   final opIds = _idsOf(d.operations, 'op_id');
+  final conversationIds = _idsOf(d.conversations, 'id');
 
   for (final r in d.reminders) {
     final t = r['task_id'];
@@ -697,6 +768,17 @@ void _checkRelations(BackupData d, List<String> errors) {
     final op = r['op_id'];
     if (op != null && !opIds.contains(op)) {
       errors.add('Task ${r['id']} points at a turn that is not in the backup.');
+    }
+  }
+  for (final r in d.messageMoods) {
+    final m = r['message_id'];
+    if (!conversationIds.contains(m)) {
+      errors.add('A mood record points at a message that is not in the '
+          'backup.');
+    }
+    final chat = r['chat_id'];
+    if (chat != null && !chatIds.contains(chat)) {
+      errors.add('A mood record points at a chat that is not in the backup.');
     }
   }
 }
@@ -814,6 +896,7 @@ BackupData buildBackupData({
   required List<Map<String, Object?>> proactiveEvents,
   required List<Map<String, Object?>> reviewItems,
   required List<Map<String, Object?>> operations,
+  List<Map<String, Object?>> messageMoods = const [],
   Map<String, Object?>? profile,
   Map<String, Object?>? preferences,
   String? selectedModelId,
@@ -830,7 +913,8 @@ BackupData buildBackupData({
         pendingClarifications: pendingClarifications,
         proactiveEvents: proactiveEvents,
         reviewItems: reviewItems,
-        operations: operations);
+        operations: operations,
+        messageMoods: messageMoods);
 
 /// The JSON form of one database row, per the table's column spec.
 Map<String, Object?> rowToJson(_Table spec, Map<String, Object?> row) {
@@ -841,6 +925,8 @@ Map<String, Object?> rowToJson(_Table spec, Map<String, Object?> row) {
       case _Kind.bool:
         out[col.key] = v == 1;
       case _Kind.double:
+        out[col.key] = (v as num?)?.toDouble();
+      case _Kind.doubleOrNull:
         out[col.key] = (v as num?)?.toDouble();
       case _Kind.intList:
         out[col.key] = _leads(v as String?);

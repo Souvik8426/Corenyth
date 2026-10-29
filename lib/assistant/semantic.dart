@@ -1,3 +1,4 @@
+import '../mascot/mascot_emotion.dart';
 import 'tools.dart';
 
 /// What the model may say about a message: meaning only. It never supplies
@@ -43,6 +44,10 @@ class Semantic {
   /// plan-v2 only: the model's [semanticAuthorizations] label (evidence the
   /// app compares with its own reading; never permission by itself).
   final String? authorization;
+
+  /// The validated mood envelope of the same generation, or null when it was
+  /// absent or malformed (unknown provenance; never a plan failure).
+  final MoodReading? mood;
   const Semantic(this.intent,
       {this.title,
       this.ref,
@@ -52,7 +57,8 @@ class Semantic {
       this.multiple,
       this.followUp,
       this.negated = false,
-      this.authorization});
+      this.authorization,
+      this.mood});
 }
 
 /// Fields each intent may carry (besides `intent` and `negated`).
@@ -79,12 +85,19 @@ const _fieldsV2 = {
   'details': {'ref', 'title', 'when', 'reply'},
 };
 
-/// Field order is fixed by [semanticGrammar]: intent, title, ref, when, range,
-/// multiple, follow_up, negated, reply. [version] 2 reads plan-v2
-/// ([semanticGrammarV2]): its intents, and `authorization` (a v1 `negated`
-/// is still accepted, as authorization "negated" when true).
+/// Field order is fixed by [semanticGrammar]: emotion, intent, title, ref,
+/// when, range, multiple, follow_up, negated/authorization, reply. The mood
+/// envelope comes first so a streaming consumer has it before any reply text.
+/// [version] 2 reads plan-v2 ([semanticGrammarV2]): its intents, and
+/// `authorization` (a v1 `negated` is still accepted, as authorization
+/// "negated" when true).
+///
+/// The mood envelope is validated on its own: absent or malformed emotion
+/// degrades to an unknown reading and never fails an otherwise valid plan,
+/// while every other unknown key still rejects the whole plan.
 Semantic parseSemantic(String raw, {int version = 1}) {
   final j = extractJsonObject(raw);
+  final mood = MoodReading.parse(j[moodContractKey]);
   final intent = j['intent'];
   final intents = version == 2 ? semanticIntentsV2 : semanticIntents;
   final fields = version == 2 ? _fieldsV2 : _fields;
@@ -96,6 +109,7 @@ Semantic parseSemantic(String raw, {int version = 1}) {
   for (final k in j.keys) {
     if (k != 'intent' &&
         k != 'negated' &&
+        k != moodContractKey &&
         !(version == 2 && k == 'authorization') &&
         !fields[intent]!.contains(k)) {
       throw ToolError('"$k" does not belong to $intent');
@@ -126,6 +140,7 @@ Semantic parseSemantic(String raw, {int version = 1}) {
   if (version == 2 && auth == null && negated) auth = 'negated';
   return Semantic(intent,
       authorization: auth,
+      mood: mood,
       title: str('title'),
       ref: str('ref'),
       when: str('when'),
@@ -139,6 +154,16 @@ Semantic parseSemantic(String raw, {int version = 1}) {
 /// Intent-specific grammar mirrors the parser exactly. An unconstrained
 /// optional-field union caused small models to fill irrelevant fields, making
 /// otherwise grammatical plans fail validation on every request.
+///
+/// The mood envelope is the required first field of every plan (and of the
+/// reply contract), so a streaming consumer has it validated before any
+/// reply text is generated.
+final String emotionGrammar = [
+  'emotion ::= "{\\"mood\\":" emood ",\\"intensity\\":" mnum ",\\"confidence\\":" mnum "}"',
+  'emood ::= ${moodContractMoods.map((m) => '"\\"$m\\""').join(' | ')}',
+  'mnum ::= [0-1] "." [0-9] [0-9]',
+].join('\n');
+
 String _semanticGrammar(int version) {
   String alt(List<String> values) =>
       values.map((v) => '\"\\\"$v\\\"\"').join(' | ');
@@ -147,7 +172,11 @@ String _semanticGrammar(int version) {
   final intents = version == 2 ? semanticIntentsV2 : semanticIntents;
   final rules = <String>[];
   for (final intent in intents) {
-    final parts = <String>['\"{\"', '\"\\\"intent\\\":\\\"$intent\\\"\"'];
+    final parts = <String>[
+      '\"{\"',
+      '\"\\\"emotion\\\":\" emotion',
+      '\"\\\"intent\\\":\\\"$intent\\\"\"'
+    ];
     for (final key in [
       'title',
       'ref',
@@ -181,6 +210,7 @@ String _semanticGrammar(int version) {
     'range ::= ${alt(semanticRanges)}',
     'auth ::= ${alt(semanticAuthorizations)}',
     'bool ::= \"true\" | \"false\"',
+    emotionGrammar,
     jsonStrRule,
   ].join('\n');
 }

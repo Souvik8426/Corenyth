@@ -469,6 +469,47 @@ final _actionClaim = _ci(
     r'notified|booked|noted)\b|\b(?:reminders?|alerts?|alarms?|tasks?)\s+(?:is|are|has been|have been|was|were)\s+'
     r'(?:set|added|created|scheduled|saved|moved|updated|cancell?ed)\b');
 
+/// The verbs whose appearance (in the contexts [_actionClaim] matches) turns a
+/// reply into an action claim. Shared source for the claim regex above and the
+/// streaming gate's holdback: a trailing word that could still grow into one
+/// of these verbs is undecidable until the word completes.
+const actionClaimVerbs = [
+  // direct perfective/committed claims
+  'set', 'added', 'created', 'scheduled', 'saved', 'deleted', 'removed',
+  'completed', 'marked', 'canceled', 'cancelled', 'updated', 'reminded',
+  'postponed', 'moved', 'rescheduled', 'sent', 'messaged', 'emailed',
+  'texted', 'called', 'contacted', 'told', 'notified', 'booked', 'noted',
+  // futures ("I'll check…") and passive rows ("tasks were set…")
+  'check', 'follow', 'remind', 'notify', 'schedule',
+];
+
+final _claimVerbPrefixes = () {
+  final prefixes = <String>{};
+  for (final verb in actionClaimVerbs) {
+    for (var i = 1; i < verb.length; i++) {
+      prefixes.add(verb.substring(0, i));
+    }
+  }
+  return prefixes;
+}();
+
+final _trailingWord = RegExp(r"[A-Za-z0-9']+$");
+
+/// The length of [text]'s trailing suffix that cannot be judged yet by the
+/// reply checks ([safeReply] and friends): a number whose digits may still be
+/// arriving (a partial `1` is not yet the grounded `12`), or a word that
+/// could still complete into an action-claim verb (`crea` → `created`).
+/// Streaming gates hold this suffix and revalidate as new output arrives;
+/// once a word or number completes, the normal checks decide as before.
+int undecidableSuffixLength(String text) {
+  final m = _trailingWord.firstMatch(text);
+  if (m == null) return 0;
+  final word = m.group(0)!;
+  if (word.contains(RegExp(r'\d'))) return word.length;
+  if (_claimVerbPrefixes.contains(word.toLowerCase())) return word.length;
+  return 0;
+}
+
 /// A model reply that may be shown: short prose, claims no action, and
 /// every number in it occurs in [grounding] (the facts and the message).
 bool safeReply(String reply, String grounding) {
