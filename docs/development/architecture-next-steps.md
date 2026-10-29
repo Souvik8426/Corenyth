@@ -2,6 +2,10 @@
 
 Date: 29 October 2026. Reviewed source revision: `0ee7905`, including the existing untracked `CORE_RULES.md` and architecture study. This document retains the proposed sequence and records partial implementation and verification in the checkpoint below.
 
+## Detailed execution plan
+
+The [architecture execution plan](architecture-execution-plan.md) expands this roadmap into concrete packages, state transitions, evaluation contracts, migration strategy and release gates against revision `abb3420`. Use it for the next implementation cycle; the checkpoint below remains historical evidence.
+
 ## Direction
 
 Keep Corenyth an offline personal assistant: deterministic code owns authorization, dates, storage, scheduling and execution; the small local model interprets phrasing and provides bounded personality. Adopt the study's memory and lifecycle principles by improving the existing implementation. Do not replace it with Mem0, Hermes, a vector service, or a new agent loop.
@@ -128,7 +132,7 @@ Implemented in this checkout:
 - Conversation-local first-request scope refusal, immediate similar-repeat allowance, reset on unrelated requests, and bypasses for core requests, pending time answers and arithmetic.
 - Scope refusals skip plan, prose and mascot inference. Conservative deterministic classification leaves uncertain phrasing to existing interpretation.
 - Conversational prose length cap with explicit-detail and persisted-request exceptions; execution receipts and lists retain their factual content.
-- Validated deterministic confirmations reach the display callback before optional mood inference. The handle still waits for mood completion; this is a first-display improvement, not an end-to-end latency claim or asynchronous mood worker.
+- Validated deterministic confirmations reach the display callback before optional mood inference. The handle still waits for mood completion; this is a first-display improvement, not an end-to-end latency claim or asynchronous mood worker. _Superseded:_ the P3 package in the [acceptance report](architecture-acceptance-report.md) dispatches optional mood in the background (`_dispatchOptionalMood`), so the turn handle no longer awaits it.
 - Day-only calls ask their time and retain the requested date through clarification.
 - Planning prompt marks retrieved saved facts as reference data rather than instructions.
 

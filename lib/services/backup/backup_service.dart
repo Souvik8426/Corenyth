@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../../data/db.dart' show indexMemoryRows;
 import '../../data/repos.dart';
 import '../model_selection.dart';
 import '../model_status.dart';
@@ -426,6 +427,9 @@ class BackupService {
       await tx.insert('assistant_preferences', data.preferences!,
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
+    // The backup carries memory text only; the lookup keys that dedupe and
+    // supersede by are derived from it again, as the v10 migration does.
+    await indexMemoryRows(tx);
   }
 
   /// Brings the platform alarms in line with the imported reminders.

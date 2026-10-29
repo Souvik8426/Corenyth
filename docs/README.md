@@ -40,8 +40,11 @@ docs/
 
 | Doc | Covers |
 |---|---|
+| [architecture-execution-plan.md](development/architecture-execution-plan.md) | Detailed remaining work: implementation contracts, dependencies, tests and acceptance gates |
 | [architecture-next-steps.md](development/architecture-next-steps.md) | Source-grounded implementation sequence after the Mem0/Hermes study |
 | [architecture-study-mem0-hermes.md](development/architecture-study-mem0-hermes.md) | Memory and agent architecture research; proposed gains require validation |
+| [architecture-acceptance-report.md](development/architecture-acceptance-report.md) | Live gate status while executing the architecture plan |
+| [capability-matrix.md](development/capability-matrix.md) | Supported wording vs stored entities, permissions, receipts and unsupported variants |
 | [reliability-status.md](development/reliability-status.md) | Implemented repairs, recorded test and corpus results, open acceptance gates |
 | [known-gaps.md](development/known-gaps.md) | What is not built yet, and known rough edges |
 | [device-evaluation.md](development/device-evaluation.md) | Checking real model behavior and notification delivery on a phone |
@@ -69,8 +72,6 @@ history and evidence (the P5 verification report is cited by the status docs). N
 - [`../README.md`](../README.md): project overview.
 - [`../eval/README.md`](../eval/README.md): frozen evaluation corpus, scoring and native host reference.
 - [`../training/README.md`](../training/README.md): Qwen3-0.6B fine-tune data (MASSIVE + generated) and Colab training.
-- [`../branding/DESIGN.md`](../branding/DESIGN.md): "Ethereal Arcana" design system (colors, type, components). Left in
-  place next to the logo it describes.
 
 ## Moved paths (19 October 2026)
 

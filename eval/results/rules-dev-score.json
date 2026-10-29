@@ -2,25 +2,21 @@
   "mode": "model-unavailable",
   "split": "dev",
   "counts": {
-    "pass": 87,
-    "fail": 10,
+    "pass": 97,
     "incomplete": 5
   },
   "categories": {
     "ambiguity": {
-      "fail": 1,
-      "pass": 10
+      "pass": 11
     },
     "chat": {
       "pass": 10
     },
     "lists": {
-      "fail": 6,
-      "pass": 5
+      "pass": 11
     },
     "memory": {
-      "pass": 8,
-      "fail": 2
+      "pass": 10
     },
     "negation": {
       "pass": 9,
@@ -31,8 +27,7 @@
       "pass": 6
     },
     "scheduling": {
-      "pass": 24,
-      "fail": 1
+      "pass": 25
     },
     "updates": {
       "pass": 15
@@ -196,11 +191,8 @@
     {
       "id": "S-023",
       "category": "scheduling",
-      "status": "fail",
-      "errors": [
-        "missing write",
-        "missing/ambiguous create_task"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
@@ -325,10 +317,8 @@
     {
       "id": "L-001",
       "category": "lists",
-      "status": "fail",
-      "errors": [
-        "missing answer t2"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
@@ -341,20 +331,15 @@
     {
       "id": "L-003",
       "category": "lists",
-      "status": "fail",
-      "errors": [
-        "missing answer t1"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
       "id": "L-004",
       "category": "lists",
-      "status": "fail",
-      "errors": [
-        "missing answer t1",
-        "missing answer t2"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
@@ -367,10 +352,8 @@
     {
       "id": "L-006",
       "category": "lists",
-      "status": "fail",
-      "errors": [
-        "missing answer t1"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
@@ -383,10 +366,8 @@
     {
       "id": "L-008",
       "category": "lists",
-      "status": "fail",
-      "errors": [
-        "missing answer t1"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
@@ -399,10 +380,8 @@
     {
       "id": "L-010",
       "category": "lists",
-      "status": "fail",
-      "errors": [
-        "missing answer t2"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
@@ -549,29 +528,22 @@
     {
       "id": "Y-009",
       "category": "memory",
-      "status": "fail",
-      "errors": [
-        "missing answer m1"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
       "id": "Y-010",
       "category": "memory",
-      "status": "fail",
-      "errors": [
-        "missing answer fact"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {
       "id": "A-001",
       "category": "ambiguity",
-      "status": "fail",
-      "errors": [
-        "missing clarification question",
-        "wrong clarification field"
-      ],
+      "status": "pass",
+      "errors": [],
       "unscored": []
     },
     {

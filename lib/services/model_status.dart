@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// Allowlisted local GGUF model (Qwen3 ChatML only): Corenyth's fine-tuned 0.6B.
+/// Allowlisted local GGUF models (Qwen3 ChatML only); Corenyth's fine-tuned
+/// 0.6B is the recommended default.
 /// Size/SHA-256 are those of the exported file (training/README.md).
 /// [checkModel] is only a size check; [ModelSelection.verify] hashes the file before load.
 
@@ -39,7 +40,7 @@ class ModelSpec {
 
 const defaultModelId = 'corenyth-0.6b-tuned';
 
-/// The only allowlisted model: Qwen3-0.6B LoRA-fine-tuned on Corenyth's plan
+/// The default, recommended model: Qwen3-0.6B LoRA-fine-tuned on Corenyth's plan
 /// prompts (training/), merged and quantized to Q4_0 by Unsloth. Published as a
 /// GitHub release asset; the app only opens the link in the browser (no
 /// INTERNET permission). A retrained file has a new size, hash and release URL.
@@ -52,7 +53,20 @@ const ModelSpec corenythModel = ModelSpec(
   sha256: '77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821',
 );
 
-const List<ModelSpec> modelCatalog = [corenythModel];
+/// Optional alternative: a Qwen3-0.6B Q4_0 build imported from the device. Not
+/// published as a release asset yet, so it has no download link (the setup
+/// card hides the browser button for an empty [ModelSpec.url]).
+const ModelSpec qwen3Model = ModelSpec(
+  id: 'qwen3-0.6b-q4_0',
+  fileName: 'Qwen3-0.6B.Q4_0.gguf',
+  url: '',
+  expectedBytes: 381566560,
+  label: 'Qwen3 0.6B (Q4_0)',
+  sha256: '553519095aa918d215da7924872da1349d321a6dd98bac96cc66021064f8137b',
+);
+
+/// Selectable models; [corenythModel] (first) is the default and recommended.
+const List<ModelSpec> modelCatalog = [corenythModel, qwen3Model];
 
 /// Back-compat aliases for the default model (literals; field access is not a const expr).
 const modelFileName = 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';

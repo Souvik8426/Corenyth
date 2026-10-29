@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../data/repos.dart' show normTitle;
 import 'calculator.dart';
 import 'engine.dart';
+import 'semantic.dart' show rangeArgs;
 import 'temporal.dart';
 import 'tools.dart' show friendlyTime, shortDate;
 
@@ -183,7 +184,10 @@ class RuleEngine extends LlmEngine {
     );
   }
 
-  static final _dailyRe = _ci(r'\b(?:daily|every ?day|each day)\b');
+  /// "every morning" is daily too; its part of day stays in the text so it
+  /// still sets the time ("every evening at 9" = 9 PM).
+  static final _dailyRe = _ci(
+      r'\b(?:daily|every ?day|each day|(?:every|each) (morning|afternoon|evening|night))\b');
   static final _untilDoneRe = _ci(
       r"\b(?:until|till|til)\s+(?:it'?s\s+|i'?m\s+|i\s+am\s+)?(?:done|complete|completed|finished)\b");
 
@@ -199,7 +203,9 @@ class RuleEngine extends LlmEngine {
     if (m == null) return null;
     ({DailySchedule? schedule, String? problem}) ask(String p) =>
         (schedule: null, problem: p);
-    t = t.replaceFirst(m.group(0)!, ' ').replaceAll(_untilDoneRe, ' ');
+    t = t
+        .replaceFirst(m.group(0)!, ' ${m.group(1) ?? ''} ')
+        .replaceAll(_untilDoneRe, ' ');
     final now = clock();
     DateTime? last;
     final cutoff = _ci(Temporal.untilLead).firstMatch(t);
@@ -243,7 +249,10 @@ class RuleEngine extends LlmEngine {
           minute: at.minute,
           first: first,
           until: until,
-          rest: w.rest,
+          // The part of day kept for the clock is not part of the title.
+          rest: m.group(1) == null
+              ? w.rest
+              : _squash(w.rest.replaceFirst(_ci('\\b${m.group(1)}\\b'), ' ')),
           note: w.note),
       problem: null
     );
@@ -269,6 +278,21 @@ class RuleEngine extends LlmEngine {
 
   /// "don't…", "not…": never a write, whatever the model read.
   static bool isNegated(String raw) => _negRe.hasMatch(_req(raw));
+
+  /// "not tonight, but remind me tomorrow at 8am to pay rent": the request
+  /// after "but" when it is a full, un-negated request on its own; otherwise
+  /// null and the whole message is read as said.
+  static String? contrastRequest(String text) {
+    final m = _contrastRe.firstMatch(text.trim());
+    if (m == null) return null;
+    final rest = m.group(1)!.trim();
+    return _contrastAsk.hasMatch(rest) && !isNegated(rest) ? rest : null;
+  }
+
+  static final _contrastRe = _ci(
+      r"^(?:no,?\s+)?not\s+[\w' ]{1,25}?\s*,?\s+but\s+(.+)$");
+  static final _contrastAsk = _ci(
+      r'\b(?:remind|reminder|add|set|ping|nudge|buzz|alert|notify|schedule|note)\b');
   static final _negRe =
       _ci(r"\b(?:not|don'?t|do not|never|haven'?t|hasn'?t|won'?t|no longer)\b");
 
@@ -399,6 +423,38 @@ class RuleEngine extends LlmEngine {
   static final _remindQueryRe =
       _ci(r'^remind me (?:what|when|which|of what|about what)\b');
 
+  /// A question or request to see the user's own pending tasks.
+  static final _agendaCue = _ci(
+      r"\b(?:pending|left|on my plate|overdue|to-?dos?|tasks?|due|agenda|schedule|"
+      r"do i have|anything|what do i have|what(?:'s| is| are) on|the things)\b");
+  static final _agendaAsk = _ci(
+      r'^(?:what|which|any|anything|do i|is there|are there|tell me|show|list)\b|'
+      r'\?|\b(?:tell me|show me|list)\b');
+  static final _agendaWrite = _ci(
+      r'\b(?:remind|add|create|set|schedule|delete|remove|complete|finish|mark|'
+      r'cancel|edit|rename|move|postpone|delay|change|book|save)\b');
+
+  static bool agendaQuestion(String t) =>
+      _agendaCue.hasMatch(t) &&
+      _agendaAsk.hasMatch(t) &&
+      !_agendaWrite.hasMatch(t);
+
+  /// The [rangeArgs] range a read-only agenda question asks for.
+  static String agendaRange(String t) {
+    if (_ci(r'\b(?:overdue|miss(?:ed)?|late|behind|past due)\b').hasMatch(t)) {
+      return 'overdue';
+    }
+    if (_ci(r'\bthis week\b').hasMatch(t)) return 'week';
+    if (_ci(r'\bafter lunch\b').hasMatch(t) && _ci(r'\btoday\b').hasMatch(t)) {
+      return 'afternoon_today';
+    }
+    if (_ci(r'\b(?:tomorrow|tmrw|tmrow|tmr|tmw|tomo|2moro)\b').hasMatch(t)) {
+      return 'tomorrow';
+    }
+    if (_ci(r'\btoday\b').hasMatch(t)) return 'today';
+    return 'all';
+  }
+
   static final _postponeAbsRe = _ci(
       r'^(?:postpone|delay|push(?: back)?|move|reschedule|change)(?: the| my)? (.+?) to (.+)$');
 
@@ -408,7 +464,7 @@ class RuleEngine extends LlmEngine {
   static final _doneRefRe = _ci(
       r"^(?:i(?:'m| am) )?(?:all )?(?:done|finished) with (.+)$|"
       r"^i(?:'ve| have)? (?:just )?(?:finished|completed|done) (.+)$|"
-      r"^(?:i(?:'ve| have)? )?(?:just )?(bought|picked up|called|paid|sent|emailed|booked|cleaned) (.+)$");
+      r"^(?:i(?:'ve| have)? )?(?:just )?(bought|picked up|called|paid|sent|emailed|booked|cleaned|renewed|fixed|watered|read) (.+)$");
   static const _verbs = {
     'buying': 'buy',
     'bought': 'buy',
@@ -426,6 +482,14 @@ class RuleEngine extends LlmEngine {
     'cleaned': 'clean',
     'picking up': 'pick up',
     'picked up': 'pick up',
+    'renewing': 'renew',
+    'renewed': 'renew',
+    'fixing': 'fix',
+    'fixed': 'fix',
+    'watering': 'water',
+    'watered': 'water',
+    'reading': 'read',
+    'read': 'read',
     // "done with the meeting with ceo" names "schedule a meet with ceo"
     'meeting': 'meet',
     'meetings': 'meet',
@@ -446,7 +510,7 @@ class RuleEngine extends LlmEngine {
         .trim();
     if (verb != null) return ['${_verbs[verb]} $obj'];
     final g =
-        _ci(r'^(buying|calling|paying|sending|emailing|booking|cleaning|picking up) (.+)$')
+        _ci(r'^(buying|calling|paying|sending|emailing|booking|cleaning|picking up|renewing|fixing|watering|reading) (.+)$')
             .firstMatch(obj);
     return [
       obj,
@@ -498,6 +562,8 @@ class RuleEngine extends LlmEngine {
     return (multiple, followUp, _squash(t).replaceAll(RegExp(r'[\s,]+$'), ''));
   }
 
+  static final _questionLead = _ci(
+      r'^(?:what|which|when|who|where|how|why|is|are|do|does|did|can|could|would|should)\b');
   static final _captureRe = _ci(
       r'^(?:i\s+)?(?:(?:also|still|really)\s+)*(?:have to|need to|must|gotta|got to|remember to)\s+(.+)$');
   static final _haveRe = _ci(r"^i(?:'ve| have)(?: got)? (?:a|an) (.+)$");
@@ -560,6 +626,10 @@ class RuleEngine extends LlmEngine {
         (m = _ci(r'^i want to (.+)$').firstMatch(t)) != null) {
       body = m!.group(1)!;
       needsWhen = true; // Untimed facts and wishes are not commitments.
+    } else if (readWhen(t).conflict && !_questionLead.hasMatch(t)) {
+      // A bare request whose times disagree ("Meeting in 10 minutes at 9"):
+      // the conflict note makes the caller ask which time, and nothing is saved.
+      body = t;
     } else {
       return null;
     }
@@ -672,7 +742,7 @@ class RuleEngine extends LlmEngine {
   /// the question). Null: [raw] is a new request; route it normally.
   ({Map<String, Object?> call, bool keep})? resolveClarify(
       ClarifyDraft d, String raw) {
-    final t = _req(raw);
+    final t = _clarificationText(raw);
     ({Map<String, Object?> call, bool keep}) ask(String why) =>
         (call: _say('$why ${d.prompt}'), keep: true);
     if (_cancelRe.hasMatch(t)) {
@@ -687,6 +757,11 @@ class RuleEngine extends LlmEngine {
       return null;
     }
     if (extra.isNotEmpty) {
+      // A question about the user's tasks is a new request: answer it and keep
+      // the open question for a later time reply.
+      if (agendaQuestion(t) || _question.hasMatch(t)) {
+        return null;
+      }
       return ask(
           'I\'m not sure if "$raw" is the time for "${d.title}" or a new '
           'request, so I did nothing. Reply with just the time, or "cancel".');
@@ -706,15 +781,18 @@ class RuleEngine extends LlmEngine {
   /// A reply that only answers [d]'s question (a time, or cancel): settled
   /// without the model. Anything longer may be a new request.
   bool isTimeAnswer(ClarifyDraft d, String raw) {
-    final t = _req(raw);
+    final t = _clarificationText(raw);
     if (_cancelRe.hasMatch(t)) return true;
     final (at, rest, _) = _when(_withTime(d, t));
     if (at != null) return _extra(rest).isEmpty;
     return _unsupportedDate.hasMatch(t) && t.split(' ').length <= 4;
   }
 
+  static String _clarificationText(String raw) => _req(raw)
+      .replaceFirst(_ci(r'^(?:ok(?:ay)?\s+)?(?:make that\s+|actually\s+)'), '');
+
   static final _cancelRe =
-      _ci(r'^(?:cancel|never ?mind|forget (?:it|about it)|stop|no)$');
+      _ci(r'^(?:cancel|never ?mind|forget (?:it|about it|that one)|stop|no)$');
   static String _extra(String rest) => rest
       .replaceAll(
           _ci(r'\b(?:ok(?:ay)?|please|pls|thanks|then|make it|at|on|by|yes|for|it)\b'),
@@ -805,6 +883,16 @@ class RuleEngine extends LlmEngine {
           'from': from.toIso8601String(),
           'to': DateTime(from.year, from.month, from.day + 1).toIso8601String(),
         }
+      });
+    }
+
+    // Read-only agenda questions ("anything left?", "what's overdue?") use the
+    // same ranges as the model path, so both interpreters answer alike.
+    if (agendaQuestion(t) && parseCreate(t) == null && doneRef(t) == null) {
+      final args = rangeArgs(agendaRange(t), clock());
+      return _tool('list_tasks', {
+        for (final e in args.entries)
+          e.key: (e.value as DateTime).toIso8601String(),
       });
     }
 
@@ -906,6 +994,12 @@ class RuleEngine extends LlmEngine {
   static final _question = _ci(
       r'^(?:how|why|what|when|where|which|who|explain|tell me|should|is|are|does|do i|am i|can i|could i|if|suppose|what if)\b');
 
+  /// Recall questions about something the user said earlier: "do you remember
+  /// …", "did I say …", "where I said …". Read-only; the answer comes from
+  /// saved facts first, then earlier messages (see Session._recall).
+  static final _yesNoRecallRe = _ci(
+      r'^(?:(?:what|when|who|where|how)\b.*\bi (?:said|told you)\b|'
+      r'(?:do you|did i) (?:remember|recall|say|tell|mention)\b)');
   static final _personalCue =
       _ci(r"\b(?:i|me|my|mine|we|our|remember|prefer|usually|normally)\b");
   static final _generalRe = _ci(
@@ -1046,8 +1140,10 @@ class RuleEngine extends LlmEngine {
       });
     }
     if (_personalCue.hasMatch(t) &&
-        RegExp(r'^(what|when|who|where|how).*\b(did i tell you|do you know|do you remember|normally|usually|about)\b')
-            .hasMatch(t)) {
+        (_question.hasMatch(t) ||
+            RegExp(r'^(what|when|who|where|how).*\b(did i tell you|do you know|do you remember|normally|usually|about)\b')
+                .hasMatch(t) ||
+            _yesNoRecallRe.hasMatch(t))) {
       return _tool('search_memory', {'query': text});
     }
     // Only the strict fastRoute above may emit mutations; past here the rules
@@ -1059,7 +1155,9 @@ class RuleEngine extends LlmEngine {
           "I didn't change anything: I couldn't tell exactly what you meant. "
           'Try e.g. "delete task 3", "complete task buy milk", or "postpone gym to tomorrow at 5".');
     }
-    if (isExplicitRemember(t)) return _say("Okay, I'll remember that.");
+    if (isExplicitRemember(t) || extractMemory(t)['remember'] == true) {
+      return _say("Okay, I'll remember that.");
+    }
     if (RegExp(
             r"^(?:how are you|how's it going|how is it going|what'?s up|sup|you there)\b")
         .hasMatch(t)) {
@@ -1075,8 +1173,48 @@ class RuleEngine extends LlmEngine {
         "tell you what's on your plate, or do quick calculations.");
   }
 
+  /// The new fact a correction states: the old verb with the new object
+  /// ("live" + "in Bangalore" -> "User lives in Bangalore").
+  Map<String, Object?> _corrected(RegExpMatch m) {
+    final verb = (m.group(1) ?? m.group(3))!.toLowerCase();
+    final old = (m.group(2) ?? m.group(4))!.trim();
+    var now = m.group(5)!.trim();
+    now = now
+        .replaceFirst(
+            RegExp(
+                r"^(?:(?:i'?ve|i have|i)\s+)?(?:switched|moved|changed|shifted)\s+(?:over\s+)?to\s+|"
+                r"^(?:now\s+)?(?:i'?m|i am)\s+|^now\s+(?:i\s+)?|^i\s+",
+                caseSensitive: false),
+            '')
+        .replaceFirst(RegExp('^$verb\\s+', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'\s+now$', caseSensitive: false), '')
+        .trim();
+    if (now.isEmpty) return {'remember': false};
+    // Keep the old preposition when the new clause dropped it ("in Pune" ->
+    // "Bangalore" stays "in Bangalore").
+    final prep = RegExp(r'^(in|at|on|with|for|from)\s', caseSensitive: false)
+        .firstMatch(old);
+    if (prep != null &&
+        !RegExp('^${prep.group(1)}\\s', caseSensitive: false).hasMatch(now)) {
+      now = '${prep.group(1)!.toLowerCase()} $now';
+    }
+    final third = verb.endsWith('s') ||
+            verb.endsWith('sh') ||
+            verb.endsWith('ch') ||
+            verb.endsWith('o')
+        ? '${verb}es'
+        : verb.endsWith('y') && !RegExp(r'[aeiou]y$').hasMatch(verb)
+            ? '${verb.substring(0, verb.length - 1)}ies'
+            : '${verb}s';
+    return {
+      'remember': true,
+      'memory': 'User $third $now',
+      'category': 'preference',
+    };
+  }
+
   static final _fact = RegExp(
-      r"^i\s+(?:(?:usually|normally|always|never|really)\s+)?(?:am|'m|work|live|prefer|like|love|hate|dislike|need|use|go|have|study)\b");
+      r"^i(?:'m\b|\s+(?:(?:usually|normally|always|never|really)\s+)?(?:am|'m|work|live|prefer|like|love|hate|dislike|need|use|go|have|study)\b)");
 
   /// Short-lived plans and obligations: never stored as personal memory.
   /// Habits ("I usually have meetings on Monday") still count as durable.
@@ -1089,29 +1227,62 @@ class RuleEngine extends LlmEngine {
   static bool isTemporary(String text) =>
       _temporary.hasMatch(text) && !_durable.hasMatch(text);
 
-  /// "remember (that) X" — but not "remember to X", which is a task/reminder.
-  static bool isExplicitRemember(String text) =>
-      RegExp(r'^(?:please\s+)?remember(?:\s+that)?\s+(?!to\b)\S',
-              caseSensitive: false)
-          .hasMatch(text.trim());
+  /// "remember (that) X", "note that X", "fyi X", "keep in mind X",
+  /// "don't forget that X", "X, keep that in mind" — but not "remember to X",
+  /// which is a task/reminder. A correction ("I no longer …") counts too.
+  static bool isExplicitRemember(String text) {
+    final t = text.trim();
+    return _memoryCue.hasMatch(t) ||
+        _memoryTail.hasMatch(t) ||
+        _correction.hasMatch(t);
+  }
+
+  static final _memoryCue = RegExp(
+      r"^(?:please\s+)?(?:remember|note|fyi|keep\s+in\s+mind|don'?t\s+forget|do\s+not\s+forget)"
+      r'(?:\s+that)?[:,]?\s+(?!to\b)(\S.*)$',
+      caseSensitive: false);
+  static final _memoryTail = RegExp(
+      r'^(.+?)[,;]?\s+(?:(?:please\s+)?(?:keep|bear)\s+(?:that|this|it)\s+in\s+mind|remember\s+that|note\s+that)[.!]*$',
+      caseSensitive: false);
+
+  /// "I no longer live in Pune, I'm in Bangalore now", "I don't drink coffee
+  /// anymore, switched to tea": verb, the dropped object, the new clause.
+  static final _correction = RegExp(
+      r"^i\s+(?:no\s+longer\s+(\w+)\s+(.+?)|(?:don'?t|do\s+not|dont)\s+(\w+)\s+(.+?)\s+any\s?more)\s*[,;]\s*(.+?)[.!]*$",
+      caseSensitive: false);
+
+  /// What a correction replaces ("pune", "coffee"), for superseding the
+  /// memories that still say it; null when [text] is not a correction.
+  static String? correctedObject(String text) {
+    final m = _correction.firstMatch(text.trim());
+    return m == null ? null : (m.group(2) ?? m.group(4))!.trim();
+  }
 
   Map<String, Object?> extractMemory(String raw) {
     final text = raw
         .trim()
         .replaceFirst(RegExp(r'^actually[, ]+', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'\bnow\b[, ]*', caseSensitive: false), '')
         .replaceFirst(RegExp(r'\s+now[.!?]*$', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'[, ]+\bnot\s+.*$', caseSensitive: false), '')
         .replaceAll(RegExp(r'[.!?]+$'), '');
     final t = text.toLowerCase();
     if (isTemporary(t)) return {'remember': false};
-    final r = RegExp(r'^(?:please\s+)?remember(?:\s+that)?\s+(.+)$',
-            caseSensitive: false)
-        .firstMatch(text);
+    final fix = _correction.firstMatch(text);
+    if (fix != null) return _corrected(fix);
+    final r = _memoryCue.firstMatch(text) ?? _memoryTail.firstMatch(text);
     if (r != null) {
-      final inner = extractMemory(
-          r.group(1)!); // "remember I like tea" -> "User likes tea"
-      return inner['remember'] == true
-          ? inner
-          : {'remember': true, 'memory': r.group(1)!, 'category': 'fact'};
+      final said = r.group(1)!.trim();
+      final inner =
+          extractMemory(said); // "remember I like tea" -> "User likes tea"
+      if (inner['remember'] == true) return inner;
+      // "fyi my brother's name is Kabir" -> "User's brother's name is Kabir"
+      final mine = RegExp(r'^my\s+(.+)$', caseSensitive: false).firstMatch(said);
+      return {
+        'remember': true,
+        'memory': mine == null ? said : "User's ${mine.group(1)}",
+        'category': 'fact'
+      };
     }
     if (_fact.hasMatch(t)) {
       var rest = text.substring(1).trim();

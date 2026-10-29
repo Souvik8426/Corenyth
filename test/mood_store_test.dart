@@ -28,19 +28,21 @@ void main() {
     expect(store.pending.emotion!.mood, MascotMood.concerned);
   });
 
-  test('events after endTurn, stop, or a newer turn are stale', () {
+  test('events after endTurn, stop, or a newer turn handle live and history correctly', () {
     final store = MoodController(conversationId: 'c1');
     store.beginTurn('op1');
     store.endTurn();
-    expect(store.accept(mood(MascotMood.happy)), isFalse,
-        reason: 'the window closed with the turn');
+    expect(store.accept(mood(MascotMood.happy, turn: 'op1')), isTrue,
+        reason: 'current turn accepts valid optional reading after text completes');
     store.cancelPending();
-    expect(store.accept(mood(MascotMood.happy)), isFalse);
+    expect(store.accept(mood(MascotMood.happy, turn: 'op1')), isFalse);
 
     store.beginTurn('op2');
     store.beginTurn('op3'); // a newer request supersedes op2
-    expect(store.accept(mood(MascotMood.happy, turn: 'op2')), isFalse,
-        reason: 'stale turn id');
+    expect(store.accept(mood(MascotMood.happy, turn: 'op2', row: 12)), isFalse,
+        reason: 'stale turn id does not change live mascot');
+    expect(store.moodFor(12).emotion!.mood, MascotMood.happy,
+        reason: 'historical adoption updates that row only');
     expect(store.accept(mood(MascotMood.happy, turn: 'op3')), isTrue);
   });
 

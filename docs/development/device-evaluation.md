@@ -76,7 +76,7 @@ fixed-time host equivalent is `test/screenshot_within_test.dart`, which is expec
 | 6 | I'm done with buying milk | completes "buy milk" only (asks if several match) |
 | 7 | don't remind me to call Bob | nothing saved |
 | 8 | Explain how to delete tasks | nothing deleted |
-| 9 | what's the capital of France | short honest reply, no task facts |
+| 9 | what's the capital of France | **first** general-knowledge ask: exact core-functionality refusal, **zero** model calls; a similar immediate retry may answer briefly via the local model (read-only). Capability wording: see [capability-matrix.md](capability-matrix.md). Supported model catalog is the allowlisted fine-tuned 0.6B only. |
 | 10 | 90+24-10*89898 | -898866, no model call |
 
 Record for each: reply, `intent`, whether the rules took over (`lastFallbackReason`, shown under the chat), and

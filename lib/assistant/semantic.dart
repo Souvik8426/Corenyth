@@ -174,7 +174,7 @@ String _semanticGrammar(int version) {
   for (final intent in intents) {
     final parts = <String>[
       '\"{\"',
-      '\"\\\"emotion\\\":\" emotion',
+      '\"\\\"emotion\\\":\" emotion \",\"',
       '\"\\\"intent\\\":\\\"$intent\\\"\"'
     ];
     for (final key in [

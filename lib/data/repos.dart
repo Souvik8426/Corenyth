@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
 int _now() => DateTime.now().millisecondsSinceEpoch;
@@ -490,7 +491,9 @@ String normTitle(String s) => s
 
 class ReminderRepo {
   final Database db;
-  ReminderRepo(this.db);
+  ReminderRepo(this.db, {DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now;
+  final DateTime Function() _clock;
 
   /// Saves the whole [plan] (see [reminderPlan]) and, without [taskId], its
   /// task due at [at], in one transaction with pending 'schedule' intents, so
@@ -641,12 +644,16 @@ class ReminderRepo {
     return r.isEmpty ? null : Reminder(r.first);
   }
 
-  Future<List<Reminder>> upcoming() async => (await db.query('reminders',
-          where: 'enabled = 1 AND trigger_at > ?',
-          whereArgs: [_now()],
-          orderBy: 'trigger_at'))
-      .map(Reminder.new)
-      .toList();
+  Future<List<Reminder>> upcoming() => upcomingAt(_clock());
+
+  /// Uses the caller's captured turn clock for temporal consistency.
+  Future<List<Reminder>> upcomingAt(DateTime now) async =>
+      (await db.query('reminders',
+              where: 'enabled = 1 AND trigger_at > ?',
+              whereArgs: [now.millisecondsSinceEpoch],
+              orderBy: 'trigger_at'))
+          .map(Reminder.new)
+          .toList();
 
   Future<bool> update(int id, Map<String, Object?> v) async =>
       await db.update('reminders', v, where: 'id = ?', whereArgs: [id]) > 0;
@@ -1020,8 +1027,8 @@ class MoodRepo {
 
   /// Every stored mood row of one chat, keyed by message id.
   Future<Map<int, Map<String, Object?>>> rowsForChat(String chatId) async {
-    final rows = await db.query('message_moods',
-        where: 'chat_id = ?', whereArgs: [chatId]);
+    final rows = await db
+        .query('message_moods', where: 'chat_id = ?', whereArgs: [chatId]);
     return {for (final r in rows) r['message_id'] as int: r};
   }
 }
@@ -1030,9 +1037,9 @@ class Memory {
   final int id;
   final String content, category;
   final double importance;
-  final DateTime? createdAt, updatedAt, lastAccessedAt;
-  final String? opId, source, status;
-  final int? supersededBy;
+  final DateTime? createdAt, updatedAt, lastAccessedAt, observedAtUtc;
+  final String? opId, source, status, contentHash, subjectKey, attributeKey, factDate;
+  final int? supersededBy, observationOffsetMin;
 
   Memory(Map<String, Object?> r)
       : id = r['id'] as int,
@@ -1045,7 +1052,13 @@ class Memory {
         opId = r['op_id'] as String?,
         source = r['source'] as String?,
         status = r['status'] as String? ?? 'active',
-        supersededBy = r['superseded_by'] as int?;
+        supersededBy = r['superseded_by'] as int?,
+        contentHash = r['content_hash'] as String?,
+        subjectKey = r['subject_key'] as String?,
+        attributeKey = r['attribute_key'] as String?,
+        observedAtUtc = _dt(r['observed_at_utc']),
+        observationOffsetMin = r['observation_offset_min'] as int?,
+        factDate = r['fact_date'] as String?;
 
   bool get isActive => status == 'active';
 
@@ -1115,18 +1128,11 @@ MemorySlot? extractMemorySlot(String content) {
     return MemorySlot(subject, 'pref:answer_style');
   }
 
-  // Tea preference
-  if (RegExp(r'\btea\b').hasMatch(rest) &&
+  // Drink preference
+  if (RegExp(r'\b(?:tea|coffee|drink|drinks|beverage)\b').hasMatch(rest) &&
       RegExp(r'\b(?:prefers?|likes?|loves?|hates?|dislikes?|drinks?)\b')
           .hasMatch(rest)) {
-    return MemorySlot(subject, 'pref:tea:${_drinkAttribute(rest)}');
-  }
-
-  // Coffee preference
-  if (RegExp(r'\bcoffee\b').hasMatch(rest) &&
-      RegExp(r'\b(?:prefers?|likes?|loves?|hates?|dislikes?|drinks?)\b')
-          .hasMatch(rest)) {
-    return MemorySlot(subject, 'pref:coffee:${_drinkAttribute(rest)}');
+    return MemorySlot(subject, 'pref:drink:${_drinkAttribute(rest)}');
   }
 
   // Meeting time preference
@@ -1205,9 +1211,12 @@ class MemoryRepo {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     final norm = normalized(content);
-    // Deduplication check
+    final contentHash = sha256.convert(utf8.encode(norm)).toString();
+    // Fast deduplication check using indexed content_hash
     for (final r in await db.query('memories',
-        columns: ['id', 'content', 'importance'], where: "status = 'active'")) {
+        columns: ['id', 'content', 'importance'],
+        where: "status = 'active' AND content_hash = ?",
+        whereArgs: [contentHash])) {
       if (normalized(r['content'] as String) == norm) {
         final imp = ((r['importance'] as num) + 0.1).clamp(0.0, 1.0);
         await db.update(
@@ -1224,17 +1233,15 @@ class MemoryRepo {
       }
     }
 
-    // Slot superseding check: new preference supersedes prior value for same subject & slot
+    // Fast slot superseding check using indexed subject_key & attribute_key
     final newSlot = extractMemorySlot(content);
     final toSupersede = <int>[];
     if (newSlot != null) {
       for (final r in await db.query('memories',
-          columns: ['id', 'content'], where: "status = 'active'")) {
-        final existingContent = r['content'] as String;
-        final existingSlot = extractMemorySlot(existingContent);
-        if (existingSlot != null && existingSlot == newSlot) {
-          toSupersede.add(r['id'] as int);
-        }
+          columns: ['id', 'content'],
+          where: "status = 'active' AND subject_key = ? AND attribute_key = ?",
+          whereArgs: [newSlot.subject, newSlot.slot])) {
+        toSupersede.add(r['id'] as int);
       }
     }
 
@@ -1246,6 +1253,9 @@ class MemoryRepo {
       'created_at': t,
       'updated_at': t,
       'status': 'active',
+      'content_hash': contentHash,
+      'subject_key': newSlot?.subject,
+      'attribute_key': newSlot?.slot,
       if (opId != null) 'op_id': opId,
       if (source != null) 'source': source,
     });
@@ -1277,7 +1287,7 @@ class MemoryRepo {
     final rows = (await db.rawQuery(
             'SELECT m.* FROM memories m JOIN memories_fts f ON f.docid = m.id '
             'WHERE memories_fts MATCH ? AND m.status = \'active\'',
-            [ts.map((t) => '"$t"').join(' OR ')]))
+            [ts.map((t) => '"$t" OR ${t.replaceAll('"', '')}*').join(' OR ')]))
         .toList();
     final now = _now();
     double score(Map<String, Object?> r) {

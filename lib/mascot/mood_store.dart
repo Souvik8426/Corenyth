@@ -48,10 +48,17 @@ class MoodController {
   /// Accepts one validated event. True when it became the display value:
   /// the first valid event of the open turn wins, everything else (later
   /// events, closed windows, other conversations, stale turns) is dropped.
+  /// A late reading for an older turn adopts into history for that row only,
+  /// without modifying the live pending display.
   bool accept(TurnMood record) {
-    if (_disposed || !_turnOpen || _accepted) return false;
+    if (_disposed) return false;
     if (record.conversationId != conversationId) return false;
-    if (_turnId != null && record.turnId != _turnId) return false;
+    if (_turnId != null && record.turnId != _turnId) {
+      final row = record.messageRowId;
+      if (row != null) _history[row] = record;
+      return false;
+    }
+    if (!_turnOpen || _accepted) return false;
     _accepted = true;
     _pending = record;
     final row = record.messageRowId;
@@ -67,10 +74,11 @@ class MoodController {
     _history[messageRowId] = record;
   }
 
-  /// Closes the turn window: late events for it are stale from now on. The
-  /// accepted value stays visible for its exchange.
+  /// Notes foreground text completion. A completed current turn continues
+  /// to accept its own valid optional reading until a newer turn, cancel, or
+  /// dispose closes the window.
   void endTurn() {
-    _turnOpen = false;
+    // Text complete; keep window open for current turn's optional mood.
   }
 
   /// The turn was stopped or failed before a reading arrived: back to the

@@ -141,6 +141,9 @@ class AssistantSession {
   /// Durations only, never message text.
   Map<String, int> lastTiming = const {};
 
+  /// The in-flight or completed optional mood job for the last turn, if dispatched.
+  Future<void>? lastOptionalMoodJob;
+
   /// The last turn's accepted plan, validation and receipts (null: none ran,
   /// e.g. cancelled before commit or a replayed retry).
   TurnRecord? lastTurn;
@@ -266,11 +269,20 @@ class AssistantSession {
   ToolCall? _memoryEffect;
   String? _modelAuth;
   bool _dryRun = false, _pickStored = false;
-  final _corePolicy = CorePolicy();
+  late final CorePolicy _corePolicy;
   bool _scopeRefused = false;
+  bool _persistedOutside = false;
   var _budget = _ModelBudget();
   var _auth = const AuthorizationReading(Authorization.statement, '');
   static final _rand = Random();
+  int _generationEpoch = 0;
+
+  /// Test-only barrier invoked once after planning, immediately before commit.
+  FutureOr<void> Function()? onBeforeCommit;
+
+  /// Marks the in-flight turn cancelled without awaiting settlement.
+  /// Used by evaluation for deterministic `cancel: before_commit`.
+  void markCancelled() => _cancelled = true;
 
   AssistantSession({
     required this.engine,
@@ -291,9 +303,12 @@ class AssistantSession {
     this.operations,
     this.moods,
     Interpreter? interpreter,
+    CorePolicyStore? policyStore,
   })  : id = conversationId ?? ConversationRepo.newChatId(),
         clock = clock ?? DateTime.now,
-        interpreter = interpreter ?? defaultInterpreter;
+        interpreter = interpreter ?? defaultInterpreter {
+    _corePolicy = CorePolicy(store: policyStore, chatId: id);
+  }
 
   void _go(SessionState n) {
     if (!_allowed[_s]!.contains(n)) {
@@ -386,12 +401,15 @@ class AssistantSession {
       sha256.convert(utf8.encode(text)).toString().substring(0, 16);
 
   void _resetTurn(String text, {Interpreter? mode, bool dryRun = false}) {
+    _generationEpoch++;
     _note = null;
     _header = null;
     _prefix = null;
     _modelLine = null;
     _subject = null;
     _leadMin = null;
+    // "not tonight, but remind me…": the request after "but" is the turn.
+    text = RuleEngine.contrastRequest(text) ?? text;
     _said = text;
     _turnNow = _now();
     _userRowId = null;
@@ -417,8 +435,37 @@ class AssistantSession {
     _memoryEffect = null;
     _modelAuth = null;
     _pickStored = false;
+    _scopeRefused = false;
+    _persistedOutside = false;
     _budget = _ModelBudget();
     _auth = readAuthorization(text);
+  }
+
+  /// Persisted outside answers stay read-only even if a tool plan was produced.
+  CandidatePlan _readOnlyOutside(CandidatePlan plan, String text) {
+    _memoryEffect = null;
+    _effects = [];
+    _changes = [];
+    if (!plan.writes && plan.call.tool == 'respond') {
+      final raw = plan.call.args['text'] as String? ?? '';
+      return CandidatePlan(
+        interpreter: plan.interpreter,
+        route: plan.route,
+        call: _say(_corePolicy.concise(raw, text)),
+        authorization: plan.authorization,
+        modelAuthorization: plan.modelAuthorization,
+      );
+    }
+    final fallback = plan.call.tool == 'respond'
+        ? (plan.call.args['text'] as String? ?? '')
+        : "Here's what I can say about that.";
+    return CandidatePlan(
+      interpreter: plan.interpreter,
+      route: plan.route,
+      call: _say(_corePolicy.concise(fallback.trim(), text)),
+      authorization: plan.authorization,
+      modelAuthorization: plan.modelAuthorization,
+    );
   }
 
   static const _final = {
@@ -474,12 +521,17 @@ class AssistantSession {
           plan = await _plan(text, onText, timing);
         }
         timing['route'] ??= route.elapsedMilliseconds;
+        final prepared =
+            _persistedOutside ? _readOnlyOutside(plan, text) : plan;
+        final beforeCommit = onBeforeCommit;
+        onBeforeCommit = null;
+        if (beforeCommit != null) await beforeCommit();
         if (_cancelled && !recovering) {
           await _abandon(journal);
           return '';
         }
-        reply =
-            await _commit(plan, text, timing, journal, recovering: recovering);
+        reply = await _commit(prepared, text, timing, journal,
+            recovering: recovering);
         if (lastTurn!.receipts.any((r) => r.wrote)) {
           status = OperationJournal.replied;
         }
@@ -500,32 +552,29 @@ class AssistantSession {
         reply = '$reply $_modelLine';
         _diag['reply'] = 'model_line';
       }
-      // The committed confirmation is available immediately; optional mood
-      // reading must not delay its first display. Final persistence and turn
-      // ownership still settle before another turn can use this session.
-      if (_budget.plan + _budget.reply == 0 && !_cancelled) {
-        onText?.call(reply);
-      }
-      // A turn the model never saw (deterministic routes such as the grounded
-      // task questions) otherwise has no reading of the user's message at
-      // all. One budgeted reply-kind call supplies it on the loaded-model
-      // path: its mood envelope is the reading; its generated text is
-      // discarded (the reply above is final and already validated). Mechanical
-      // inputs (#id picks, bare times, arithmetic) never pay this call.
-      if (!_scopeRefused && _budget.plan + _budget.reply == 0 &&
-          !_dryRun &&
-          !_cancelled &&
-          engineInUse == engine.name &&
-          engine is! RuleEngine &&
-          !_mechanicalRoutes.contains(_routeId)) {
-        await _moodOnlyCall(text);
-      }
       await conversations.add(id, 'assistant', reply);
       await journal?.mark(_op, status,
           receipt: jsonEncode({...?lastTurn?.toJson(), 'reply': reply}));
       onText?.call(reply);
       _go(SessionState.speaking);
       if (!_cancelled) await speak?.call(reply);
+
+      // Foreground confirmation settles before optional mood; mood work runs with
+      // captured immutable inputs without delaying or blocking foreground replies.
+      if (!_scopeRefused &&
+          _budget.plan + _budget.reply == 0 &&
+          !_dryRun &&
+          !_cancelled &&
+          engineInUse == engine.name &&
+          engine is! RuleEngine &&
+          !_mechanicalRoutes.contains(_routeId)) {
+        _dispatchOptionalMood(
+          text: text,
+          opId: _op,
+          userRowId: _userRowId,
+          moodSink: _moodSink,
+        );
+      }
       return reply;
     } finally {
       timing['total'] = total.elapsedMilliseconds;
@@ -584,28 +633,78 @@ class AssistantSession {
     RouteId.pendingAnswer,
   };
 
-  /// One bounded call for turns no other route inferred: only its mood
-  /// envelope is consumed, so the live draft is never touched and a finished
-  /// reply is never rewritten. Nothing here can change the turn's outcome.
-  Future<void> _moodOnlyCall(String text) async {
-    if (_cancelled) return;
-    final p = Prompt(PromptKind.reply, text,
-        tone: (await profile.get())?.tone,
-        now: _now(),
-        context: 'Goal: a mascot mood reading of the user\'s current message. '
-            'The reply text is not shown or used.',
-        personalContext: buildPersonalContext(
-            await profile.get() ?? const UserProfile(), const []));
+  /// Dispatches optional mood work with captured immutable inputs, completely
+  /// independent of foreground turn settlement and mutable turn budget.
+  void _dispatchOptionalMood({
+    required String text,
+    required String opId,
+    required int? userRowId,
+    required void Function(TurnMood mood)? moodSink,
+  }) {
+    final epoch = _generationEpoch;
+    final now = _turnNow ?? _now();
+    lastOptionalMoodJob = _runOptionalMood(
+      text: text,
+      opId: opId,
+      userRowId: userRowId,
+      moodSink: moodSink,
+      now: now,
+      epoch: epoch,
+    );
+  }
+
+  Future<void> _runOptionalMood({
+    required String text,
+    required String opId,
+    required int? userRowId,
+    required void Function(TurnMood mood)? moodSink,
+    required DateTime now,
+    required int epoch,
+  }) async {
+    if (_cancelled || epoch != _generationEpoch || _closeRequested) return;
     try {
-      await _complete(p, onRaw: (chunk) {
-        if (_cancelled) return;
-        if (_moodEmitted) return;
+      final p = Prompt(PromptKind.reply, text,
+          tone: (await profile.get())?.tone,
+          now: now,
+          context: 'Goal: a mascot mood reading of the user\'s current message. '
+              'The reply text is not shown or used.',
+          personalContext: buildPersonalContext(
+              await profile.get() ?? const UserProfile(), const []));
+      await engine.completeStreaming(p, onRaw: (chunk) {
+        if (_cancelled || epoch != _generationEpoch || _closeRequested) return;
         final reading = planStreamView(chunk).mood;
-        if (reading != null) _emitMood(reading, source: 'model:reply');
+        if (reading != null) {
+          final record = TurnMood(
+            source: 'model:reply',
+            conversationId: id,
+            turnId: opId,
+            generationId: '$opId/optional_mood',
+            emotion: reading.mood == null
+                ? null
+                : MascotEmotion(reading.mood!, reading.intensity),
+            confidence: reading.confidence,
+            messageRowId: userRowId,
+          );
+          moodSink?.call(record);
+          final repo = moods;
+          if (repo != null && userRowId != null) {
+            repo
+                .save(
+                  messageId: userRowId,
+                  chatId: id,
+                  source: 'model:reply',
+                  mood: reading.mood?.name,
+                  intensity: reading.intensity,
+                  confidence: reading.confidence,
+                )
+                .catchError((_) {});
+          }
+        }
       });
+      _diag['model_calls'] = '${_budget.plan}p${_budget.reply + 1}r';
+      _diag['mood'] = 'emitted';
+      lastDiagnostics = Map.unmodifiable(_diag);
     } on PlatformException {
-      // cancelled (by the user or after the envelope) or native failure:
-      // the mood stays whatever it already is
     } catch (_) {}
   }
 
@@ -613,22 +712,39 @@ class AssistantSession {
 
   Future<CandidatePlan> _plan(String text, void Function(String)? onText,
       Map<String, int> timing) async {
-    _scopeRefused = await _draft() == null &&
-        calculate(text) == null && _corePolicy.refuse(text);
+    text = RuleEngine.contrastRequest(text) ?? text;
+    final hasPending = await _draft() != null;
+    final isCalc = calculate(text) != null;
+    // Pending answers and arithmetic keep route precedence but still advance
+    // policy so an outside topic does not linger across them.
+    if (hasPending || isCalc) {
+      _corePolicy.noteCoreTurn();
+      _scopeRefused = false;
+      _persistedOutside = false;
+    } else {
+      final decision = _corePolicy.evaluate(text);
+      _scopeRefused = decision == ScopeDecision.refuse;
+      _persistedOutside = decision == ScopeDecision.persistedOutside;
+    }
     if (_scopeRefused) {
       _routeId = RouteId.rules;
       _diag['route'] = 'scope';
       _diag['route_id'] = _routeId!.name;
-      return CandidatePlan(interpreter: _mode, route: _routeId!,
-          call: _say(CorePolicy.refusal), authorization: _auth);
+      return CandidatePlan(
+          interpreter: _mode,
+          route: _routeId!,
+          call: _say(CorePolicy.refusal),
+          authorization: _auth);
     }
     final explicit = RuleEngine.isExplicitRemember(text);
     final memo = _memoryCandidate(text, explicit);
     if (memo != null) {
+      final replaces = RuleEngine.correctedObject(text);
       _memoryEffect = ToolCall('save_memory', {
         'content': memo.content,
         'category': memo.category,
-        'source': 'chat:$id'
+        'source': 'chat:$id',
+        if (replaces != null) 'replaces': replaces,
       });
     }
     final ToolCall call;
@@ -643,16 +759,20 @@ class AssistantSession {
       _memoryEffect = null;
       final raw = forget.group(1)!;
       final fact = _fallback.extractMemory(raw)['memory'] as String? ?? raw;
-      final matches = (await memory.search(fact, limit: 10))
+      final candidates = await memory.search(fact, limit: 10);
+      final exactMatches = candidates
           .where((m) =>
               m.content.toLowerCase().replaceAll(RegExp(r'[.!?]+$'), '') ==
               fact.toLowerCase())
           .toList();
+      final matches = exactMatches.isNotEmpty
+          ? exactMatches
+          : (candidates.length == 1 ? candidates : const <Memory>[]);
       if (matches.length == 1) {
         _evidence['target'] = 'exact_memory';
         call = ToolCall('delete_memory', {'id': matches.single.id});
       } else {
-        call = _say(matches.isEmpty
+        call = _say(candidates.isEmpty
             ? "I couldn't identify that saved memory. You can review or delete it in Memories."
             : 'Several memories match. Please choose one in Memories.');
       }
@@ -722,6 +842,24 @@ class AssistantSession {
       return _say(hits.isEmpty
           ? 'I could not find that task.'
           : hits.map(_line).join('\n'));
+    }
+    if (ci(r'^(?:did you (?:set|save|schedule)|is it (?:set|saved|scheduled))(?: (?:it|that))?[?!.]*$')
+        .hasMatch(text.trim())) {
+      final upcoming = await tools.reminders.upcoming();
+      final last = upcoming.lastOrNull;
+      if (last != null) {
+        String? issue;
+        try {
+          issue = await tools.scheduler.deliveryIssue();
+        } catch (_) {}
+        if (issue != null) {
+          return _say(
+              'Saved the reminder for ${friendlyTime(last.triggerAt, _now())}: ${last.title}, but $issue so it is not scheduled to alert until enabled.');
+        } else {
+          return _say(
+              'Yes, I set the reminder for ${friendlyTime(last.triggerAt, _now())}: ${last.title}.');
+        }
+      }
     }
     if (_auth.kind == Authorization.hypothetical ||
         _auth.kind == Authorization.question) return null;
@@ -828,7 +966,7 @@ class AssistantSession {
       return rules;
     }
     _routeId = RouteId.rulePlan;
-    return parseToolCall(jsonEncode(_fallback.plan(text)));
+    return _rulePlanCall(text);
   }
 
   /// The unified coordinator: one route table in explicit priority order
@@ -877,7 +1015,7 @@ class AssistantSession {
       (RouteId.rules, () => _rules(t)),
       (
         RouteId.rulePlan,
-        () async => parseToolCall(jsonEncode(_fallback.plan(t)))
+        () async => _rulePlanCall(t)
       ),
     ];
     for (final (id, handler) in table) {
@@ -1149,7 +1287,13 @@ class AssistantSession {
   /// it exist. Nothing is created or cancelled here; the reply names the
   /// saved reminders and a typed pick lets "#12" cancel the intended one.
   Future<ToolCall?> _negatedCancelRoute(String text) async {
-    if (_auth.kind != Authorization.negated || !_reminderWord.hasMatch(text)) {
+    // "the gym reminder isn't needed, cancel it" asks to drop it: once the
+    // not-needed words are set aside nothing is refused ("don't cancel the
+    // gym reminder" still is).
+    final unneeded = _notNeeded.hasMatch(text) &&
+        !RuleEngine.isNegated(text.replaceAll(_notNeeded, ' '));
+    if ((_auth.kind != Authorization.negated && !unneeded) ||
+        !_reminderWord.hasMatch(text)) {
       return null;
     }
     final k = keyWords(text);
@@ -1163,6 +1307,21 @@ class AssistantSession {
           r
     ];
     if (hits.isEmpty) return null;
+    // "don't cancel the gym reminder": the refusal is of cancelling itself.
+    if (!unneeded && _cancelVerb.hasMatch(text)) {
+      return _say(hits.length == 1
+          ? 'Okay, your ${hits.single.title} reminder stays.'
+          : 'Okay, those reminders stay.');
+    }
+    // Said it is not needed and said to cancel it, and only one reminder
+    // fits: cancel it. Anything less certain asks first, as below.
+    if (unneeded &&
+        hits.length == 1 &&
+        _cancelVerb.hasMatch(text) &&
+        _auth.permitsWrite) {
+      _evidence['target'] = 'reminder_words';
+      return ToolCall('cancel_reminder', {'id': hits.single.id});
+    }
     _setPick(TargetPick(
         tool: 'cancel_reminder',
         args: const {},
@@ -1197,9 +1356,14 @@ class AssistantSession {
   /// The last assistant message here asked how something went (or, with
   /// [phrase], asked that question).
   Future<bool> _justAsked([String phrase = 'how did']) async {
-    final last = (await conversations.recent(id, n: 3))
+    var last = (await conversations.recent(id, n: 3))
         .where((m) => m.role == 'assistant')
         .lastOrNull;
+    if (last == null && id != ConversationRepo.mainChatId) {
+      last = (await conversations.recent(ConversationRepo.mainChatId, n: 3))
+          .where((m) => m.role == 'assistant')
+          .lastOrNull;
+    }
     return last != null &&
         ((phrase == 'how did' && last.kind == 'follow_up') ||
             last.content.toLowerCase().contains(phrase));
@@ -1617,11 +1781,16 @@ class AssistantSession {
   Future<ToolCall> _adjust(ToolCall c) async {
     final a = c.args, due = a['due'];
     final r = c.tool.startsWith('create_') ? _fallback.readWhen(_said) : null;
-    if (c.tool == 'create_task' && due is DateTime &&
-        r != null && r.dated && !r.timed &&
+    if (c.tool == 'create_task' &&
+        due is DateTime &&
+        r != null &&
+        r.dated &&
+        !r.timed &&
         RegExp(r'^call(?: with .+)?$', caseSensitive: false)
             .hasMatch((a['title'] as String).trim())) {
-      final draft = ClarifyDraft(tool: c.tool, title: a['title'] as String,
+      final draft = ClarifyDraft(
+          tool: c.tool,
+          title: a['title'] as String,
           day: due.toIso8601String().substring(0, 10));
       _diag['clarify'] = 'event_time';
       _note = null;
@@ -2175,6 +2344,11 @@ class AssistantSession {
     switch (s.intent) {
       case 'chat':
         if (command()) return null;
+        // "did I miss anything", "am I behind on anything": the overdue list.
+        if (_overdueQuestion.hasMatch(text) && !RuleEngine.isNegated(text)) {
+          _header = rangeLabel('overdue');
+          return ToolCall('list_tasks', rangeArgs('overdue', _now()));
+        }
         if (dataQuestion) {
           _header = rangeLabel(_rangeIn(text) ?? 'all');
           return ToolCall(
@@ -2197,10 +2371,24 @@ class AssistantSession {
         return planned == null ? null : _say(planned);
       case 'list':
         if (command()) return null;
+        // "which reminders are coming up", "got any alarms lined up": the
+        // reminders, not the task list.
+        if (_reminderNoun.hasMatch(text) && !RuleEngine.isNegated(text)) {
+          return ToolCall('list_reminders', const {});
+        }
         if (!dataQuestion) {
           final read = _fallback.plan(text);
           if (read['type'] == 'tool' && read['tool'] == 'search_memory') {
             return _recall(text);
+          }
+          // The model heard a request to see plans in words the app's own
+          // patterns miss ("gimme a rundown of tmrw", "did i miss anything").
+          // Listing only reads, so that reading stands unless the user said
+          // not to.
+          if (!RuleEngine.isNegated(text)) {
+            final range = _rangeIn(text) ?? RuleEngine.agendaRange(text);
+            _header = rangeLabel(range);
+            return ToolCall('list_tasks', rangeArgs(range, _now()));
           }
           final r = s.reply;
           if (r != null &&
@@ -2215,7 +2403,7 @@ class AssistantSession {
               history: await _chatHistory()));
         }
         // The day the user said wins over a missing or different model range.
-        final range = _rangeIn(text) ?? 'all';
+        final range = _rangeIn(text) ?? RuleEngine.agendaRange(text);
         _header = rangeLabel(range);
         return ToolCall('list_tasks', rangeArgs(range, _now()));
       case 'recall':
@@ -2266,6 +2454,16 @@ class AssistantSession {
         return _followIntent(s, text, open);
     }
     return null;
+  }
+
+  /// The deterministic plan as a call. A memory lookup goes through [_recall],
+  /// which also checks earlier chats; a bare search_memory call would not.
+  Future<ToolCall> _rulePlanCall(String text) async {
+    final plan = _fallback.plan(text);
+    if (plan['type'] == 'tool' && plan['tool'] == 'search_memory') {
+      return _recall(text);
+    }
+    return parseToolCall(jsonEncode(plan));
   }
 
   Future<ToolCall> _recall(String text) async {
@@ -2347,8 +2545,7 @@ class AssistantSession {
           "I can't do that action for you. Would you like me to save it as a task or reminder?");
     }
     final asked = _fallback.parseCreate(text)?.tool == 'create_reminder' ||
-        RegExp(r'\b(?:remind|alert|notify|alarm)\b', caseSensitive: false)
-            .hasMatch(text);
+        _notifyAsk.hasMatch(text);
     final reminder = asked;
     if (s.negated || RuleEngine.isNegated(text)) {
       return _say("Okay, I won't save that.");
@@ -2463,7 +2660,8 @@ class AssistantSession {
         reading.dated &&
         !reading.timed &&
         (isEventTitle(title) ||
-            RegExp(r'^call(?: with .+)?$', caseSensitive: false).hasMatch(title.trim()))) {
+            RegExp(r'^call(?: with .+)?$', caseSensitive: false)
+                .hasMatch(title.trim()))) {
       return askTime('event_time', '', day: at);
     }
     final problem = RuleEngine.timeProblem(reading, reminder, _now());
@@ -2637,6 +2835,33 @@ class AssistantSession {
             ? 'tomorrow'
             : null;
   }
+
+  /// Words that ask to be notified, so a create becomes a reminder rather
+  /// than a silent task ("ping me at 5", "set a reminder: …").
+  static final _notifyAsk = RegExp(
+      r'\b(?:remind(?:er|ers)?|alert|notify|alarm|ping|nudge|buzz|heads[- ]?up|wake me|let me know)\b',
+      caseSensitive: false);
+
+  static final _reminderNoun =
+      RegExp(r'\b(?:reminders?|alarms?|alerts?)\b', caseSensitive: false);
+
+  /// "the gym reminder isn't needed", "I don't need the parcel reminder":
+  /// a request to drop it, not a refusal. "no need to cancel it" is the
+  /// opposite and never matches.
+  static final _notNeeded = RegExp(
+      r"\b(?:(?:is|are)n'?t\s+(?:needed|necessary|required)|(?:is|are)\s+not\s+(?:needed|necessary|required)|"
+      r"not\s+(?:needed|necessary|required)|no\s+longer\s+(?:needed|necessary|required)|"
+      r"(?:don'?t|do\s+not|no)\s+need)\b(?!\s+(?:it\s+)?to\s+(?:cancel|remove|delete|drop|clear|stop))",
+      caseSensitive: false);
+  static final _cancelVerb = RegExp(
+      r'\b(?:cancel|remove|delete|drop|clear|stop|turn\s+off|get\s+rid\s+of)\b',
+      caseSensitive: false);
+
+  /// A question about whether anything slipped ("did I miss anything"); a
+  /// specific thing ("did I miss the bus") is not one.
+  static final _overdueQuestion = RegExp(
+      r'^(?:did|have|am|was)\s+i\b.*\b(?:miss(?:ed)?|late|behind|forg[eo]t(?:ten)?)\b.*\b(?:anything|something|stuff|tasks?)\b',
+      caseSensitive: false);
 
   static final _dataQuestion = RegExp(
       r'\b(?:pending|left|tasks?|to-?dos?|plans?|planned|schedule|agenda|due|reminders?)\b',

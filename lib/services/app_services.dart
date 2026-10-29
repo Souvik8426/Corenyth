@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../assistant/engine.dart';
+import '../assistant/core_policy.dart';
 import '../assistant/rule_engine.dart';
 import '../assistant/session.dart';
 import '../assistant/tools.dart';
@@ -287,8 +288,8 @@ class AppServices {
       await step('review alarm', () => s.armReview());
     } catch (_) {}
     try {
-      final failed = await step('reschedule reminders',
-          () => sched.rescheduleAll(s.reminders),
+      final failed = await step(
+          'reschedule reminders', () => sched.rescheduleAll(s.reminders),
           limit: const Duration(seconds: 20));
       if (failed.isNotEmpty) {
         issue ??= 'Could not schedule reminder${failed.length > 1 ? 's' : ''} '
@@ -503,11 +504,14 @@ class AppServices {
 
   /// [conversationId] continues an existing chat (see [ConversationRepo.createChat]);
   /// null starts a new one, persisted on its first message.
+  final _policyStore = CorePolicyStore();
+
   AssistantSession newSession(
       {String? conversationId, void Function()? onIdleTimeout}) {
     final engine = _engine();
     return AssistantSession(
       engine: engine,
+      policyStore: _policyStore,
       tools: executor(),
       memory: memory,
       profile: profile,

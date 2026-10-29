@@ -582,6 +582,7 @@ void main() {
           due: DateTime(2099, 10, 14, 9));
       final moods = <TurnMood>[];
       final reply = await session.handle(text, onMood: moods.add);
+      await session.lastOptionalMoodJob;
       expect(reply, contains('the report'));
       expect(moods, hasLength(1),
           reason: 'one bounded mood-only call, no extra on inferred turns');

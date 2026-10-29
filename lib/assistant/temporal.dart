@@ -771,6 +771,17 @@ class Temporal {
     if (md != null) {
       add(year(md.group(3)), month(md.group(1)!), int.parse(md.group(2)!));
     }
+    // "the 31st": this month's day, only while it is still ahead. A day that
+    // has passed could mean next month, so it stays unresolved and is refused.
+    final ord = take(r'(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)\b');
+    if (ord != null) {
+      final d = int.parse(ord.group(1)!);
+      if (d >= today.day) {
+        add(today.year, today.month, d);
+      } else {
+        bad = true;
+      }
+    }
     for (final (word, offset) in [
       ('tomorrow', 1),
       ('today', 0),

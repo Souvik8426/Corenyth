@@ -1,8 +1,21 @@
 /// A small arithmetic parser; no code evaluation or model-generated arithmetic.
 String? calculate(String text) {
   var expression = text.trim().replaceFirst(
-      RegExp(r'^(?:what is|what\x27s|whats|calculate|compute)\s+',
+      RegExp(r'^(?:what is|what\x27s|whats|how much is|calculate|compute)\s+',
           caseSensitive: false), '');
+  // "20 percent of 350", "12.5% of 80"
+  final percent = RegExp(
+          r'^(\d+(?:\.\d+)?)\s*(?:%|percent|per cent)\s+of\s+(\d+(?:\.\d+)?)\s*[?.]*$',
+          caseSensitive: false)
+      .firstMatch(expression.trim());
+  if (percent != null) {
+    final p = double.parse(percent.group(1)!);
+    final result = p / 100 * double.parse(percent.group(2)!);
+    final out = result == result.roundToDouble()
+        ? result.toInt()
+        : double.parse(result.toStringAsFixed(4));
+    return '${percent.group(1)}% of ${percent.group(2)} = $out.';
+  }
   expression = expression
       .replaceAll(RegExp(r'[?=]+$'), '')
       .replaceAll('×', '*')

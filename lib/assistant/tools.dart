@@ -409,7 +409,7 @@ class ToolExecutor {
             to: a['to'] as DateTime?,
             includeDone: a['include_done'] == true);
         return l.isEmpty
-            ? 'No tasks.'
+            ? _emptyListText(a)
             : l
                 .map((t) => '#${t.id} ${t.done ? "[done] " : ""}${t.title}'
                     '${t.dueAt == null ? "" : " (due ${_when(t.dueAt!)})"}')
@@ -566,10 +566,29 @@ class ToolExecutor {
             }
           } catch (_) {}
         }
-        await memory.add(content,
+        final saved = await memory.add(content,
             category: a['category'] as String? ?? 'fact',
             opId: rec.op,
             source: a['source'] as String? ?? 'chat');
+        // A correction ("I don't drink coffee anymore") retires the memories
+        // that still state what was dropped; a vague one touching many rows
+        // retires none.
+        final replaces = a['replaces'] as String?;
+        if (replaces != null) {
+          final words = MemoryRepo.terms(replaces);
+          final old = words.isEmpty
+              ? const <Memory>[]
+              : (await memory.all())
+                  .where((m) =>
+                      m.id != saved &&
+                      words.every(MemoryRepo.terms(m.content).contains))
+                  .toList();
+          if (old.length <= 3) {
+            for (final m in old) {
+              await memory.supersede(m.id, saved);
+            }
+          }
+        }
         return '';
       case 'delete_memory':
         final id = a['id'];
@@ -693,6 +712,14 @@ class ToolExecutor {
       ..at = first
       ..alarm = await _alarm();
     return confirm(first);
+  }
+
+  /// What an empty task list means for the range asked. A bare "No tasks."
+  /// reads as if nothing exists at all.
+  static String _emptyListText(Map<String, Object?> a) {
+    if (a['from'] == null && a['to'] == null) return 'No pending tasks.';
+    if (a['from'] == null) return 'Nothing overdue.';
+    return 'Nothing due in that window.';
   }
 
   /// Scheduled, or saved but the phone won't deliver as asked.

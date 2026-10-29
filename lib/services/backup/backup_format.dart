@@ -577,6 +577,15 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
       if (row == null) return null;
       parsed.add(row);
     }
+    // Insert replaces on conflict, so a repeated id would silently drop a row.
+    final seen = <String>{};
+    for (final row in parsed) {
+      final id = [for (final c in spec.idColumns) '${row[c]}'].join('\u0000');
+      if (!seen.add(id)) {
+        errors.add('The "${spec.key}" section repeats the id ${id.replaceAll('\u0000', ', ')}.');
+        return null;
+      }
+    }
     rows[spec.key] = parsed;
   }
 

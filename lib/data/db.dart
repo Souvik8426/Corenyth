@@ -1,12 +1,17 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+
+import 'repos.dart' show extractMemorySlot;
 
 /// Single SQLite file. The Android widget reads `tasks` from the same file
 /// (see WidgetProvider.kt), so keep the file name and the tasks columns stable.
 const dbFileName = 'assistant.db';
 
 /// Current schema version. Every upgrade is additive (see each `_create…`).
-const dbVersion = 9;
+const dbVersion = 10;
 
 /// [version] below [dbVersion] only for migration tests (e.g. a v6 file).
 Future<Database> openAppDb(
@@ -46,7 +51,17 @@ Future<Database> openAppDb(
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
       last_accessed_at INTEGER, embedding BLOB,
       op_id TEXT, source TEXT, status TEXT NOT NULL DEFAULT 'active',
-      superseded_by INTEGER)''');
+      superseded_by INTEGER,
+      content_hash TEXT,
+      subject_key TEXT,
+      attribute_key TEXT,
+      observed_at_utc INTEGER,
+      observation_offset_min INTEGER,
+      fact_date TEXT)''');
+    await db.execute(
+        'CREATE INDEX memories_status_hash ON memories(status, content_hash)');
+    await db.execute(
+        'CREATE INDEX memories_slot ON memories(status, subject_key, attribute_key)');
     // FTS4 (not FTS5): guaranteed in every Android SQLite build.
     await db.execute(
         'CREATE VIRTUAL TABLE memories_fts USING fts4(content, tokenize=unicode61)');
@@ -77,7 +92,62 @@ Future<Database> openAppDb(
     if (oldVersion < 7 && newVersion >= 7) await _createOperations(db);
     if (oldVersion < 8 && newVersion >= 8) await _createMemoryProvenance(db);
     if (oldVersion < 9 && newVersion >= 9) await _createMessageMoods(db);
+    if (oldVersion < 10 && newVersion >= 10) await _createMemoryIndexing(db);
   });
+}
+
+/// v10 indexed personal memory representation (content_hash, slot keys, observation metadata).
+Future<void> _createMemoryIndexing(DatabaseExecutor db) async {
+  final columns = (await db.rawQuery('PRAGMA table_info(memories)'))
+      .map((row) => row['name'])
+      .toSet();
+  for (final entry in {
+    'content_hash': 'TEXT',
+    'subject_key': 'TEXT',
+    'attribute_key': 'TEXT',
+    'observed_at_utc': 'INTEGER',
+    'observation_offset_min': 'INTEGER',
+    'fact_date': 'TEXT',
+  }.entries) {
+    if (!columns.contains(entry.key)) {
+      await db.execute('ALTER TABLE memories ADD COLUMN ${entry.key} ${entry.value}');
+    }
+  }
+  await db.execute(
+      'CREATE INDEX IF NOT EXISTS memories_status_hash ON memories(status, content_hash)');
+  await db.execute(
+      'CREATE INDEX IF NOT EXISTS memories_slot ON memories(status, subject_key, attribute_key)');
+
+  // Deterministic backfill in migration transaction without inference.
+  await indexMemoryRows(db);
+}
+
+/// Fills the derived lookup columns (content hash, slot keys) of every
+/// memory row from its text. Used by the v10 migration and after a backup
+/// restore, whose rows carry content but not these derived keys.
+Future<void> indexMemoryRows(DatabaseExecutor db) async {
+  final rows = await db.query('memories', columns: ['id', 'content']);
+  for (final r in rows) {
+    final id = r['id'] as int;
+    final content = r['content'] as String? ?? '';
+    final norm = content
+        .toLowerCase()
+        .replaceAll(RegExp(r'[.!?]+$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final hash = sha256.convert(utf8.encode(norm)).toString();
+    final slot = extractMemorySlot(content);
+    await db.update(
+      'memories',
+      {
+        'content_hash': hash,
+        'subject_key': slot?.subject,
+        'attribute_key': slot?.slot,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 }
 
 /// v9 per-turn mascot mood records, keyed by the `conversations` row of the

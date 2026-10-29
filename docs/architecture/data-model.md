@@ -1,13 +1,13 @@
 # Data model
 
 One SQLite file, `assistant.db`, in the app's databases directory (`getDatabasesPath()`). The Android widget reads the
-same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 9
+same file directly, so the `tasks` columns are a contract with `WidgetProvider.kt`. Schema version: 10
 (`lib/data/db.dart`). v2 added `assistant_profile`; v3 added `chats` (backfilled from existing messages) and
 `reminders.sync`; v4 added `reminders.kind`, `tasks.alert_plan` and `assistant_preferences`; v5 added
 `pending_clarifications`; v6 adds event details, daily schedules, global task questions, message metadata,
 proactive occurrence keys and evening review participation. v7 adds the operation journal and task/reminder operation IDs; v8 adds memory provenance, active/superseded status and replacement links. Existing rows and saved preference choices are kept
 (old reminders become `kind = 'reminder'`, old tasks get no stored plan). `test/backend_sqlite_test.dart` runs the
-real v2 → v8 migration and fresh `onCreate` with `sqflite_common_ffi`; macOS uses system SQLite through the sqlite3 hook so production FTS4 retrieval is exercised.
+real v2 → v8 migration and fresh `onCreate`; the v10 memory-indexing migration is covered by `test/p3_p6_architecture_test.dart`. v10 adds `memories.content_hash`, `subject_key`, `attribute_key`, `observed_at_utc`, `observation_offset_min` and `fact_date`, with indexes `memories_status_hash` and `memories_slot`; the migration backfills hashes and slot keys deterministically without inference with `sqflite_common_ffi`; macOS uses system SQLite through the sqlite3 hook so production FTS4 retrieval is exercised.
 
 ## Tables
 
@@ -130,3 +130,23 @@ questions use the task's `awaiting` field instead. Typed target picks use `pick:
 ## v9 message moods
 
 `message_moods` links a model-origin mood reading to its user conversation row. It stores chat ID, optional mood/confidence, intensity, source and timestamp; deleting the message cascades to its mood record. Missing readings retain unknown provenance and display the calm fallback.
+
+## Backup archive (`lib/services/backup/`)
+
+A backup is one zip file, `backup.corenyth` in the app-private `backups` folder (scoped storage; the user moves it with the system share sheet and brings one back with the document picker), holding exactly two JSON entries:
+
+- `manifest.json`: `format` (`corenyth-backup`), `formatVersion` (`1`), `appVersion`, `createdAt` (UTC), and per-table `counts`.
+- `data.json`: the rows of every user table in JSON form (camelCase keys, booleans for flags, the stored model id under `model.selectedId`).
+
+Limits: 64 MiB per file, 32 MiB per entry, 200 000 rows per table. Any other entry name, a path with `..`, or a missing entry is refused before anything is parsed.
+
+Reading checks every row: each table's primary key must be present and unique within the file (a repeated id is refused, because the restore would otherwise drop a row silently), and cross-table links such as `reminders.taskId` must point at a row in the same backup.
+
+Restore (`BackupService.importBackup`):
+
+1. Writes a recovery copy, `corenyth-recovery-<UTC stamp>.corenyth`, next to the backup. If this fails, nothing is imported.
+2. Replaces the user tables in one transaction, keeping the original ids. A failure rolls back to the previous data.
+3. Restores the chosen model id only when it is still in the allowlist, and undoes it if a later step fails.
+4. Reconciles alarms: past reminders are disabled, future ones are re-armed, and alarms for reminders the import removed are cancelled.
+
+Export takes one transaction so the snapshot is consistent, writes to a `.tmp` file and renames it over the old backup.

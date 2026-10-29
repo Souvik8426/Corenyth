@@ -1233,25 +1233,46 @@ class _ModelSetupCardState extends State<ModelSetupCard>
     sv.loadModel();
   }
 
-  /// The one allowlisted model and whether its file is in place. There is no
-  /// choice to make: only Corenyth's fine-tuned 0.6B may load.
+  /// Every allowlisted model, whether its file is in place, and which one is
+  /// selected. Corenyth's fine-tuned 0.6B is the default and recommended
+  /// choice; picking another saves it and loads it when its file is installed.
   Widget _picker(bool loading) {
-    final m = widget.services.selectedModel;
-    final installed = checkModelSpec(p.dirname(widget.services.modelPath), m,
-            granted: true) ==
+    final sv = widget.services;
+    final selected = sv.selectedModel;
+    final installedSelected = checkModelSpec(
+            p.dirname(sv.modelPath), selected, granted: true) ==
         ModelState.ready;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Model', style: Theme.of(context).textTheme.titleSmall),
-      ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.memory),
-        title: Text(m.label),
-        subtitle: Text('${m.fileName} · about ${m.approxMiB} MB · '
-            '${installed ? 'installed' : 'not installed'}'),
-      ),
-      if (!installed)
-        Text('Download ${m.fileName}, then choose it below to import it.'),
+      for (final m in modelCatalog)
+        Builder(builder: (context) {
+          final installed =
+              checkModelSpec(p.dirname(sv.modelPath), m, granted: true) ==
+                  ModelState.ready;
+          final isSelected = m.id == selected.id;
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(isSelected
+                ? Icons.radio_button_checked
+                : Icons.radio_button_unchecked),
+            title: Text(m.id == defaultModelId
+                ? '${m.label} · Recommended'
+                : m.label),
+            subtitle: Text('${m.fileName} · about ${m.approxMiB} MB · '
+                '${installed ? 'installed' : 'not installed'}'),
+            enabled: !loading && !_importing,
+            onTap: isSelected ? null : () => _select(m),
+          );
+        }),
+      if (!installedSelected)
+        Text('Download ${selected.fileName}, then choose it above to import it.'),
     ]);
+  }
+
+  Future<void> _select(ModelSpec m) async {
+    setState(() => _importError = null);
+    await widget.services.selectModel(m);
+    if (mounted) await _check();
   }
 
   @override

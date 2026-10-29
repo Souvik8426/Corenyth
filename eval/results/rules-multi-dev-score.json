@@ -1,0 +1,546 @@
+{
+  "mode": "model-unavailable multi-turn",
+  "split": "multi",
+  "counts": {
+    "pass": 20,
+    "incomplete": 3
+  },
+  "categories": {
+    "ambiguity": {
+      "incomplete": 1,
+      "pass": 1
+    },
+    "lists": {
+      "pass": 1
+    },
+    "memory": {
+      "incomplete": 1,
+      "pass": 2
+    },
+    "negation": {
+      "pass": 2
+    },
+    "progress": {
+      "incomplete": 1,
+      "pass": 2
+    },
+    "scheduling": {
+      "pass": 10
+    },
+    "updates": {
+      "pass": 2
+    }
+  },
+  "cases": [
+    {
+      "id": "M-001",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-002",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-003",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-004",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-005",
+      "category": "progress",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric",
+        "groundedness rubric"
+      ],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "incomplete",
+          "errors": [],
+          "unscored": [
+            "groundedness rubric"
+          ]
+        },
+        {
+          "index": 2,
+          "status": "incomplete",
+          "errors": [],
+          "unscored": [
+            "groundedness rubric"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M-006",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-007",
+      "category": "lists",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-008",
+      "category": "progress",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-009",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-010",
+      "category": "ambiguity",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "groundedness rubric"
+      ],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "incomplete",
+          "errors": [],
+          "unscored": [
+            "groundedness rubric"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M-011",
+      "category": "memory",
+      "status": "incomplete",
+      "errors": [],
+      "unscored": [
+        "uses_memory evidence"
+      ],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "incomplete",
+          "errors": [],
+          "unscored": [
+            "uses_memory evidence"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M-012",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-013",
+      "category": "memory",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-014",
+      "category": "ambiguity",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-015",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-016",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-017",
+      "category": "updates",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-018",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-019",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-020",
+      "category": "progress",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-021",
+      "category": "negation",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-022",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    },
+    {
+      "id": "M-023",
+      "category": "scheduling",
+      "status": "pass",
+      "errors": [],
+      "unscored": [],
+      "turns": [
+        {
+          "index": 0,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "errors": [],
+          "unscored": []
+        }
+      ]
+    }
+  ]
+}

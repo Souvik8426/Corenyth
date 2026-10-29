@@ -81,4 +81,24 @@ Native reference: build the pinned llama.cpp sources for the host CPU, then comp
 
 Run `python3 -I eval/source_manifest.py` before recording a candidate. The result includes all current source files, including uncommitted new files; the runner saves its content identity. Model checksum and backend revision are in `results/native-identity.json`.
 
-After development tuning finishes, add `--dart-define=CORENYTH_EVAL_SPLIT=heldout`. Do not tune on its results. Score its output separately. `score.py` reports **incomplete**, never pass, for unimplemented checks/rubrics; its pass count is not a complete product acceptance rate. It does not yet run the multi-turn JSONL corpus. Multi-turn behavior is covered separately by the named regression tests; never count those as executed corpus cases.
+After development tuning finishes, add `--dart-define=CORENYTH_EVAL_SPLIT=heldout`. Do not tune on its results. Score its output separately. `score.py` reports **incomplete**, never pass, for unimplemented checks/rubrics; its pass count is not a complete product acceptance rate.
+
+Multi-turn corpus:
+
+```bash
+TZ=Asia/Kolkata flutter test test/reliability_multi_corpus_test.dart --dart-define=CORENYTH_EVAL=true
+python3 -I eval/score.py eval/results/rules-multi-dev.json
+```
+
+Named regression tests are not a substitute for executing the 23 frozen scenarios. The harness records honest failures.
+
+### Preserving new baseline identities
+
+Use `python3 -I eval/source_manifest.py --output eval/results/runs/<run-id>/source-manifest.json`
+to create a separately named source identity. Explicit output paths refuse overwrite. Manifests include dirty
+state, corpus hashes, model id/sha and host token caps. The existing no-argument command remains compatible with
+the current runners.
+
+Run scorer negative controls with `python3 -m unittest discover -s eval/tests -v`.
+The scorer rejects missing, duplicate and unexpected case IDs before scoring state accuracy, uses an explicit
+table/id delta, hard-fails `forbid`, and flags unexpected inserts.

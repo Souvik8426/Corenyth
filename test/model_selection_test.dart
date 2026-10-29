@@ -42,8 +42,10 @@ void main() {
   });
 
   group('catalog', () {
-    test('only the fine-tuned Corenyth 0.6B is allowlisted', () {
-      expect(modelCatalog.map((m) => m.id).toList(), [defaultModelId]);
+    test('the fine-tuned Corenyth 0.6B is the default allowlisted model', () {
+      expect(modelCatalog.map((m) => m.id).toList(),
+          [defaultModelId, qwen3Model.id]);
+      expect(modelCatalog.first, corenythModel);
       expect(corenythModel.id, 'corenyth-0.6b-tuned');
       expect(corenythModel.expectedBytes, 381566560);
       expect(corenythModel.sha256,
@@ -298,7 +300,7 @@ void main() {
       expect(loads, isEmpty);
     });
 
-    testWidgets('details show the one model and no download button', (t) async {
+    testWidgets('details list the catalog, recommend the trained model, no download button', (t) async {
       const native = MethodChannel('assistant/native');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(native, (c) async =>
@@ -316,7 +318,8 @@ void main() {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
         await t.pump();
       }
-      expect(find.text(corenythModel.label), findsOneWidget);
+      expect(find.text('${corenythModel.label} · Recommended'), findsOneWidget);
+      expect(find.text(qwen3Model.label), findsOneWidget);
       expect(find.textContaining('Qwen3 1.7B'), findsNothing);
       expect(find.textContaining('Download'), findsNothing);
     });

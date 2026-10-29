@@ -408,4 +408,20 @@ void main() {
     expect(await s.handle('mark that done'), contains('Which one'));
     expect((await one('buy bread')).done, isFalse);
   });
+
+  test('plan grammar separates the mood envelope from intent with a comma', () {
+    // The constrained model can only emit what the grammar spells out; a
+    // missing separator made every plan invalid JSON (rules fallback, no mood).
+    for (final g in [semanticGrammar, semanticGrammarV2]) {
+      for (final rule in g.split('\n').where((l) => l.startsWith('plan-'))) {
+        expect(rule, contains('emotion "," "\\"intent'), reason: rule);
+      }
+    }
+    final s = parseSemantic(
+        '{"emotion":{"mood":"happy","intensity":0.80,"confidence":0.90},'
+        '"intent":"chat","reply":"Yay!"}',
+        version: 2);
+    expect(s.intent, 'chat');
+    expect(s.mood?.mood, isNotNull);
+  });
 }

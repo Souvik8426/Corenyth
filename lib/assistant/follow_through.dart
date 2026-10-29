@@ -351,8 +351,12 @@ final _briefRe = _ci(
 /// "Brief me", "what does my day look like".
 bool isBriefingRequest(String text) =>
     _briefRe.hasMatch(text) &&
+    !_otherDay.hasMatch(text) &&
     !_command.hasMatch(text) &&
     !RuleEngine.isNegated(text);
+
+/// A briefing covers today; "a rundown of tomorrow" is a list of that day.
+final _otherDay = _ci(r'\b(?:tomorrow|tmrw|tmrow|tmr|tomo|2moro)\b');
 
 String _line(Task t, DateTime now) => '#${t.id} ${t.title}'
     '${t.dueAt == null ? '' : ' (${friendlyTime(t.dueAt!, now)})'}'
