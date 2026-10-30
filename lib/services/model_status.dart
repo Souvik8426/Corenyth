@@ -43,14 +43,14 @@ const defaultModelId = 'corenyth-0.6b-tuned';
 /// The default, recommended model: Qwen3-0.6B LoRA-fine-tuned on Corenyth's plan
 /// prompts (training/), merged and quantized to Q4_0 by Unsloth. Published as a
 /// GitHub release asset; the app only opens the link in the browser (no
-/// INTERNET permission). A retrained file has a new size, hash and release URL.
+/// INTERNET permission). A retrained file has a new size, hash and release URL (the mood build's asset still has to be uploaded to the release).
 const ModelSpec corenythModel = ModelSpec(
   id: defaultModelId,
-  fileName: 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf',
-  url: 'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf',
-  expectedBytes: 381566560,
+  fileName: 'Corenyth-Qwen3-0.6B-mood-Q4_0.gguf',
+  url: 'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-mood-Q4_0.gguf',
+  expectedBytes: 381566592,
   label: 'Corenyth 0.6B (fine-tuned)',
-  sha256: '77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821',
+  sha256: 'f2086705f885560e76ceb8e48b25bc3a07fad3f0f429f5202efd6dd8bfca69ee',
 );
 
 /// Optional alternative: a Qwen3-0.6B Q4_0 build imported from the device. Not
@@ -65,14 +65,26 @@ const ModelSpec qwen3Model = ModelSpec(
   sha256: '553519095aa918d215da7924872da1349d321a6dd98bac96cc66021064f8137b',
 );
 
+/// Experimental: Gemma 4 E2B LoRA-fine-tuned on the mood-envelope mix (training/),
+/// merged on a Mac and quantized to Q4_0. Prompts stay ChatML text. Side-loaded
+/// only (no release asset yet), so no download link.
+const ModelSpec gemma4Model = ModelSpec(
+  id: 'corenyth-gemma4-e2b-tuned',
+  fileName: 'Corenyth-Gemma4-E2B-tuned-Q4_0.gguf',
+  url: '',
+  expectedBytes: 3360161024,
+  label: 'Corenyth Gemma 4 E2B (experimental)',
+  sha256: 'f1d79102fc28a45861a8fed3840b31500364b1ffb780dfacbc77e9d20c2b7c34',
+);
+
 /// Selectable models; [corenythModel] (first) is the default and recommended.
-const List<ModelSpec> modelCatalog = [corenythModel, qwen3Model];
+const List<ModelSpec> modelCatalog = [corenythModel, qwen3Model, gemma4Model];
 
 /// Back-compat aliases for the default model (literals; field access is not a const expr).
-const modelFileName = 'Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';
+const modelFileName = 'Corenyth-Qwen3-0.6B-mood-Q4_0.gguf';
 const modelUrl =
-    'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-tuned-Q4_0.gguf';
-const modelBytes = 381566560;
+    'https://github.com/Souvik8426/Corenyth/releases/download/v0.1.0-alpha.1/Corenyth-Qwen3-0.6B-mood-Q4_0.gguf';
+const modelBytes = 381566592;
 
 ModelSpec? modelById(String id) {
   for (final m in modelCatalog) {

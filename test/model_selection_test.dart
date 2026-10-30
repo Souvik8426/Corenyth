@@ -44,12 +44,12 @@ void main() {
   group('catalog', () {
     test('the fine-tuned Corenyth 0.6B is the default allowlisted model', () {
       expect(modelCatalog.map((m) => m.id).toList(),
-          [defaultModelId, qwen3Model.id]);
+          [defaultModelId, qwen3Model.id, gemma4Model.id]);
       expect(modelCatalog.first, corenythModel);
       expect(corenythModel.id, 'corenyth-0.6b-tuned');
-      expect(corenythModel.expectedBytes, 381566560);
+      expect(corenythModel.expectedBytes, 381566592);
       expect(corenythModel.sha256,
-          '77d3f6d469a6d5069a86980ec61f77bd0fb8b937b56d4fac0362659ca6c7b821');
+          'f2086705f885560e76ceb8e48b25bc3a07fad3f0f429f5202efd6dd8bfca69ee');
       expect(corenythModel.url,
           startsWith('https://github.com/Souvik8426/Corenyth/releases/download/'));
       expect(corenythModel.url, endsWith('/${corenythModel.fileName}'));

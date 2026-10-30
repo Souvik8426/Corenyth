@@ -1,0 +1,132 @@
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Corenyth Documentation</title>
+<style>:root{--bg:#fbfaff;--fg:#222;--card:#fff;--acc:#7b5cd6;--bd:#e3ddf5}@media(prefers-color-scheme:dark){:root{--bg:#16141f;--fg:#e8e6f0;--card:#211e2e;--acc:#b9a6e8;--bd:#383250}}
+body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);display:flex}nav{position:sticky;top:0;height:100vh;overflow:auto;width:250px;flex:none;padding:16px;border-right:1px solid var(--bd)}nav a{display:block;color:var(--acc);text-decoration:none;padding:3px 0;font-size:14px}main{flex:1;max-width:1000px;padding:20px 32px}section{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:8px 20px;margin:16px 0}.dia{overflow:auto;background:#fff;border-radius:8px;padding:8px}table{border-collapse:collapse}td,th{border:1px solid var(--bd);padding:4px 10px}#warn{display:none;background:#fde;color:#900;padding:8px;border-radius:8px}
+@media(max-width:800px){body{display:block}nav{position:static;height:auto;width:auto}main{padding:10px}}</style></head>
+<body><nav><b>Corenyth docs</b><a href="#overview">1. What Corenyth is</a><a href="#arch">2. System architecture</a><a href="#pipeline">3. Request pipeline (one message)</a><a href="#reply">4. How the agent produces a reply</a><a href="#output">5. How output comes back</a><a href="#policy">6. Core rules and core policy</a><a href="#reminder">7. Reminder lifecycle</a><a href="#memory">8. Memory and facts</a><a href="#backup">9. Backup and restore</a><a href="#delivery">10. Model and data delivery</a><a href="#training">11. Training and eval pipeline</a><a href="#status">12. Feature status map</a><a href="#privacy">13. Privacy and permissions</a><a href="#perf">14. Performance and state</a><a href="#files">15. File and folder map</a><a href="#study">16. mem0 / Hermes study takeaways</a><a href="#roadmap">17. Blockers and roadmap</a><a href="#report">18. Report: mood model and speed-up (Oct 30)</a></nav><main><h1>Corenyth Documentation</h1><p>Updated Oct 30, 2026 from branch beta_version (base commit e64cad7, plus uncommitted mood-model retrain and native speed-up; see section 18).</p><div id=warn>Diagrams need internet to load Mermaid.js; the diagram source text is shown instead.</div><section id="overview"><h2>1. What Corenyth is</h2><ul><li>Personal assistant that runs fully on an Android phone (Android 7.0+, API 24+).</li><li>No account, no cloud, no <code>INTERNET</code> permission.</li><li>Keeps tasks, exact reminders, personal facts; proactive follow-through check-ins.</li><li>Fine-tuned <b>Qwen3 0.6B</b> (Q4_0 GGUF, 381 MB) runs on phone CPU via llama.cpp (<code>libllama_jni.so</code> + runtime-selected <code>libggml-cpu-*.so</code> variants, b11541). It emits a mascot mood envelope first in every reply. Gemma 4 E2B is kept as an experimental, slower option.</li><li>Design rule: <b>the model interprets, code acts</b>.</li><li>Package <code>com.corenyth.assistant</code>, v0.2.0+2, branch <code>beta_version</code>, Apache-2.0.</li></ul></section><section id="arch"><h2>2. System architecture</h2><div class="dia"><pre class="mermaid">flowchart TB
+ subgraph UI["Flutter UI (aurora glass)"]
+  CV[Chat view + sidebar history]; TP[Tasks page]; MP[Memories page]; ST[Settings: backup, reminders, model]; GM[Ghost mascot]
+ end
+ subgraph AS["Assistant core (lib/assistant)"]
+  CP[core_policy.dart scope + length]; SE[session.dart orchestrator]; RE[rule_engine.dart]; SM[semantic.dart model plans]; TC[turn_contract / authorization validator]; TMP[temporal.dart dates]; TL[tools.dart actions]; FT[follow_through.dart]
+ end
+ subgraph DATA["Data"]
+  DB[(SQLite v10 db.dart + repos.dart)]
+ end
+ subgraph NAT["Native Android (Kotlin + C++)"]
+  LB[LlamaBridge.kt + llama.cpp]; AM[AlarmManager + notifications]; WG[Home widget]; PR[Proactive.kt boot re-arm]
+ end
+ UI --> SE; SE --> CP; SE --> RE; SE --> SM; SM --> LB; SM --> TC; TC --> TL; RE --> TL; TL --> TMP; TL --> DB; TL --> AM; DB --> WG; SE --> GM</pre></div><ul><li>Flutter/Dart app plus native Kotlin and C++ (llama.cpp JNI).</li><li>Deps: sqflite, flutter_local_notifications, timezone, crypto (model SHA-256), characters (reply budget), archive (backup).</li></ul></section><section id="pipeline"><h2>3. Request pipeline (one message)</h2><div class="dia"><pre class="mermaid">flowchart TD
+ U[User types message] --> SC{Scope check core_policy}
+ SC -->|clearly outside, 1st time| RF[One-line refusal, AI does not run]
+ SC -->|outside, user persists| RO[Model answers read-only, no data changes]
+ SC -->|core or unsure| R{Simple case?}
+ R -->|yes| RE[Rule engine instant]
+ R -->|no| M[Qwen3 0.6B: GBNF JSON plan]
+ M --> V{Code validates plan vs text + DB}
+ V -->|valid| X[Execute tools]
+ V -->|unsafe / invalid| RE
+ RE --> X
+ X --> DB[(Local SQLite)]
+ X --> AL[Schedule Android exact alarm]
+ X --> C[Honest confirmation]
+ C -.background.-> MO[Mascot mood update]</pre></div><ul><li>1 Scope check: core / clearly outside / unsure.</li><li>2 Outside first time: one line refusal, model skipped.</li><li>3 Core: rules handle simple cases, else model plans, code validates, rules take over on bad plans.</li><li>4 Code writes DB + schedules alarm; honest reply e.g. "Saved, but notifications are blocked".</li><li>5 Mood updates in background so replies stay fast.</li><li>6 When due, Android fires it even if the app is closed.</li></ul></section><section id="reply"><h2>4. How the agent produces a reply</h2><div class="dia"><pre class="mermaid">sequenceDiagram
+ participant U as User
+ participant S as Session
+ participant P as Core policy
+ participant L as Qwen3 (llama.cpp)
+ participant V as Validator
+ participant T as Tools/DB
+ U->>S: message
+ S->>P: classify scope
+ P-->>S: core
+ S->>L: prompt + grammar (GBNF)
+ L-->>S: JSON plan + reply text (one call)
+ S->>V: check ids, dates, words grounded in input
+ V-->>S: ok
+ S->>T: execute deterministically
+ T-->>S: result
+ S->>P: cap length
+ S-->>U: streamed reply</pre></div><ul><li>Model never invents DB ids or computes dates; temporal.dart resolves time.</li><li>Normal plan includes reply in one inference call; replies stream live.</li><li>No model installed: rule engine answers everything.</li></ul></section><section id="output"><h2>5. How output comes back</h2><div class="dia"><pre class="mermaid">flowchart LR
+ X[Executed action] --> CH[Chat bubble, streamed]
+ X --> WG[Home screen widget refresh]
+ X --> TK[Tasks / Memories pages]
+ X -.async.-> MD[Mascot mood]
+ X --> AL[Alarm armed] --> N[Notification at due time]
+ N --> FT[Follow-through check-in]</pre></div></section><section id="policy"><h2>6. Core rules and core policy</h2><div class="dia"><pre class="mermaid">stateDiagram-v2
+ [*] --> InScope: reminders/alarms/tasks/notes/schedule/facts
+ InScope --> [*]: normal concise reply
+ [*] --> Refused: out of scope, first ask
+ Refused --> Answered: repeats similar ask or says answer anyway
+ Answered --> [*]: model answers read-only
+ Refused --> [*]: user moves on
+ note right of Refused: refusal remembered per chat (resets on app restart)</pre></div><ul><li>Scope: reminders, alarms, tasks, notes, schedule, saved facts.</li><li>Exact line: <i>"That's not in my core functionality. I can help with: reminders, alarms, tasks, notes, your schedule, and facts you've saved."</i></li><li>Persisted answers can be fuller, never change data.</li><li>Replies short; length cap lifted when user asks for detail (grapheme-aware budget).</li><li>Always on, no toggle. Source: <code>CORE_RULES.md</code>, <code>lib/assistant/core_policy.dart</code>.</li><li>Limits: refusal memory resets on restart; word rules can't classify every sentence.</li></ul></section><section id="reminder"><h2>7. Reminder lifecycle</h2><div class="dia"><pre class="mermaid">flowchart LR
+ A[Create task/reminder] --> B[Resolve exact time temporal.dart]
+ B --> C[(Save in SQLite)]
+ C --> D[AlarmManager exact alarm]
+ D --> E[Notification fires, app may be closed]
+ E --> F[Done / snooze-by-chat / follow-through]
+ C --> G[Cancel or edit] --> D
+ R[Phone reboot] --> H[Proactive.kt RECEIVE_BOOT_COMPLETED] --> D</pre></div><ul><li>"Alarms" are notifications: no ringing, no snooze button.</li><li>Day-only calls ("call on Sunday") ask for the time and keep the day.</li></ul></section><section id="memory"><h2>8. Memory and facts</h2><div class="dia"><pre class="mermaid">flowchart TD
+ S["I drink green tea"] --> K[Slot: subject + attribute]
+ K --> DB[(memories table)]
+ C["I drink coffee now"] --> K2[Same slot] --> UP[Supersede old fact] --> DB
+ Q["Do you remember..."] --> IX[Indexed lookup memories_slot / status_hash + FTS4] --> DB --> A[Recall answer]</pre></div><ul><li>DB v10 adds indexes <code>memories_slot</code>, <code>memories_status_hash</code>; migrations additive.</li><li>Other tables: conversations, tasks, reminders, message_moods (indexed).</li></ul></section><section id="backup"><h2>9. Backup and restore</h2><div class="dia"><pre class="mermaid">flowchart LR
+ E[User taps export] --> Z[backup_service: DB to archive] --> F[File via Android picker / share]
+ F2[Pick backup file] --> VL[backup_format validate] --> RS[Restore DB] --> RA[Re-arm reminders]</pre></div></section><section id="delivery"><h2>10. Model and data delivery</h2><div class="dia"><pre class="mermaid">flowchart LR
+ T[Fine-tuned GGUF on Mac] -->|adb push / file picker import today| P[App storage]
+ P --> H[SHA-256 check model_selection] --> L[LlamaBridge loads]
+ X[Planned: first-run download or bundle] -.-> P
+ N[No model] --> RE[Rule engine only]</pre></div><ul><li>Fresh install has no model; only allowlisted GGUFs (size + SHA-256) load. Default is <code>Corenyth-Qwen3-0.6B-mood-Q4_0.gguf</code> (sha256 <code>f2086705...69ee</code>); its release asset on v0.1.0-alpha.1 still has to be uploaded for the download link to work.</li><li>Model button opens browser; app itself has no internet.</li></ul></section><section id="training"><h2>11. Training and eval pipeline</h2><div class="dia"><pre class="mermaid">flowchart LR
+ G[generate_teacher.py + reply_banks] --> B[build_dataset / build_chat_rows] --> TR[train_mac.py / Colab LoRA] --> MG[merge_lora.py] --> GG[GGUF] --> EV[eval/score.py + native_host.cpp]
+ EV --> R1[Dev corpus] & R2[Held-out corpus] & R3[Multi-turn]</pre></div><table><tr><th>Eval</th><th>Pass</th><th>Fail</th><th>Incomplete</th></tr><tr><td>Rules/dev (real model)</td><td>97</td><td>0</td><td>5</td></tr><tr><td>Multi-turn</td><td>20</td><td>0</td><td>3</td></tr><tr><td>Held-out real model</td><td>12</td><td>18</td><td>4 (fails gate)</td></tr><tr><td>Oct 29 checkout run</td><td>83</td><td>14</td><td>5</td></tr></table><ul><li>Oct 30: <code>flutter test</code> 538 pass, 3 skipped; <code>flutter analyze</code> 0 errors/warnings (111 pre-existing infos).</li></ul><ul><li>App tests: 512 pass, 3 skipped (per docs, not re-run).</li><li>Validation rows share generator with training, so optimistic.</li><li>Mood labels from GoEmotions (goemotions_mood.py). Colab Qwen run: 2 epochs, final loss about 0.38 (eval printout not captured; reply quality only spot-checked on 3 prompts).</li></ul></section><section id="status"><h2>12. Feature status map</h2><div class="dia"><pre class="mermaid">mindmap
+ root((Corenyth))
+  Working
+   Tasks
+   Reminders fire when closed
+   Facts with corrections
+   Cancel and edit
+   Agenda questions
+   Recall
+   Backup and restore
+   Chat history
+   Home widget
+   Aurora glass UI
+   Mascot moods
+   Core policy
+  Partial
+   Unseen phrasing
+   Tone loosely followed
+   Some date forms
+   Alarms are notifications
+  Missing
+   Voice in and out
+   Google Calendar sync
+   Larger models
+   Cross device speed tests
+   Desktop port</pre></div><ul><li>Dates not understood: "next Friday", "in 2 weeks", "12/03"; it asks instead of guessing.</li><li>Agenda: "anything overdue?", "this week".</li><li>Voice: VoiceSessionActivity.kt exists but ASR/TTS not integrated.</li></ul></section><section id="privacy"><h2>13. Privacy and permissions</h2><ul><li>Permissions: POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM, RECEIVE_BOOT_COMPLETED, BIND_REMOTEVIEWS (widget).</li><li>No INTERNET, mic, camera, contacts, location, analytics or crash reporting.</li><li>Feedback opens your own mail app draft.</li></ul></section><section id="perf"><h2>14. Performance and state</h2><ul><li>POCO F5 measured Oct 30 (profile build, mood model): cold first turn about 24 s (13 s prompt prefill), warm turn about 14 s (3 s prefill + about 44 tokens at about 4 tok/s). Target 4 s median is NOT met; see section 18.</li><li>Profile APK (debug-signed AOT) installed and exercised on a POCO F5; debug APK fails there ("Invalid kernel binary") and the release APK has a signature mismatch with the installed build.</li><li>Latest commit e64cad7, Oct 30 1:55 AM IST: v10 memory indexing, background mood, rules fixes, device-tested recall.</li></ul></section><section id="files"><h2>15. File and folder map</h2><ul><li><code>lib/assistant</code>: session, core_policy, rule_engine, semantic, turn_contract, authorization, temporal, tools, follow_through, calculator, personalities.</li><li><code>lib/data</code>: db.dart (v10), repos.dart. <code>lib/mascot</code>: emotion + mood store.</li><li><code>lib/services</code>: native_bridge, reminder_scheduler, proactive, model_selection/status, backup/.</li><li><code>lib/ui</code>: app_shell, chat_view, chat_sidebar, tasks_page, memories_page, settings, ghost_mascot, glass widgets.</li><li><code>android/.../kotlin</code>: LlamaBridge, MainActivity, Proactive, Widget*, DocumentFiles, VoiceSessionActivity.</li><li><code>training/</code>, <code>eval/</code>, <code>docs/development/</code>, <code>CORE_RULES.md</code>, <code>PRIVACY.md</code>.</li></ul></section><section id="study"><h2>16. mem0 / Hermes study takeaways</h2><ul><li>mem0: scoped memory items, ADD/UPDATE/DELETE/NOOP resolution, temporal anchoring, hybrid BM25 search, audit history.</li><li>Hermes: turn loop, cached three-tier prompts, tool progressive disclosure, fallback chains, durable task ledger, crash-safe SQLite WAL.</li><li>Applied to Corenyth problems: accuracy gate, latency, tone, date ambiguity, context overflow.</li></ul></section><section id="roadmap"><h2>17. Blockers and roadmap</h2><div class="dia"><pre class="mermaid">flowchart LR
+ A[More varied fine-tuning data] --> B[Retrain] --> C[Re-run held-out eval]
+ C --> D[First-run model download or bundle]
+ D --> E[Install on real phone + device checklist]
+ E --> F[Speed work to 4 s]
+ F --> G[Desktop port macOS/Windows/Linux, plan not written]</pre></div><ul><li>Blockers: unseen-phrasing accuracy, model delivery (upload release asset), wider device testing, speed (decode about 4 tok/s and about 44-token replies dominate).</li><li>Desktop port: Flutter desktop, offline GGUF, tray, signing/notarization; <code>desktop-port-plan.md</code> not written yet.</li></ul></section><section id="report"><h2>18. Report: mood model and speed-up (Oct 30)</h2>
+<h3>Goal</h3><ul><li>The on-device model emits a mascot-readable envelope <code>{"emotion":{"mood","intensity","confidence"},...}</code> first in every reply, in the user's chosen personality (loving / professional / caring / friendly), for both prompt contracts (plan and reply).</li></ul>
+<h3>What was done</h3><ul>
+<li><b>Dataset:</b> 4000-row personality set + mood rows (GoEmotions-derived) + reply rows, built by <code>build_dataset.py</code>, <code>build_chat_rows.py</code>, <code>make_bundle.py</code>; prompts are byte-identical to the Dart renderers (<code>app_prompts.py</code>, <code>export_prompts_test.dart</code>).</li>
+<li><b>Gemma 4 E2B:</b> LoRA merged on Mac (<code>merge_lora.py</code>), quantized to Q4_0 (3.36 GB) and run on the POCO F5. Works but too slow, so kept as an experimental catalog entry (no download URL).</li>
+<li><b>Qwen3-0.6B retrain (default):</b> LoRA r=32, alpha 32, all projections, lr 2e-4 cosine, 2 epochs, loss on completion only, Colab T4 via Unsloth (<code>colab_cells.py</code>). Exported Q4_0, 381,566,592 bytes, allowlisted in <code>model_status.dart</code>; tests updated.</li>
+<li><b>Mac training:</b> <code>train_mac.py</code> (MPS) works but is about 52 s/step (about 13 h/epoch), so Colab is used for training; Mac is used for merge/convert/quantize.</li>
+<li><b>Phone check:</b> mood and mascot reactions correct on three prompts ("got the job", "dog is sick", "remind me to call mom"). The job reply wording ("relief/lucky") is off, so quality needs a wider check.</li></ul>
+<h3>Speed work (POCO F5, Snapdragon 7+ Gen 2, 4 threads, about 1.15k-token prompt)</h3>
+<table><tr><th>Build</th><th>Cold prefill</th><th>Warm prefill</th><th>Decode</th></tr>
+<tr><td>Baseline armv8-a</td><td>about 22 s</td><td>3.9 s</td><td>6-7 tok/s</td></tr>
+<tr><td>Static dotprod + i8mm + repack</td><td>10.8 s</td><td>2.5 s</td><td>about 4 tok/s</td></tr>
+<tr><td>Static dotprod + repack</td><td>13.4 s</td><td>2.7 s</td><td>about 3.8 tok/s</td></tr>
+<tr><td>Dotprod, repack off</td><td>29 s</td><td>n/a</td><td>about 3.7 tok/s</td></tr>
+<tr><td><b>Shipped: runtime-selected variants</b></td><td>12.9 s</td><td>3.0 s</td><td>about 4 tok/s</td></tr></table>
+<ul><li><b>Change:</b> llama/ggml are now shared libs with <code>GGML_BACKEND_DL</code> + <code>GGML_CPU_ALL_VARIANTS</code> (baseline, dotprod, i8mm, SVE variants). <code>llama_jni.cpp</code> loads the variants from its own folder (<code>dladdr</code> + <code>ggml_backend_load_all_from_path</code>); <code>build.gradle.kts</code> sets <code>useLegacyPackaging = true</code> so the libs are extracted. Phones without dotprod fall back to baseline instead of crashing.</li>
+<li><b>Result:</b> prompt processing about 2x faster. Decode did not improve (about 4 tok/s in every build; the earlier 6-7 tok/s was probably a cooler phone, unconfirmed).</li>
+<li><b>Turn time now:</b> cold about 24 s, warm about 14 s. Reply generation (about 44 tokens, about 10-11 s) is the main cost; the 4 s target needs shorter replies and a shorter envelope in the training data, then a retrain. Lowering <code>maxTokens</code> alone does nothing since typical replies are far below the cap.</li></ul>
+<h3>Verification</h3><ul><li><code>flutter test</code>: 538 pass, 3 skipped. <code>flutter analyze</code>: 0 errors, 0 warnings (111 existing infos, identical before the changes).</li><li>On phone: model loads and answers with the new native libs; two prompts timed. Not tested: a phone without dotprod/i8mm (fallback path), which variant was picked on the POCO F5 (timings look like dotprod, not i8mm), Windows/macOS.</li></ul>
+<h3>Open items</h3><ul><li>Upload <code>Corenyth-Qwen3-0.6B-mood-Q4_0.gguf</code> to release v0.1.0-alpha.1 (default model download currently 404s until then).</li><li>Shorter reply/envelope data + retrain for the 4 s target; wider reply-quality eval.</li><li><code>training/data/</code> (11 MB), <code>__pycache__</code> and <code>.DS_Store</code> are untracked; consider ignoring them.</li></ul></section></main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>if(window.mermaid){mermaid.initialize({startOnLoad:true,theme:'default'})}else{document.getElementById('warn').style.display='block'}</script></body></html>

@@ -7,6 +7,8 @@ plugins {
 }
 
 android {
+    // ggml loads its CPU-variant libs by file path, so they must be extracted, not read from the APK.
+    packaging { jniLibs { useLegacyPackaging = true } }
     namespace = "com.corenyth.assistant"
     // README requires >= 34 (flutter_local_notifications).
     compileSdk = maxOf(34, flutter.compileSdkVersion)

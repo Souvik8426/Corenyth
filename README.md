@@ -334,7 +334,7 @@ Being transparent about what works today and what is still in progress:
 - **Voice Input & Output (`sherpa-onnx`):** Streaming VAD/ASR speech recognition, local TTS playback, and voice barge-in interruption are planned next.
 - **Extended Date Expressions:** Phrases like *"today/tonight/tomorrow"*, *"morning/afternoon/evening"*, *"in N minutes/hours"*, weekdays, and named month dates work today. Relative expressions like *"next Friday"*, *"next week"*, or *"in 2 weeks"* are not parsed yet—Corenyth asks you for a specific date/time rather than guessing.
 - **Vector Embeddings / Mem0:** Personal memory currently uses local SQLite `FTS4` ranked by importance and recency. The `embedding` column in `memories` is reserved for future semantic search.
-- **ARMv8.2 Dot-Product Kernels:** Native builds currently target baseline `armv8-a` for compatibility across all 64-bit Android phones; optional `armv8.2-a+dotprod` kernels are planned for faster prompt processing on modern SoCs.
+- **Runtime-selected CPU kernels:** the native build ships baseline, dotprod, i8mm and newer ggml CPU variants and picks the best one for the phone at load, so older 64-bit phones still run it while modern SoCs get about 2x faster prompt processing.
 - **Google Play Store Distribution:** Model import uses Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT`) and private storage. Broad storage and microphone permissions are not declared.
 
 See [Known Gaps](docs/development/known-gaps.md) for the complete technical breakdown.

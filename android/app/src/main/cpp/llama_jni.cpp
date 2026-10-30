@@ -2,6 +2,7 @@
 // load/generate/unload are serialized by LlamaBridge's single worker thread;
 // only cancel() comes from another thread, so it touches nothing but atomics.
 #include <android/log.h>
+#include <dlfcn.h>
 #include <jni.h>
 
 #include <algorithm>
@@ -65,6 +66,13 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_corenyth_assistant_LlamaBridge_nativeLoad(JNIEnv *env, jobject, jstring jpath, jint n_ctx) {
     static bool backend_ready = false;
     if (!backend_ready) {
+        // Backends are separate libs next to this one; load the best CPU variant for this phone.
+        Dl_info info;
+        if (dladdr((void *) &Java_com_corenyth_assistant_LlamaBridge_nativeLoad, &info) && info.dli_fname) {
+            std::string dir = info.dli_fname;
+            dir.resize(dir.find_last_of('/'));
+            ggml_backend_load_all_from_path(dir.c_str());
+        }
         llama_backend_init();
         // llama.cpp logs to stderr, which Android drops; keep warnings/errors in logcat.
         llama_log_set([](ggml_log_level level, const char *text, void *) {

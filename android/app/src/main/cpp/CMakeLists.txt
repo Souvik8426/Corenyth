@@ -13,12 +13,15 @@ if(NOT EXISTS ${LLAMA_DIR}/CMakeLists.txt)
         "  git clone --depth 1 --branch b11541 https://github.com/ggml-org/llama.cpp android/app/src/main/cpp/llama.cpp")
 endif()
 
-# One self-contained libllama_jni.so: static llama/ggml, no OpenMP runtime, no network-fetched extras.
-# ponytail: baseline armv8-a kernels (no dotprod/i8mm) so every arm64 phone runs it;
-# for speed, set GGML_CPU_ARM_ARCH=armv8.2-a+dotprod or GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS.
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# llama/ggml are shared libs and the CPU backend is built in several variants (baseline armv8.0,
+# dotprod, i8mm, ...) that ggml picks between at runtime from the phone's CPU features
+# (llama_jni.cpp loads them from this lib's folder). One APK is fast on new phones and still
+# runs on old ones. Measured on a POCO F5: cold prompt 22 s baseline, 13 s dotprod, 11 s i8mm.
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL ON CACHE BOOL "" FORCE)
+set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
 add_subdirectory(${LLAMA_DIR} llama EXCLUDE_FROM_ALL)
 
