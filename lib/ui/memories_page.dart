@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import '../assistant/personalities.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../data/repos.dart';
@@ -26,12 +29,18 @@ class MemoriesPage extends StatefulWidget {
     required this.memory,
     required this.profile,
     this.refreshToken = 0,
+    this.cleanupMemories,
+    this.memoryCleanupIssue,
+    this.memoryCleanupChanged,
     super.key,
   });
 
   final MemoryRepo memory;
   final ProfileRepo profile;
   final int refreshToken;
+  final Future<void> Function()? cleanupMemories;
+  final ValueListenable<String?>? memoryCleanupIssue;
+  final Listenable? memoryCleanupChanged;
 
   @override
   State<MemoriesPage> createState() => _MemoriesPageState();
@@ -39,16 +48,25 @@ class MemoriesPage extends StatefulWidget {
 
 class _MemoriesPageState extends State<MemoriesPage> {
   List<Memory> _memories = [];
+  List<Memory> _deletedMemories = [];
+  bool _showDeleted = false;
   UserProfile? _profile;
   bool _loading = true;
   String? _loadError;
   int? _deleting;
   String? _actionError;
+  String? _privacyIssue;
+  String? _cleanupCallbackIssue;
+  Future<void>? _cleanupRequest;
+  int _loadRevision = 0;
+  int _deletedRevision = 0;
   final _search = TextEditingController();
   String? _category;
 
   @override
   void dispose() {
+    widget.memoryCleanupIssue?.removeListener(_cleanupIssueChanged);
+    widget.memoryCleanupChanged?.removeListener(_cleanupSettled);
     _search.dispose();
     super.dispose();
   }
@@ -56,36 +74,107 @@ class _MemoriesPageState extends State<MemoriesPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    widget.memoryCleanupIssue?.addListener(_cleanupIssueChanged);
+    widget.memoryCleanupChanged?.addListener(_cleanupSettled);
+    _refresh();
   }
 
   @override
   void didUpdateWidget(covariant MemoriesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.memoryCleanupIssue != widget.memoryCleanupIssue) {
+      oldWidget.memoryCleanupIssue?.removeListener(_cleanupIssueChanged);
+      widget.memoryCleanupIssue?.addListener(_cleanupIssueChanged);
+    }
+    if (oldWidget.memoryCleanupChanged != widget.memoryCleanupChanged) {
+      oldWidget.memoryCleanupChanged?.removeListener(_cleanupSettled);
+      widget.memoryCleanupChanged?.addListener(_cleanupSettled);
+    }
+    if (oldWidget.memory != widget.memory ||
+        oldWidget.cleanupMemories != widget.cleanupMemories) {
+      // An old owner's callback may still settle after this widget is reused.
+      _cleanupRequest = null;
+      _cleanupCallbackIssue = null;
+    }
     if (oldWidget.refreshToken != widget.refreshToken ||
         oldWidget.memory != widget.memory ||
-        oldWidget.profile != widget.profile) {
-      _load();
+        oldWidget.profile != widget.profile ||
+        oldWidget.cleanupMemories != widget.cleanupMemories) {
+      _refresh();
     }
   }
 
+  void _cleanupIssueChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _cleanupSettled() {
+    if (mounted) unawaited(_load());
+  }
+
+  Future<void> _refresh() {
+    final cleanup = widget.cleanupMemories;
+    if (cleanup != null && _cleanupRequest == null) {
+      // Start cleanup without making the page wait for it. AppServices owns
+      // single-flight across pages/resumes and signals late settlement too.
+      final repo = widget.memory;
+      final changed = widget.memoryCleanupChanged;
+      final request = Completer<void>();
+      _cleanupRequest = request.future;
+      unawaited(() async {
+        try {
+          await cleanup();
+          if (mounted && identical(_cleanupRequest, request.future)) {
+            setState(() => _cleanupCallbackIssue = null);
+          }
+        } catch (_) {
+          if (mounted && identical(_cleanupRequest, request.future)) {
+            setState(() => _cleanupCallbackIssue =
+                'Memory cleanup did not finish. Erasure has not been confirmed.');
+          }
+        } finally {
+          final current = identical(_cleanupRequest, request.future);
+          if (current) _cleanupRequest = null;
+          request.complete();
+          if (mounted && current && widget.memory == repo && changed == null) {
+            unawaited(_load());
+          }
+        }
+      }());
+    }
+    return _load();
+  }
+
   Future<void> _load() async {
+    final revision = ++_loadRevision;
+    final memory = widget.memory;
+    final profileRepo = widget.profile;
     setState(() {
       _loading = true;
       _loadError = null;
       _actionError = null;
     });
     try {
-      final memories = await widget.memory.all();
-      final profile = await widget.profile.get();
-      if (!mounted) return;
+      final memories = await memory.all();
+      final profile = await profileRepo.get();
+      String? privacyIssue;
+      try {
+        if (await memory.legacyErasureBlocked()) {
+          privacyIssue = MemoryPrivacyBlocked.explanation;
+        }
+      } catch (_) {
+        privacyIssue = 'Could not check whether permanent erasure is blocked.';
+      }
+      if (!mounted || revision != _loadRevision) return;
       setState(() {
         _memories = memories;
         _profile = profile;
+        _privacyIssue = privacyIssue;
         _loading = false;
       });
+      if (_showDeleted) await _loadDeleted();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || revision != _loadRevision) return;
       setState(() {
         _loading = false;
         _loadError = 'Could not load context';
@@ -107,7 +196,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
         scrollable: true,
         title: const Text('Delete this memory?'),
         content: Text(
-            'This removes the saved memory from this device.\n\n${memory.content}'),
+            'You can restore this memory for 30 days.\n\n${memory.content}'),
         actions: [
           TextButton(
             style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -142,6 +231,16 @@ class _MemoriesPageState extends State<MemoriesPage> {
         _memories = rows;
         _deleting = null;
       });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Memory deleted'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () {
+              if (mounted && widget.memory == repo) _restoreMemory(memory);
+            }),
+      ));
+      if (_showDeleted) await _loadDeleted();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -150,6 +249,119 @@ class _MemoriesPageState extends State<MemoriesPage> {
             ? 'Could not confirm deletion. Refresh to check saved data.'
             : 'Memory could not be deleted. Please try again.';
       });
+    }
+  }
+
+  Future<void> _loadDeleted() async {
+    final revision = ++_deletedRevision;
+    final repo = widget.memory;
+    try {
+      final rows = await repo.deleted();
+      if (mounted && revision == _deletedRevision && repo == widget.memory) {
+        setState(() => _deletedMemories = rows);
+      }
+    } catch (_) {
+      if (mounted && revision == _deletedRevision && repo == widget.memory) {
+        setState(() => _actionError = 'Could not load deleted memories.');
+      }
+    }
+  }
+
+  Future<void> _restoreMemory(Memory memory) async {
+    if (!mounted || _deleting != null) return;
+    setState(() => _deleting = memory.id);
+    try {
+      final result = await widget.memory.restore(memory.id);
+      if (!mounted) return;
+      if (result.status == RestoreStatus.restored) {
+        await _load();
+      } else {
+        setState(() => _actionError = switch (result.status) {
+              RestoreStatus.duplicate =>
+                'An identical memory is already saved.',
+              RestoreStatus.slotTaken =>
+                'A newer memory already fills this preference.',
+              _ => 'This memory can no longer be restored.',
+            });
+      }
+    } catch (_) {
+      if (mounted)
+        setState(() => _actionError = 'Memory could not be restored.');
+    } finally {
+      if (mounted) setState(() => _deleting = null);
+    }
+  }
+
+  Future<void> _purgeMemory(Memory memory) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => GlassAlertDialog(
+        title: const Text('Delete permanently?'),
+        content: const Text(
+            'This erases the memory and its history content. It cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete permanently')),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || _deleting != null) return;
+    setState(() => _deleting = memory.id);
+    try {
+      if (!await widget.memory.deletePermanently(memory.id)) {
+        throw StateError('Memory was not found');
+      }
+      await _loadDeleted();
+    } on MemoryPrivacyBlocked {
+      if (mounted) {
+        setState(() {
+          _privacyIssue = MemoryPrivacyBlocked.explanation;
+          _actionError =
+              'Memory was not erased. Memory and history are retained.';
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _actionError = 'Memory could not be erased.');
+    } finally {
+      if (mounted) setState(() => _deleting = null);
+    }
+  }
+
+  Future<void> _showHistory(Memory memory) async {
+    try {
+      final history = await widget.memory.history(memory.id);
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        builder: (_) => _SheetBody(
+            child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(memory.content,
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
+            const Text('Memory history'),
+            for (final event in history)
+              ListTile(
+                title: Text('${event['event']} · ${event['actor']}'),
+                subtitle: Text(DateTime.fromMillisecondsSinceEpoch(
+                        event['created_at'] as int)
+                    .toLocal()
+                    .toString()),
+              ),
+          ],
+        )),
+      );
+    } catch (_) {
+      if (mounted)
+        setState(() => _actionError = 'Could not load memory history.');
     }
   }
 
@@ -173,6 +385,8 @@ class _MemoriesPageState extends State<MemoriesPage> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final cleanupIssue =
+        widget.memoryCleanupIssue?.value ?? _cleanupCallbackIssue;
     final query = _search.text.trim().toLowerCase();
     final categories = _memories.map((m) => m.category).toSet().toList()
       ..sort();
@@ -203,11 +417,29 @@ class _MemoriesPageState extends State<MemoriesPage> {
                   tooltip: 'Refresh context',
                   constraints:
                       const BoxConstraints(minWidth: 48, minHeight: 48),
-                  onPressed: _loading || _deleting != null ? null : _load,
+                  onPressed: _loading || _deleting != null ? null : _refresh,
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ]),
           const SizedBox(height: 14),
+          if (cleanupIssue != null) ...[
+            _Surface(
+                child: Semantics(
+              liveRegion: true,
+              child: Text(cleanupIssue, key: const Key('memory-cleanup-issue')),
+            )),
+            const SizedBox(height: 14),
+          ],
+          if (_privacyIssue != null &&
+              !(cleanupIssue?.contains(_privacyIssue!) ?? false)) ...[
+            _Surface(
+                child: Semantics(
+              liveRegion: true,
+              child:
+                  Text(_privacyIssue!, key: const Key('memory-privacy-issue')),
+            )),
+            const SizedBox(height: 14),
+          ],
           if (_loading)
             const Center(
                 child: CircularProgressIndicator(
@@ -222,7 +454,7 @@ class _MemoriesPageState extends State<MemoriesPage> {
                 const Text(
                     'Your saved data could not be read. Please try again.'),
                 const SizedBox(height: 16),
-                OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                OutlinedButton(onPressed: _refresh, child: const Text('Retry')),
               ],
             ))
           else ...[
@@ -366,11 +598,50 @@ class _MemoriesPageState extends State<MemoriesPage> {
                         ),
                       ]),
                   const SizedBox(height: 16),
-                  Text(memory.content, style: text.bodyLarge),
+                  InkWell(
+                    onTap: () => _showHistory(memory),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(memory.content, style: text.bodyLarge),
+                    ),
+                  ),
                 ],
               )),
               const SizedBox(height: 16),
             ],
+            ExpansionTile(
+              initiallyExpanded: _showDeleted,
+              title: const Text('Recently deleted'),
+              subtitle: const Text('Restore within 30 days'),
+              onExpansionChanged: (expanded) {
+                _showDeleted = expanded;
+                if (expanded) {
+                  _refresh();
+                  _loadDeleted();
+                }
+              },
+              children: [
+                if (_deletedMemories.isEmpty)
+                  const ListTile(title: Text('No deleted memories')),
+                for (final memory in _deletedMemories)
+                  ListTile(
+                    title: Text(memory.content),
+                    onTap: () => _showHistory(memory),
+                    subtitle: Wrap(spacing: 8, children: [
+                      TextButton(
+                          onPressed: _deleting == null
+                              ? () => _restoreMemory(memory)
+                              : null,
+                          child: const Text('Restore')),
+                      TextButton(
+                          onPressed: _deleting == null
+                              ? () => _purgeMemory(memory)
+                              : null,
+                          child: const Text('Delete permanently')),
+                    ]),
+                  ),
+              ],
+            ),
           ],
           const SizedBox(height: 8),
           const Text(
@@ -595,14 +866,20 @@ class _AddMemorySheetState extends State<_AddMemorySheet> {
     });
     var wrote = false;
     try {
-      final id = await widget.memory
-          .add(_content.text.trim(), category: _category.text.trim());
+      final id = await widget.memory.add(_content.text.trim(),
+          category: _category.text.trim(), actor: 'user');
       wrote = true;
       final rows = await widget.memory.all();
       if (!rows.any((m) => m.id == id))
         throw StateError('Memory readback failed');
       if (!mounted) return;
       Navigator.of(context).pop(rows);
+    } on MemoryInstructionRejected catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error.reason;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {

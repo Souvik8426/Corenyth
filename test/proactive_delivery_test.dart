@@ -365,9 +365,112 @@ void main() {
     await app.catchUp(now: now);
     await app.catchUp(now: now);
     final msgs = await mainChat();
-    expect(msgs.map((m) => m.content).toList(), [contains('Missed call')],
+    expect(msgs.map((m) => m.content).toList(),
+        [contains('Ancient'), contains('Missed call')],
         reason:
-            '20h old skipped; 5 min old left to its own alarm; repeat adds nothing');
+            '20h old summarized; 5 min old left to its own alarm; repeat adds nothing');
+    expect(msgs.map((m) => m.kind), ['missed', 'reminder']);
+    expect(native.notices, isEmpty);
+  });
+
+  test('catch-up with no missed reminders writes no summary', () async {
+    final resume = today.add(const Duration(hours: 12));
+    final disabled = await app.reminders.create(
+        'Cancelled', resume.subtract(const Duration(days: 2)));
+    await app.reminders.cancel(disabled.id);
+    final future = await app.reminders
+        .create('Later', resume.add(const Duration(hours: 1)));
+
+    await app.catchUp(now: resume);
+
+    expect(await mainChat(), isEmpty);
+    expect(await app.conversations.delivered('missed-summary:${dayKey(resume)}'),
+        isFalse);
+    expect((await app.reminders.get(future.id))!.enabled, isTrue);
+    expect(native.notices, isEmpty);
+  });
+
+  test('seven old misses produce five summary items and two more', () async {
+    final resume = today.add(const Duration(hours: 12));
+    final old = <Reminder>[];
+    for (var i = 0; i < 7; i++) {
+      old.add(await app.reminders.create(
+          'Missed item $i', resume.subtract(Duration(hours: 12 + i))));
+    }
+
+    await app.catchUp(now: resume);
+
+    final message = (await mainChat()).single;
+    expect((message.kind, message.taskId), ('missed', null));
+    expect(message.content, contains('7 reminders passed'));
+    expect(message.content.split('\n').where((line) => line.startsWith('- ')),
+        hasLength(5));
+    for (var i = 0; i < 5; i++) {
+      expect(message.content, contains('Missed item $i'));
+      expect(message.content, contains(dayKey(old[i].triggerAt)));
+    }
+    expect(message.content, isNot(contains('Missed item 5')));
+    expect(message.content, isNot(contains('Missed item 6')));
+    expect(message.content, contains('and 2 more'));
+    expect(await app.conversations.delivered('missed-summary:${dayKey(resume)}'),
+        isTrue);
+    for (final reminder in old) {
+      final retired = (await app.reminders.get(reminder.id))!;
+      expect((retired.enabled, retired.sync), (false, 'cancel'));
+    }
+    expect(native.notices, isEmpty);
+  });
+
+  test('catch-up never summarizes retired misses again', () async {
+    final resume = today.add(const Duration(hours: 12));
+    final missed = await app.reminders
+        .create('Call mom', resume.subtract(const Duration(hours: 20)));
+
+    await app.catchUp(now: resume);
+    final first = (await mainChat()).single;
+    expect(first.content, contains('1 reminder passed'));
+    expect(first.content, isNot(contains('and ')));
+    final before = await mainChat();
+    final retiredBefore = (await app.reminders.get(missed.id))!;
+    expect((retiredBefore.enabled, retiredBefore.sync), (false, 'cancel'));
+    await app.catchUp(now: resume);
+    final after = await mainChat();
+    expect(after.map((m) => (m.id, m.kind, m.content, m.createdAt)).toList(),
+        before.map((m) => (m.id, m.kind, m.content, m.createdAt)).toList(),
+        reason: 'a repeat catch-up must not add or rewrite any message');
+    final retiredAfter = (await app.reminders.get(missed.id))!;
+    expect((retiredAfter.enabled, retiredAfter.sync, retiredAfter.triggerAt),
+        (retiredBefore.enabled, retiredBefore.sync, retiredBefore.triggerAt),
+        reason: 'a repeat catch-up must not touch the retired reminder row');
+    expect((await mainChat()).map((m) => m.id), [first.id]);
+    await app.catchUp(now: resume.add(const Duration(days: 1)));
+    expect((await mainChat()).map((m) => m.id), [first.id]);
+    expect(native.notices, isEmpty);
+  });
+
+  test('misses inside twelve hours keep the latest delivery per task', () async {
+    final resume = today.add(const Duration(hours: 12));
+    final latest = resume.subtract(const Duration(hours: 1));
+    final rs = await plan('Recent meeting', latest, [
+      (kind: 'reminder', at: resume.subtract(const Duration(hours: 2))),
+      (kind: 'follow_up', at: latest),
+    ]);
+    final other = await app.reminders.create(
+        'Recent call', resume.subtract(const Duration(hours: 3)));
+
+    await app.catchUp(now: resume);
+    await app.catchUp(now: resume);
+
+    final messages = await mainChat();
+    expect(messages, hasLength(2));
+    expect(messages.map((m) => m.kind), ['follow_up', 'reminder']);
+    expect(messages.first.taskId, rs.first.taskId);
+    expect(messages.last.content, contains('Recent call'));
+    expect(await app.conversations.delivered(alertKey(rs.last)), isTrue);
+    expect(await app.conversations.delivered(alertKey(rs.first)), isFalse);
+    for (final reminder in [...rs, other]) {
+      expect((await app.reminders.get(reminder.id))!.enabled, isTrue);
+    }
     expect(native.notices, isEmpty);
   });
 

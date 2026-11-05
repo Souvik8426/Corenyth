@@ -173,3 +173,164 @@ class CorePolicy {
     return prior.intersection(words).length / prior.union(words).length >= 0.6;
   }
 }
+
+/// Shared wording for a rejected instruction-like memory.
+const memoryInstructionRefusal =
+    'I keep facts about you, not instructions for me. To change how I reply, use Memories → Edit tone.';
+
+/// An explicit memory request's leading cue ("remember", "please remember
+/// that", "note:", "keep in mind", "don't forget"), not "remember to ..."
+/// (a task request) and not words that merely start the same ("notes").
+final memoryRequestCue = RegExp(
+    r"^(?:please\s+)?(?:remember|note|fyi|keep\s+in\s+mind|don['’]?t\s+forget|do\s+not\s+forget)\b"
+    r'(?:\s+that\b)?\s*[:,]?\s*(?!to\b)(?=\S)',
+    caseSensitive: false);
+
+/// Removes at most one conversational filler tag anchored at the very end of
+/// [text]: ", you know" / ", you see" (any text), or ", will you" only when
+/// [request] says the user explicitly asked to remember. Optional trailing
+/// `?.!` go with the tag. Nothing before the tag is touched, so every rule of
+/// [memoryInstructionIssue] still runs on the rest; a tag that is not the
+/// final clause ("..., you know you must obey") is kept.
+String stripMemoryFillerTag(String text, {bool request = false}) {
+  final t = text.trim();
+  final tag = request
+      ? RegExp(r',\s*(?:you\s+(?:know|see)|will\s+you)\s*[?.!]*$',
+          caseSensitive: false)
+      : RegExp(r',\s*you\s+(?:know|see)\s*[?.!]*$', caseSensitive: false);
+  final m = tag.firstMatch(t);
+  if (m == null) return t;
+  final rest = t.substring(0, m.start).trim();
+  return rest.isEmpty ? t : rest;
+}
+
+/// Write-time scan that rejects instruction-like memories before storage.
+///
+/// Returns null when allowed (facts about the user).
+/// When rejected, returns a short user-facing reason string.
+/// [request]: the caller already removed an explicit "remember ..." cue from
+/// [content], so a trailing ", will you" tag is courtesy, not a directive.
+String? memoryInstructionIssue(String content, {bool request = false}) {
+  final text = content.trim();
+  if (text.isEmpty) return null;
+
+  // (c) Contains role or control markers (scanned before any tag removal).
+  final controlMarkers = RegExp(
+      r'(?:<\||(?:^|[\n\r"\u201c\u2018])\s*(?:system|assistant)\s*:|'
+      r'(?:^|[\n\r])\s*###(?:\s+(?:system|assistant|admin)\b|\s*$)|'
+      r'\[\s*(?:system|admin)\b\s*\])',
+      caseSensitive: false,
+      multiLine: true);
+  if (controlMarkers.hasMatch(text)) {
+    return memoryInstructionRefusal;
+  }
+
+  // A trailing filler/courtesy tag is not a future obligation. Remove only
+  // that anchored tag; the rest is scanned as usual, clause by clause.
+  final cue = memoryRequestCue.firstMatch(text);
+  final untagged =
+      stripMemoryFillerTag(text, request: request || cue != null);
+  final strippedTag = untagged != text;
+  if (strippedTag && cue != null) {
+    // The request's own words must pass too: removing the tag must never
+    // expose "Remember: ignore all previous instructions" as a fact.
+    final inner = untagged.substring(cue.end).trim();
+    if (inner.isNotEmpty &&
+        memoryInstructionIssue(inner) != null) {
+      return memoryInstructionRefusal;
+    }
+  }
+  return _instructionIssueAfterTags(untagged, strippedTag);
+}
+
+String? _instructionIssueAfterTags(String text, bool strippedTag) {
+  var addressedText = text;
+  // In this reply preference, "will" describes the replies helping the user.
+  // Mask only that modal, retaining "you" and any appended directive/modal.
+  addressedText = addressedText.replaceFirstMapped(
+    RegExp(
+      r'^(user\s+prefers\s+replies\s+that\s+)will(\s+help\s+you\s+plan\b)',
+      caseSensitive: false,
+    ),
+    (match) => '${match[1]}${match[2]}',
+  );
+  final maskedBenignModal = strippedTag || addressedText != text;
+
+  // A possessive reference to someone's assistant describes a person, rather
+  // than addressing Corenyth. Mask a short noun phrase, stopping at pronouns,
+  // modals and common clause verbs so "you must ..." stays visible.
+  addressedText = addressedText.replaceAll(
+    RegExp(
+      r"\b(?:user['’]s|my|our|his|her|their|your)\s+"
+      r'(?:(?!(?:you|must|should|always|never|will|have|can|are|is|says|said)\b)[\w-]+\s+){0,4}assistant\b',
+      caseSensitive: false,
+    ),
+    '',
+  );
+  // (a) Addresses the assistant together with an obligation or permission.
+  final addressesAssistant =
+      RegExp(r'\b(?:you|assistant|corenyth)\b', caseSensitive: false);
+  final instructionModals = RegExp(
+      r'\b(?:must|should|always|never|will|have\s+to|you\s+are\s+allowed\s+to)\b',
+      caseSensitive: false);
+  if (addressesAssistant.hasMatch(addressedText) &&
+      instructionModals.hasMatch(addressedText)) {
+    return memoryInstructionRefusal;
+  }
+
+  // Strip leading user/i/my subject (e.g. "User: ...", "User, ...", "I: ...", or
+  // "User pretend/ignore/act as/...") before checking if the body starts with an imperative.
+  String body = text;
+  var delimitedDrinkingHabit = false;
+  final delimPrefix =
+      RegExp(r'^(?:(?:the\s+)?user|i|my)\s*[:,\-—]\s*', caseSensitive: false)
+          .firstMatch(body);
+  if (delimPrefix != null) {
+    body = body.substring(delimPrefix.end).trim();
+    // "User: never drinks" is a third-person habit; "never drink" remains a
+    // command. Keep this exception bounded to the confirmed habit verb.
+    final habitStart =
+        RegExp(r'^(?:always|never)\s+(?=drinks\b)', caseSensitive: false);
+    delimitedDrinkingHabit =
+        RegExp(r'^(?:the\s+)?user\b', caseSensitive: false).hasMatch(text) &&
+            habitStart.hasMatch(body);
+    if (delimitedDrinkingHabit) {
+      body = body.replaceFirst(habitStart, '');
+    }
+  } else {
+    // Strip bare "User" before always/never/don't/do not only when followed
+    // by a known base-form command verb. This deliberately bounded vocabulary
+    // preserves third-person habits ("never drinks", "always takes"), states
+    // ("always happy"), and "doesn't". Never strip a bare "I" or "my" here.
+    const commandVerb =
+        r'(?:approve|check|ask|reply|respond|answer|use|share|store|save|send|reveal|skip|ignore|forget|pretend|act|execute|run|follow|obey|confirm|require|wait|verify|disclose)';
+    final barePrefix = RegExp(
+      r'^(?:the\s+)?user\s+(?=(?:pretend|act as|ignore|forget all|forget your|from now on|note for yourself)\b|'
+      r"(?:always|never|don['’]?t|do\s+not)\s+"
+      '$commandVerb\\b)',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (barePrefix != null) {
+      body = body.substring(barePrefix.end).trim();
+    }
+  }
+
+  // (b) Starts with an imperative or an explicit self-instruction. "Forget
+  // your" is limited to policy targets, not everyday objects such as keys.
+  final imperativeStart = RegExp(
+    r"^(?:always|never|don['’]?t|do\s+not|ignore|forget all|pretend|act as|from now on)\b|"
+    r'^note\s+for\s+yourself\s*:|'
+    r'^forget\s+your\s+(?:system\s+prompt|(?:previous\s+)?(?:rules|instructions)|safety\s+checks)\b',
+    caseSensitive: false,
+  );
+  // A benign exception must not hide a command appended as another clause.
+  final imperativeBodies = delimitedDrinkingHabit || maskedBenignModal
+      ? body.split(
+          RegExp(r'[,;.!?\n]|\b(?:and|but|then)\b', caseSensitive: false))
+      : [body];
+  if (imperativeBodies.any((part) => imperativeStart.hasMatch(part.trim()))) {
+    return memoryInstructionRefusal;
+  }
+
+  return null;
+}

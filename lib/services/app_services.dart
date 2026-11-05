@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../assistant/engine.dart';
 import '../assistant/core_policy.dart';
+import '../assistant/model_scheduler.dart';
 import '../assistant/rule_engine.dart';
 import '../assistant/session.dart';
 import '../assistant/tools.dart';
@@ -19,6 +20,7 @@ import 'model_status.dart';
 import 'native_bridge.dart';
 import 'proactive.dart';
 import 'reminder_scheduler.dart';
+import 'session_registry.dart';
 
 /// Reports each save to [saved] (AppServices: nudge cancel, review alarm).
 /// The save itself has committed by then, so a failure there never fails it.
@@ -56,6 +58,9 @@ class AppServices {
   /// Backup and restore of the user's saved context. It reads and writes the
   /// database directly, never the model.
   final BackupService backup;
+
+  /// Every session made by [newSession]; a backup import settles them first.
+  final sessionRegistry = SessionRegistry();
 
   /// Bumped after each proactive job (alarm, notification action, boot) so
   /// the open chat and lists reload what was written meanwhile.
@@ -99,11 +104,13 @@ class AppServices {
 
   /// Public for tests; the app uses [open].
   AppServices(this.db, this.scheduler, String modelPath,
-      {BackupFileGateway? backupGateway})
+      {BackupFileGateway? backupGateway,
+      MemoryRepo? memoryRepo,
+      this.memoryCleanupTimeout = const Duration(seconds: 15)})
       : _path = modelPath,
         tasks = TaskRepo(db),
         reminders = ReminderRepo(db),
-        memory = MemoryRepo(db),
+        memory = memoryRepo ?? MemoryRepo(db),
         profile = ProfileRepo(db),
         conversations = ConversationRepo(db),
         preferences = _Preferences(db),
@@ -121,6 +128,7 @@ class AppServices {
     tasks.onRemindersChanged =
         preferences.onRemindersChanged = () => syncReminders();
     (preferences as _Preferences).saved = _preferencesSaved;
+    backup.sessions = sessionRegistry;
   }
 
   /// Nudges turned off: pending early alerts go, as follow-ups do when those
@@ -152,6 +160,8 @@ class AppServices {
 
   /// App back in the foreground: file what alarms missed, retry intents.
   Future<void> resumed() async {
+    // Do not hold foreground recovery behind a slow cleanup transaction.
+    unawaited(cleanupMemories());
     try {
       await catchUp();
     } catch (_) {}
@@ -164,6 +174,7 @@ class AppServices {
   /// evening review rings, the restored tasks need their alarms, and the open
   /// screens have to show what came back.
   Future<void> backupImported() async {
+    unawaited(cleanupMemories());
     try {
       await armReview();
     } catch (_) {}
@@ -277,6 +288,10 @@ class AppServices {
     s.modelNote.value = note;
     s.modelFailure = failure;
     debugPrint('model boot: ${s.modelDiagnostics()}');
+    // cleanupMemories owns its timeout and retains the operation until the
+    // actual database work settles, even after this bounded wait returns.
+    await step('purge expired memories', s.cleanupMemories,
+        limit: s.memoryCleanupTimeout + const Duration(seconds: 1));
     try {
       await step('main chat', s.conversations.ensureMainChat);
       await step('recover operations', s.operations.recoverStale);
@@ -309,6 +324,58 @@ class AppServices {
     return s;
   }
 
+  /// Last cleanup outcome for this process. Recomputed at startup; this is
+  /// not an erasure receipt or a persisted user-policy decision.
+  final memoryCleanupIssue = ValueNotifier<String?>(null);
+
+  /// Settlement signal, including partial retirement followed by failure.
+  /// Separate from the issue: successful cleanup can leave that value null.
+  final memoryCleanupChanged = ValueNotifier(0);
+  final Duration memoryCleanupTimeout;
+  MemoryCleanupResult? lastMemoryCleanup;
+  Future<void>? _memoryCleanup;
+
+  /// One operation shared by startup, resume and page refresh. The bounded
+  /// waiter may finish before SQLite does; re-entry must still share it until
+  /// the underlying operation settles. A timeout is never a purge receipt.
+  Future<void> cleanupMemories() {
+    final running = _memoryCleanup;
+    if (running != null) return running;
+    final waiter = Completer<void>();
+    final future = _memoryCleanup = waiter.future;
+    lastMemoryCleanup = null;
+    final timer = Timer(memoryCleanupTimeout, () {
+      memoryCleanupIssue.value =
+          'Memory cleanup is taking longer than expected. '
+          'Erasure has not been confirmed. '
+          'Check Recently deleted for recoverable memories.';
+      waiter.complete();
+    });
+    unawaited(() async {
+      try {
+        final result = await memory.cleanupDeleted();
+        final blocked =
+            result.blocked != null || await memory.legacyErasureBlocked();
+        lastMemoryCleanup = result;
+        memoryCleanupIssue.value = blocked
+            ? 'Memory cleanup is blocked. ${result.retired} expired '
+                '${result.retired == 1 ? 'memory' : 'memories'} '
+                'moved to Recently deleted. ${MemoryPrivacyBlocked.explanation}'
+            : null;
+      } catch (_) {
+        memoryCleanupIssue.value =
+            'Memory cleanup did not finish. Erasure has not been confirmed. '
+            'Check Recently deleted for recoverable memories.';
+      } finally {
+        timer.cancel();
+        _memoryCleanup = null;
+        memoryCleanupChanged.value++;
+        if (!waiter.isCompleted) waiter.complete();
+      }
+    }());
+    return future;
+  }
+
   /// Current reminder-scheduling problem for the UI, or null. Updated at
   /// startup, after writes and on resume ([checkReminders]).
   final reminderIssue = ValueNotifier<String?>(null);
@@ -322,6 +389,39 @@ class AppServices {
   Future<bool>? _loading;
   Future<void>? _switching;
   Future<void>? _releasing;
+
+  /// The one app-wide model scheduler (plan 3.1): every session's generation
+  /// (chat, voice; foreground and optional mood) is queued here so calls never
+  /// overlap in this isolate and a turn anywhere preempts optional work. It
+  /// coordinates only this Dart isolate: the `:proactive` process loads no
+  /// model, and nothing here arbitrates another process's native worker.
+  ///
+  /// Background admission starts disabled and is only enabled through
+  /// [modelLifecycleChanged], which the lifecycle owner must call on both
+  /// resume and pause; otherwise background work could run while the app is
+  /// not open. (`AppServices.scheduler` is the alarm scheduler.)
+  final modelScheduler = ModelScheduler(allowBackground: false);
+
+  /// App lifecycle for model work: background jobs only while the app is
+  /// open; pausing drops queued background work and cancels a running one.
+  /// Foreground and optional work are unaffected.
+  void modelLifecycleChanged({required bool open}) {
+    try {
+      modelScheduler.backgroundEnabled = open;
+    } on StateError {
+      // disposed
+    }
+  }
+
+  /// Bounded best effort before the native model changes: queued optional
+  /// work is dropped and a running optional job cancelled. A timeout leaves
+  /// the scheduler quarantined (no new generation until the old one ends);
+  /// the native bridge itself still runs load/unload after it, in order.
+  Future<void> _quiesceOptional() async {
+    try {
+      await modelScheduler.cancelOptional();
+    } catch (_) {}
+  }
 
   /// Single load owner: concurrent callers share one native load; a failed
   /// load may be retried. Chat switches never unload. Waits for a running
@@ -446,6 +546,7 @@ class AppServices {
       _path = path;
       modelLoad.value =
           ModelLoad.loading; // busy UI while the old model is replaced
+      await _quiesceOptional(); // mood on the old model is not worth waiting
       return await ensureModel() && _path == path;
     } finally {
       _switching = null;
@@ -469,6 +570,7 @@ class AppServices {
           await _loading;
         } catch (_) {}
         modelLoad.value = ModelLoad.idle;
+        await _quiesceOptional();
         try {
           await _llama?.unload();
         } finally {
@@ -509,7 +611,7 @@ class AppServices {
   AssistantSession newSession(
       {String? conversationId, void Function()? onIdleTimeout}) {
     final engine = _engine();
-    return AssistantSession(
+    final session = AssistantSession(
       engine: engine,
       policyStore: _policyStore,
       tools: executor(),
@@ -525,6 +627,9 @@ class AppServices {
       modelDiagnostics: modelDiagnostics,
       operations: operations,
       moods: moods,
+      modelScheduler: modelScheduler,
     );
+    sessionRegistry.register(session);
+    return session;
   }
 }

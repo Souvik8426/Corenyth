@@ -84,7 +84,7 @@ class _Memory extends MemoryRepo {
           {String category = 'fact',
           double importance = 0.5,
           String? opId,
-          String? source}) async =>
+          String? source, String actor = 'rules', DateTime? observedAt, int? observationOffsetMin}) async =>
       1;
   @override
   Future<List<Memory>> search(String query, {int limit = 3}) async => [];
@@ -586,7 +586,7 @@ void main() {
       expect(reply, contains('the report'));
       expect(moods, hasLength(1),
           reason: 'one bounded mood-only call, no extra on inferred turns');
-      expect(session.lastDiagnostics['model_calls'], '0p1r');
+      expect(session.lastDiagnostics['model_calls'], '0p0r+mood');
       expect(moods.single.messageRowId, session.lastUserRowId);
     });
 

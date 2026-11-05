@@ -230,6 +230,8 @@ class _AssistantHomeState extends State<AssistantHome>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.services.modelLifecycleChanged(
+        open: WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
     _load();
     notificationTaps.addListener(_openTasks);
     chatTaps.addListener(_openChat);
@@ -251,6 +253,7 @@ class _AssistantHomeState extends State<AssistantHome>
   /// are caught up, then shown ([_proactive] follows the bump).
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
+    widget.services.modelLifecycleChanged(open: s == AppLifecycleState.resumed);
     if (s == AppLifecycleState.resumed) widget.services.resumed();
   }
 
@@ -588,6 +591,9 @@ class _AssistantHomeState extends State<AssistantHome>
           MemoriesPage(
               memory: widget.services.memory,
               profile: widget.services.profile,
+              cleanupMemories: widget.services.cleanupMemories,
+              memoryCleanupIssue: widget.services.memoryCleanupIssue,
+              memoryCleanupChanged: widget.services.memoryCleanupChanged,
               refreshToken: _refresh),
         ],
       ));
@@ -1128,6 +1134,8 @@ class _ModelSetupCardState extends State<ModelSetupCard>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.services.modelLifecycleChanged(
+        open: WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
     _check();
   }
 
@@ -1144,6 +1152,7 @@ class _ModelSetupCardState extends State<ModelSetupCard>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
+    widget.services.modelLifecycleChanged(open: s == AppLifecycleState.resumed);
     if (s == AppLifecycleState.resumed) {
       _check();
       // Retry unconfirmed alarm intents and re-read permissions (compact card = home screen, once).

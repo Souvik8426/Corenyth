@@ -1,11 +1,73 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../assistant/core_policy.dart' show memoryInstructionIssue;
+import '../assistant/rule_engine.dart' show RuleEngine;
+import '../assistant/temporal.dart' show factExpiresAt, resolveFactDate;
+
 int _now() => DateTime.now().millisecondsSinceEpoch;
 DateTime? _dt(Object? ms) =>
     ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms as int);
+
+/// Only the canonical positive integer suffix emitted for indexed creates.
+/// The caller must still verify that the returned parent really exists.
+String? indexedOperationParent(String id) {
+  final split = id.lastIndexOf('#');
+  if (split <= 0) return null;
+  final suffix = id.substring(split + 1);
+  final index = int.tryParse(suffix);
+  return index != null && index > 0 && index.toString() == suffix
+      ? id.substring(0, split)
+      : null;
+}
+
+int _storageSavepoint = 0;
+final _storageTransactions = Expando<Future<void>>('storage transactions');
+
+/// A storage operation must roll back even if its caller catches the error
+/// inside a larger transaction. Never open a second connection/transaction.
+/// Serialize sibling storage calls on the same outer transaction: SQLite
+/// savepoints are a stack, so releasing one can destroy a sibling's savepoint.
+/// All memory writes participate, including ordinary add and access stamps.
+/// Actions use private non-queuing helpers on tx, never re-enter this queue.
+Future<T> _storageTransaction<T>(
+  DatabaseExecutor db,
+  Future<T> Function(DatabaseExecutor tx) action,
+) async {
+  if (db is Database) return db.transaction(action);
+  if (db is! Transaction) {
+    throw StateError('Storage requires a database or transaction');
+  }
+  final previous = _storageTransactions[db] ?? Future<void>.value();
+  final completed = Completer<void>();
+  _storageTransactions[db] = completed.future;
+  try {
+    await previous;
+    final name = 'suggestion_${_storageSavepoint++}';
+    await db.execute('SAVEPOINT $name');
+    try {
+      final result = await action(db);
+      await db.execute('RELEASE SAVEPOINT $name');
+      return result;
+    } catch (_) {
+      await db.execute('ROLLBACK TO SAVEPOINT $name');
+      await db.execute('RELEASE SAVEPOINT $name');
+      rethrow;
+    }
+  } finally {
+    if (identical(_storageTransactions[db], completed.future)) {
+      _storageTransactions[db] = null;
+    }
+    // The queue tracks completion, not success: a caught failure cannot block
+    // subsequent siblings or leak an unhandled error through the queue tail.
+    completed.complete();
+  }
+}
 
 class Task {
   final int id;
@@ -75,15 +137,25 @@ class TaskRepo {
   /// in the same insert so a retry finds it ([byOperation]).
   Future<Task> create(String title,
       {String? notes, DateTime? due, int priority = 1, String? opId}) async {
-    final id = await db.insert('tasks', {
+    final values = <String, Object?>{
       'title': title,
       'notes': notes,
       'created_at': _now(),
       'due_at': due?.millisecondsSinceEpoch,
       'priority': priority,
       if (opId != null) 'op_id': opId,
+    };
+    if (opId == null) return (await get(await db.insert('tasks', values)))!;
+    // Stamp check and insert in one transaction: of two concurrent retries
+    // of the same operation, the loser returns the winner's row.
+    return db.transaction((tx) async {
+      final prior = await tx.query('tasks',
+          where: 'op_id = ?', whereArgs: [opId], orderBy: 'id', limit: 1);
+      if (prior.isNotEmpty) return Task(prior.first);
+      final id = await tx.insert('tasks', values);
+      return Task((await tx.query('tasks', where: 'id = ?', whereArgs: [id]))
+          .single);
     });
-    return (await get(id))!;
   }
 
   /// Tasks created by operation [opId] (a committed write of that turn).
@@ -401,6 +473,12 @@ class TaskRepo {
     final next = nextDaily(minute, now, deadline);
     if (next == null) return null;
     final id = await db.transaction((tx) async {
+      if (opId != null) {
+        // Stamp check and insert in one transaction (see [create]).
+        final prior = await tx.query('tasks',
+            where: 'op_id = ?', whereArgs: [opId], orderBy: 'id', limit: 1);
+        if (prior.isNotEmpty) return prior.first['id'] as int;
+      }
       final id = await tx.insert('tasks', {
         'title': title,
         'created_at': _now(),
@@ -511,6 +589,22 @@ class ReminderRepo {
           AlertIntent intent = (lead: const [], follow: null),
           String? opId}) =>
       db.transaction((tx) async {
+        if (opId != null) {
+          // Stamp check inside the insert transaction: a retry that lost the
+          // race returns the committed alerts instead of writing a second plan.
+          final done = taskId == null
+              ? await tx.query('tasks',
+                  columns: ['id'], where: 'op_id = ?', whereArgs: [opId], limit: 1)
+              : await tx.query('reminders',
+                  columns: ['id'], where: 'op_id = ?', whereArgs: [opId], limit: 1);
+          if (done.isNotEmpty) {
+            return [
+              for (final r in await tx.query('reminders',
+                  where: 'op_id = ?', whereArgs: [opId], orderBy: 'trigger_at'))
+                Reminder(r)
+            ];
+          }
+        }
         final id = taskId ??
             await tx.insert('tasks', {
               'title': title,
@@ -615,14 +709,24 @@ class ReminderRepo {
   /// The row is saved with a pending 'schedule' intent; clear it with [synced].
   Future<Reminder> create(String title, DateTime at,
       {int? taskId, String? opId}) async {
-    final id = await db.insert('reminders', {
+    final values = <String, Object?>{
       'title': title,
       'trigger_at': at.millisecondsSinceEpoch,
       'task_id': taskId,
       'sync': 'schedule',
       if (opId != null) 'op_id': opId,
+    };
+    if (opId == null) return (await get(await db.insert('reminders', values)))!;
+    // Stamp check and insert in one transaction (see [TaskRepo.create]).
+    return db.transaction((tx) async {
+      final prior = await tx.query('reminders',
+          where: 'op_id = ?', whereArgs: [opId], orderBy: 'id', limit: 1);
+      if (prior.isNotEmpty) return Reminder(prior.first);
+      final id = await tx.insert('reminders', values);
+      return Reminder(
+          (await tx.query('reminders', where: 'id = ?', whereArgs: [id]))
+              .single);
     });
-    return (await get(id))!;
   }
 
   /// Alerts (any state) created by operation [opId], earliest first.
@@ -931,7 +1035,7 @@ class ConversationRepo {
       db.transaction((tx) => _insert(tx, session, role, content));
 
   static Future<int> _insert(
-      Transaction tx, String session, String role, String content,
+      DatabaseExecutor tx, String session, String role, String content,
       {int? taskId, String? kind}) async {
     final t = _now();
     final id = await tx.insert('conversations', {
@@ -1033,13 +1137,164 @@ class MoodRepo {
   }
 }
 
+/// A bounded batch counts rows examined, including rows the caller must skip.
+class ExtractionBatch {
+  final int lastMessageId;
+  final List<Message> messages;
+  ExtractionBatch(this.lastMessageId, List<Message> messages)
+      : messages = List.unmodifiable(messages);
+}
+
+enum ExtractionSkipResult { skipped, notProvenOrStale }
+
+/// Storage substrate only. Nothing calls this automatically or enables model
+/// work. An absent state row denies reads and publication for that chat.
+class ExtractionRepo {
+  final DatabaseExecutor db;
+  ExtractionRepo(this.db);
+
+  /// Call only on explicit opt-in, including re-opt-in after clearing/import.
+  /// Baseline every current chat at its latest row (including assistant rows),
+  /// so old conversations never silently become extraction input.
+  Future<void> initializeAtLatest() => _storageTransaction(db, (tx) async {
+        await tx.delete('extraction_state');
+        await tx
+            .execute('''INSERT INTO extraction_state(chat_id, last_message_id)
+          SELECT chats.id, COALESCE(MAX(c.id), 0) FROM chats
+          LEFT JOIN conversations c ON c.session_id = chats.id
+          GROUP BY chats.id''');
+      });
+
+  /// Opt-out revokes storage publication as well as future batch reads.
+  /// The future lifecycle owner must also cancel its in-flight model work.
+  Future<void> clear() => _storageTransaction(db, (tx) async {
+        await tx.delete('extraction_state');
+      });
+
+  Future<ExtractionBatch?> nextBatch(String chatId) =>
+      _storageTransaction(db, (tx) async {
+        final states = await tx.query(
+          'extraction_state',
+          where: 'chat_id = ?',
+          whereArgs: [chatId],
+        );
+        if (states.isEmpty) return null;
+        final last = states.single['last_message_id'] as int;
+        final rows = await tx.query(
+          'conversations',
+          where: "session_id = ? AND role = 'user' AND id > ?",
+          whereArgs: [chatId, last],
+          orderBy: 'id',
+          limit: 5,
+        );
+        return ExtractionBatch(last, rows.map(Message._row).toList());
+      });
+
+  /// For a caller-validated skip or valid remember:false only. Invalid output,
+  /// cancellation, and model errors must never call this. Enforces ascending
+  /// processing and compare-and-set against the batch's captured watermark.
+  Future<bool> advance(
+    String chatId,
+    int messageId, {
+    required int expectedLastMessageId,
+  }) =>
+      _storageTransaction(db, (tx) async {
+        if (await _nextSource(tx, chatId, messageId, expectedLastMessageId) ==
+            null) {
+          return false;
+        }
+        await tx.update(
+          'extraction_state',
+          {'last_message_id': messageId},
+          where: 'chat_id = ?',
+          whereArgs: [chatId],
+        );
+        return true;
+      });
+
+  /// Proof and watermark publication are one transaction, never a separate
+  /// positive marker read followed by advance. Opt-out/order/CAS all apply.
+  Future<ExtractionSkipResult> skipIfMemoryWritten(
+    String chatId,
+    int messageId, {
+    required int expectedLastMessageId,
+  }) =>
+      _storageTransaction(db, (tx) async {
+        if (await _nextSource(tx, chatId, messageId, expectedLastMessageId) ==
+                null ||
+            !await MemoryWriteSource.wasWritten(tx, chatId, messageId)) {
+          return ExtractionSkipResult.notProvenOrStale;
+        }
+        await tx.update('extraction_state', {'last_message_id': messageId},
+            where: 'chat_id = ?', whereArgs: [chatId]);
+        return ExtractionSkipResult.skipped;
+      });
+
+  static Future<Map<String, Object?>?> _nextSource(
+    DatabaseExecutor tx,
+    String chatId,
+    int messageId,
+    int expectedLastMessageId,
+  ) async {
+    final rows = await tx.rawQuery(
+      '''SELECT c.* FROM conversations c
+      JOIN extraction_state s ON s.chat_id = c.session_id
+      WHERE s.chat_id = ? AND s.last_message_id = ?
+        AND c.role = 'user' AND c.id > s.last_message_id
+      ORDER BY c.id LIMIT 1''',
+      [chatId, expectedLastMessageId],
+    );
+    return rows.isNotEmpty && rows.single['id'] == messageId
+        ? rows.single
+        : null;
+  }
+}
+
+/// Content-free identity, checked again inside the memory transaction.
+class MemoryWriteSource {
+  final String operationId, chatId;
+  final int messageId;
+  const MemoryWriteSource(this.operationId, this.chatId, this.messageId);
+
+  static Future<MemoryWriteSource?> forOperation(
+      DatabaseExecutor db, String operationId) async {
+    final rows = await db.rawQuery('''SELECT c.id, o.chat_id FROM operations o
+      JOIN conversations c ON c.id = o.source_message_id
+      WHERE o.op_id = ? AND c.role = 'user' AND c.session_id = o.chat_id''',
+        [operationId]);
+    if (rows.isEmpty) return null;
+    return MemoryWriteSource(operationId, rows.single['chat_id'] as String,
+        rows.single['id'] as int);
+  }
+
+  static Future<bool> wasWritten(
+          DatabaseExecutor db, String chatId, int messageId) async =>
+      (await db.rawQuery('''SELECT w.message_id FROM memory_write_sources w
+      JOIN conversations c ON c.id = w.message_id
+      JOIN operations o ON o.source_message_id = c.id
+      WHERE c.id = ? AND c.session_id = ? AND c.role = 'user'
+        AND o.chat_id = c.session_id''', [messageId, chatId])).isNotEmpty;
+}
+
+class MemorySourceUnverified implements Exception {}
+
 class Memory {
   final int id;
   final String content, category;
   final double importance;
   final DateTime? createdAt, updatedAt, lastAccessedAt, observedAtUtc;
-  final String? opId, source, status, contentHash, subjectKey, attributeKey, factDate;
+  final String? opId,
+      source,
+      status,
+      contentHash,
+      subjectKey,
+      attributeKey,
+      factDate;
   final int? supersededBy, observationOffsetMin;
+
+  /// When this time-bound fact stops being current (plan 1.4), UTC epoch
+  /// ms; null when it never expires. Reads skip it from that instant on.
+  final int? expiresAt;
 
   Memory(Map<String, Object?> r)
       : id = r['id'] as int,
@@ -1058,9 +1313,13 @@ class Memory {
         attributeKey = r['attribute_key'] as String?,
         observedAtUtc = _dt(r['observed_at_utc']),
         observationOffsetMin = r['observation_offset_min'] as int?,
-        factDate = r['fact_date'] as String?;
+        factDate = r['fact_date'] as String?,
+        expiresAt = r['expires_at'] as int?;
 
   bool get isActive => status == 'active';
+
+  /// [content] with its absolute fact date, for prompts and replies.
+  String get dated => withFactDate(content, factDate);
 
   @override
   String toString() => content;
@@ -1155,9 +1414,294 @@ MemorySlot? extractMemorySlot(String content) {
   return null;
 }
 
+enum ForgetEvidence { exact, slot, candidates, none }
+
+class ForgetMatch {
+  final ForgetEvidence evidence;
+  final List<Memory> memories;
+  final bool severalMatch;
+  const ForgetMatch(this.evidence, this.memories, {this.severalMatch = false});
+}
+
+enum RestoreStatus { restored, duplicate, slotTaken, gone }
+
+enum SuggestionDecision { accepted, rejected, gone }
+
+class SuggestionDecisionResult {
+  final SuggestionDecision status;
+
+  /// The active memory returned by normal add/deduplication on acceptance.
+  final int? memoryId;
+  const SuggestionDecisionResult(this.status, [this.memoryId]);
+}
+
+class RestoreResult {
+  final RestoreStatus status;
+  final int? id;
+  const RestoreResult(this.status, [this.id]);
+}
+
+/// Plan 1.5: new memory text that reads as an instruction to the assistant
+/// ([memoryInstructionIssue]). Thrown by [MemoryRepo.add] and
+/// [MemoryRepo.addCorrection] before anything is written.
+class MemoryInstructionRejected implements Exception {
+  /// The user-facing reason (the shared refusal wording).
+  final String reason;
+  const MemoryInstructionRejected(this.reason);
+  @override
+  String toString() => 'MemoryInstructionRejected: $reason';
+}
+
+/// Legacy/imported supersede events have no replacement-memory identity.
+/// Automatic actions refuse to guess and keep the history; the user's own
+/// erase (deletePermanently, rejectSuggestion) redacts those copies instead.
+class MemoryPrivacyBlocked implements Exception {
+  final int memoryId;
+  final int historyId;
+
+  static const explanation =
+      'Older memory history contains copied text that cannot be safely linked '
+      'to a specific memory. Automatic purge and accepting suggestions are '
+      'blocked. Memory and history text remain stored and can appear in '
+      'exports. Deleting a memory permanently from Recently deleted still '
+      'works and also discards those copies.';
+
+  const MemoryPrivacyBlocked(this.memoryId, this.historyId);
+
+  @override
+  String toString() => 'MemoryPrivacyBlocked: Cannot safely remove memory '
+      '#$memoryId: supersede history #$historyId contains replacement text '
+      'without per-event target provenance. No permanent erasure was performed. '
+      'Memory and history are retained; privacy erasure has not completed.';
+}
+
+/// Expiry retirement commits before the atomic hard-purge batch. A blocked
+/// batch erases nothing; newly retired rows remain available for restoration.
+class MemoryCleanupResult {
+  final int retired;
+  final int purged;
+  final MemoryPrivacyBlocked? blocked;
+  const MemoryCleanupResult({
+    required this.retired,
+    required this.purged,
+    this.blocked,
+  });
+}
+
 class MemoryRepo {
   final DatabaseExecutor db;
-  MemoryRepo(this.db);
+  final DateTime Function() clock;
+  MemoryRepo(this.db, {DateTime Function()? clock})
+      : clock = clock ?? DateTime.now;
+
+  /// Review-only read; never used by retrieval or prompt context.
+  Future<List<Memory>> suggestions() async => (await db.query(
+        'memories',
+        where: "status = 'suggested'",
+        orderBy: 'id',
+      ))
+          .map(Memory.new)
+          .toList();
+
+  /// Persist an already grounded/validated extraction, never ordinary add.
+  /// Full JSON/grounding validation and lifecycle checks belong to the future
+  /// pipeline; these storage checks do not establish model precision.
+  /// Returns null for revoked/stale work or an already used source message.
+  Future<int?> suggest(
+    String content, {
+    required String chatId,
+    required int sourceMessageId,
+    required int expectedLastMessageId,
+    String category = 'fact',
+  }) =>
+      _storageTransaction(db, (tx) async {
+        final source = await ExtractionRepo._nextSource(
+          tx,
+          chatId,
+          sourceMessageId,
+          expectedLastMessageId,
+        );
+        if (source == null ||
+            await MemoryWriteSource.wasWritten(tx, chatId, sourceMessageId)) {
+          return null;
+        }
+        final used = await tx.query(
+          'extraction_sources',
+          columns: ['message_id'],
+          where: 'message_id = ?',
+          whereArgs: [sourceMessageId],
+        );
+        if (used.isNotEmpty) return null;
+        _validateSuggestion(content, category);
+        final sourceText = source['content'] as String;
+        _rejectInstruction(sourceText);
+        if (RuleEngine.isTemporary(sourceText) ||
+            RuleEngine.isObligation(sourceText)) {
+          throw ArgumentError(
+              'Temporary or obligation source is not a suggestion');
+        }
+        final t = _nowMs;
+        final text = content.trim();
+        final normalized = text
+            .toLowerCase()
+            .replaceAll(RegExp(r'[.!?]+$'), '')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+        final slot = extractMemorySlot(text);
+        final id = await tx.insert('memories', {
+          'content': text,
+          'category': category,
+          'importance': 0.5,
+          'created_at': t,
+          'updated_at': t,
+          'status': 'suggested',
+          'source': 'model:extract',
+          // Derived keys match backup reindexing; every consumer still filters
+          // status, so these keys reserve neither a duplicate nor an active slot.
+          'content_hash': sha256.convert(utf8.encode(normalized)).toString(),
+          'subject_key': slot?.subject,
+          'attribute_key': slot?.slot,
+        });
+        await tx.insert('extraction_sources', {
+          'message_id': sourceMessageId,
+          'suggestion_id': id,
+          'memory_id': id,
+        });
+        await MemoryRepo(
+          tx,
+          clock: clock,
+        )._log('add', id, now: content.trim(), actor: 'model');
+        await tx.update(
+          'extraction_state',
+          {'last_message_id': sourceMessageId},
+          where: 'chat_id = ?',
+          whereArgs: [chatId],
+        );
+        return id;
+      });
+
+  static void _validateSuggestion(String content, String category) {
+    if (content.trim().isEmpty ||
+        content.length > 2000 ||
+        !const {'preference', 'fact', 'person'}.contains(category)) {
+      throw ArgumentError('Invalid suggestion text or category');
+    }
+    _rejectInstruction(content);
+    if (RuleEngine.isTemporary(content) || RuleEngine.isObligation(content)) {
+      throw ArgumentError(
+        'Temporary or obligation content is not a suggestion',
+      );
+    }
+  }
+
+  /// Validation, ordinary add (including bump/slot supersede), user audit,
+  /// provenance relink, and removal are one transaction. The suggested row
+  /// itself is never activated or exposed to FTS. Any failure keeps it intact.
+  /// Unattributed replacement copies throw [MemoryPrivacyBlocked], as accepting
+  /// also erases the suggestion identity and its owned historical text.
+  Future<SuggestionDecisionResult> acceptSuggestion(int id) =>
+      _storageTransaction(db, (tx) async {
+        final rows = await tx.query(
+          'memories',
+          where: "id = ? AND status = 'suggested'",
+          whereArgs: [id],
+        );
+        if (rows.isEmpty) {
+          return const SuggestionDecisionResult(SuggestionDecision.gone);
+        }
+        final row = rows.single;
+        final content = row['content'] as String;
+        final category = row['category'] as String;
+        _validateSuggestion(content, category);
+        final repo = MemoryRepo(tx, clock: clock);
+        await repo._requireErasableHistory(id);
+        final saved = await repo._add(
+          content,
+          category: category,
+          importance: (row['importance'] as num).toDouble(),
+          source: row['source'] as String?,
+          actor: 'user',
+          observedAt: _dt(row['observed_at_utc']),
+          observationOffsetMin: row['observation_offset_min'] as int?,
+        );
+        // The saved row's ordinary history owns the text from now on. Do not
+        // leave an orphan copy under the removed suggestion that a later
+        // deletePermanently(saved) could never redact.
+        await tx.update(
+          'memory_history',
+          {'old_content': null, 'new_content': null},
+          where: 'memory_id = ?',
+          whereArgs: [id],
+        );
+        await repo._log('accept', id, actor: 'user');
+        await tx.update(
+          'extraction_sources',
+          {'memory_id': saved},
+          where: 'memory_id = ?',
+          whereArgs: [id],
+        );
+        // Imports can reference a suggestion even though normal writes do not.
+        // Preserve that relationship under the accepted identity. Deduplication
+        // can return a referring row itself; do not create a self-reference.
+        await tx.update('memories', {'superseded_by': null},
+            where: 'id = ? AND superseded_by = ?', whereArgs: [saved, id]);
+        await tx.update('memories', {'superseded_by': saved},
+            where: 'superseded_by = ?', whereArgs: [id]);
+        await tx.delete(
+          'memories',
+          where: "id = ? AND status = 'suggested'",
+          whereArgs: [id],
+        );
+        return SuggestionDecisionResult(SuggestionDecision.accepted, saved);
+      });
+
+  /// Reject replaces the generic purge event with a user reject event. Erase
+  /// all history text and the row together; retain only content-free audit and
+  /// source identity. Calling deletePermanently separately would break atomicity.
+  /// Never blocked by legacy copies: they are redacted in the same transaction.
+  Future<SuggestionDecisionResult> rejectSuggestion(int id) =>
+      _storageTransaction(db, (tx) async {
+        final rows = await tx.query('memories',
+            columns: ['id'],
+            where: "id = ? AND status = 'suggested'",
+            whereArgs: [id]);
+        if (rows.isEmpty) {
+          return const SuggestionDecisionResult(SuggestionDecision.gone);
+        }
+        final repo = MemoryRepo(tx, clock: clock);
+        // Rejecting is the user erasing the suggestion: never blocked.
+        await repo._redactUnattributedCopies();
+        final removed = await tx.delete(
+          'memories',
+          where: "id = ? AND status = 'suggested'",
+          whereArgs: [id],
+        );
+        if (removed == 0) {
+          return const SuggestionDecisionResult(SuggestionDecision.gone);
+        }
+        await tx.update('memories', {'superseded_by': null},
+            where: 'superseded_by = ?', whereArgs: [id]);
+        await tx.update(
+          'memory_history',
+          {'old_content': null, 'new_content': null},
+          where: 'memory_id = ?',
+          whereArgs: [id],
+        );
+        await repo._log('reject', id, actor: 'user');
+        return const SuggestionDecisionResult(SuggestionDecision.rejected);
+      });
+
+  /// Plan 1.4: a memory reads as current while it is active and not past
+  /// its `expires_at`, judged by [clock]. The instant is an integer inlined
+  /// into the SQL (no injection risk), so bound arguments stay unchanged.
+  /// [_liveM] is for joins on `memories m`; [_liveAt] for a captured
+  /// instant (one clock read per call).
+  static String _liveAt(int nowMs, [String table = '']) =>
+      "${table}status = 'active' AND "
+      '(${table}expires_at IS NULL OR ${table}expires_at > $nowMs)';
+  String get _live => _liveAt(_nowMs);
+  String get _liveM => _liveAt(_nowMs, 'm.');
+  int get _nowMs => clock().millisecondsSinceEpoch;
 
   static final _word = RegExp(r'[\p{L}\p{N}]{2,}', unicode: true);
   static const _stop = {
@@ -1190,20 +1734,181 @@ class MemoryRepo {
       .toSet()
       .toList();
 
+  /// Resolves active memories for forgetting; loose retrieval never authorizes
+  /// deletion, even when there is only one candidate.
+  Future<ForgetMatch> matchForForget(String fact) async {
+    String normalized(String value) => value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[.!?]+$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final norm = normalized(fact);
+    final hash = sha256.convert(utf8.encode(norm)).toString();
+    final exact = (await db.query('memories',
+            where: "$_live AND content_hash = ?", whereArgs: [hash]))
+        .map(Memory.new)
+        .where((m) => normalized(m.content) == norm)
+        .toList();
+    if (exact.length == 1) {
+      return ForgetMatch(ForgetEvidence.exact, exact);
+    }
+
+    const slotVocabulary = {
+      'user',
+      'i',
+      'my',
+      'like',
+      'likes',
+      'love',
+      'loves',
+      'prefer',
+      'prefers',
+      'hate',
+      'hates',
+      'dislike',
+      'dislikes',
+      'drink',
+      'drinks',
+      'live',
+      'lives',
+      'work',
+      'works',
+      'as',
+      'in',
+    };
+    final values =
+        terms(fact).where((term) => !slotVocabulary.contains(term)).toList();
+    if (values.isEmpty) {
+      return const ForgetMatch(ForgetEvidence.none, []);
+    }
+    final slot = extractMemorySlot(fact);
+    if (slot != null) {
+      final matches = (await db.query('memories',
+              where: '$_live AND subject_key = ? AND attribute_key = ?',
+              whereArgs: [slot.subject, slot.slot]))
+          .map(Memory.new)
+          .where((m) => values.any(terms(m.content).contains))
+          .toList();
+      if (matches.length == 1) {
+        return ForgetMatch(ForgetEvidence.slot, matches);
+      }
+    }
+    final candidates = (await search(fact, limit: 5))
+        .where((m) => values.every(terms(m.content).contains))
+        .toList();
+    if (candidates.isNotEmpty && candidates.length <= 3) {
+      return ForgetMatch(ForgetEvidence.candidates, candidates);
+    }
+    return ForgetMatch(ForgetEvidence.none, const [],
+        severalMatch: candidates.length > 3);
+  }
+
   /// Stores a memory; an explicit new preference supersedes its prior value;
   /// an exact same-terms duplicate bumps importance.
+  ///
+  /// [observedAt] is when the user said it (plan 1.3). A new row stores the
+  /// instant (`observed_at_utc`), the UTC offset it was said at
+  /// (`observation_offset_min`, default `observedAt.timeZoneOffset`) and the
+  /// calendar date the fact refers to (`fact_date`, see [resolveFactDate]),
+  /// resolved against that local day. A duplicate keeps its first
+  /// observation, unless it is time-bound and is re-observed (see [_add]).
+  ///
+  /// Plan 1.4: an observed time-bound fact also stores `expires_at` (see
+  /// [memoryExpiresAt]), from the same journaled observation, so a replay
+  /// stores the same expiry. An expiring row takes no preference slot and
+  /// supersedes nothing: a short-lived "I'm in Goa this week" must not retire
+  /// a lasting fact that would then be lost when it expires. An expired row
+  /// is not a duplicate; saying it again stores a fresh row.
   Future<int> add(String content,
       {String category = 'fact',
       double importance = 0.5,
       String? opId,
-      String? source}) async {
-    if (db is Database) {
-      return (db as Database).transaction((tx) => MemoryRepo(tx).add(content,
-          category: category,
-          importance: importance,
-          opId: opId,
-          source: source));
-    }
+      String? source,
+      String actor = 'rules',
+      DateTime? observedAt,
+      int? observationOffsetMin}) async {
+    _rejectInstruction(content);
+    return _storageTransaction(
+        db,
+        (tx) => MemoryRepo(tx, clock: clock)._add(content,
+            category: category,
+            importance: importance,
+            opId: opId,
+            source: source,
+            actor: actor,
+            observedAt: observedAt,
+            observationOffsetMin: observationOffsetMin));
+  }
+
+  /// Returns false for a proven replay, including a memory since purged.
+  /// The successful write (add/bump/correction) and content-free marker commit
+  /// together. A failed marker rolls back all writes even in an outer tx.
+  Future<bool> saveLinked(
+    String content, {
+    required MemoryWriteSource identity,
+    String? replaces,
+    String category = 'fact',
+    String source = 'chat',
+    String actor = 'rules',
+    DateTime? observedAt,
+    int? observationOffsetMin,
+  }) async {
+    _rejectInstruction(content);
+    return _storageTransaction(db, (tx) async {
+      final verified =
+          await MemoryWriteSource.forOperation(tx, identity.operationId);
+      if (verified == null ||
+          verified.chatId != identity.chatId ||
+          verified.messageId != identity.messageId) {
+        throw MemorySourceUnverified();
+      }
+      if (await MemoryWriteSource.wasWritten(
+          tx, identity.chatId, identity.messageId)) {
+        return false;
+      }
+      final repo = MemoryRepo(tx, clock: clock);
+      if (replaces == null) {
+        await repo._add(content,
+            category: category,
+            opId: identity.operationId,
+            source: source,
+            actor: actor,
+            observedAt: observedAt,
+            observationOffsetMin: observationOffsetMin);
+      } else {
+        await repo._addCorrection(content,
+            replaces: replaces,
+            category: category,
+            opId: identity.operationId,
+            source: source,
+            actor: actor,
+            observedAt: observedAt,
+            observationOffsetMin: observationOffsetMin);
+      }
+      await tx
+          .insert('memory_write_sources', {'message_id': identity.messageId});
+      return true;
+    });
+  }
+
+  /// Plan 1.5: new text only. Rows that already exist (restore, undo,
+  /// backup import, supersede, history) are never rescanned.
+  static void _rejectInstruction(String content) {
+    final issue = memoryInstructionIssue(content.trim());
+    if (issue != null) throw MemoryInstructionRejected(issue);
+  }
+
+  /// [add] inside a transaction; [permanent] stores no expiry (corrections).
+  Future<int> _add(String content,
+      {String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source,
+      String actor = 'rules',
+      DateTime? observedAt,
+      int? observationOffsetMin,
+      bool permanent = false}) async {
     content = content.trim();
     String normalized(String value) => value
         .toLowerCase()
@@ -1212,13 +1917,33 @@ class MemoryRepo {
         .trim();
     final norm = normalized(content);
     final contentHash = sha256.convert(utf8.encode(norm)).toString();
+    // The local day the user said it on: the instant shifted by its offset.
+    final offsetMin =
+        observationOffsetMin ?? observedAt?.timeZoneOffset.inMinutes;
+    final observedUtc = observedAt?.toUtc();
+    final observedLocal = observedUtc?.add(Duration(minutes: offsetMin!));
+    final expiresAt = permanent || observedUtc == null
+        ? null
+        : memoryExpiresAt(content,
+            observedAt: observedUtc, observationOffsetMin: offsetMin!);
+
     // Fast deduplication check using indexed content_hash
     for (final r in await db.query('memories',
-        columns: ['id', 'content', 'importance'],
-        where: "status = 'active' AND content_hash = ?",
+        columns: ['id', 'content', 'importance', 'expires_at'],
+        where: '$_live AND content_hash = ?',
         whereArgs: [contentHash])) {
       if (normalized(r['content'] as String) == norm) {
         final imp = ((r['importance'] as num) + 0.1).clamp(0.0, 1.0);
+        // Plan 1.4 (D3): restating a time-bound row re-observes it, so its
+        // expiry is the later of the old and the new one (a null new expiry
+        // never ends) and its observation and fact day follow the new
+        // statement. An earlier new expiry keeps the old observation, so the
+        // stored day and expiry stay consistent. A lasting row stays lasting.
+        final oldExpiry = r['expires_at'] as int?;
+        final reobserve = !permanent &&
+            oldExpiry != null &&
+            observedUtc != null &&
+            (expiresAt == null || expiresAt >= oldExpiry);
         await db.update(
             'memories',
             {
@@ -1226,15 +1951,31 @@ class MemoryRepo {
               'updated_at': _now(),
               if (opId != null) 'op_id': opId,
               if (source != null) 'source': source,
+              // A correction restating a time-bound row makes it lasting.
+              if (permanent) 'expires_at': null,
+              if (reobserve) ...{
+                'expires_at': expiresAt,
+                'observed_at_utc': observedUtc.millisecondsSinceEpoch,
+                'observation_offset_min': offsetMin,
+                'fact_date': resolveFactDate(content, observedLocal!)?.value,
+              },
             },
             where: 'id = ?',
             whereArgs: [r['id']]);
-        return r['id'] as int;
+        final id = r['id'] as int;
+        await _log('bump', id,
+            old: r['content'] as String,
+            now: r['content'] as String,
+            actor: actor,
+            opId: opId);
+        return id;
       }
     }
 
+    final t = _now();
+
     // Fast slot superseding check using indexed subject_key & attribute_key
-    final newSlot = extractMemorySlot(content);
+    final newSlot = expiresAt == null ? extractMemorySlot(content) : null;
     final toSupersede = <int>[];
     if (newSlot != null) {
       for (final r in await db.query('memories',
@@ -1245,7 +1986,6 @@ class MemoryRepo {
       }
     }
 
-    final t = _now();
     final newId = await db.insert('memories', {
       'content': content,
       'category': category,
@@ -1258,16 +1998,37 @@ class MemoryRepo {
       'attribute_key': newSlot?.slot,
       if (opId != null) 'op_id': opId,
       if (source != null) 'source': source,
+      if (observedUtc != null) ...{
+        'observed_at_utc': observedUtc.millisecondsSinceEpoch,
+        'observation_offset_min': offsetMin,
+        'fact_date': resolveFactDate(content, observedLocal!)?.value,
+        if (expiresAt != null) 'expires_at': expiresAt,
+      },
     });
+    await _log('add', newId, now: content, actor: actor, opId: opId);
     for (final oldId in toSupersede) {
-      await supersede(oldId, newId);
+      await _supersede(oldId, newId, actor: actor, opId: opId);
     }
     return newId;
   }
 
   /// Supersedes a prior memory with [newId]: marks it superseded and removes
   /// it from FTS so it leaves all retrieval and prompt contexts.
-  Future<void> supersede(int oldId, int newId) async {
+  Future<void> supersede(int oldId, int newId,
+          {String actor = 'rules', String? opId}) =>
+      _storageTransaction(
+          db,
+          (tx) => MemoryRepo(tx, clock: clock)
+              ._supersede(oldId, newId, actor: actor, opId: opId));
+
+  Future<void> _supersede(int oldId, int newId,
+      {String actor = 'rules', String? opId}) async {
+    if (oldId == newId) return;
+    final old = await db.query('memories',
+        columns: ['content'],
+        where: "id = ? AND status = 'active'",
+        whereArgs: [oldId]);
+    if (old.isEmpty) return;
     await db.update(
         'memories',
         {
@@ -1278,53 +2039,450 @@ class MemoryRepo {
         where: 'id = ?',
         whereArgs: [oldId]);
     await db.delete('memories_fts', where: 'docid = ?', whereArgs: [oldId]);
+    await _log('supersede', oldId,
+        old: old.single['content'] as String,
+        // Replacement text belongs to the successor's own history. Copying it
+        // here would lose its identity once the current link changes or clears.
+        // Keep the existing nullable schema and the event/actor/op audit trail.
+        actor: actor,
+        opId: opId);
   }
 
-  /// FTS match on active memories, re-ranked by term hits + importance + recency (30-day decay).
-  Future<List<Memory>> search(String query, {int limit = 3}) async {
-    final ts = terms(query);
-    if (ts.isEmpty) return [];
-    final rows = (await db.rawQuery(
-            'SELECT m.* FROM memories m JOIN memories_fts f ON f.docid = m.id '
-            'WHERE memories_fts MATCH ? AND m.status = \'active\'',
-            [ts.map((t) => '"$t" OR ${t.replaceAll('"', '')}*').join(' OR ')]))
+  Future<void> _log(String event, int memoryId,
+      {String? old, String? now, required String actor, String? opId}) async {
+    await db.insert('memory_history', {
+      'memory_id': memoryId,
+      'event': event,
+      'old_content': old,
+      'new_content': now,
+      'actor': actor,
+      'op_id': opId,
+      'created_at': _now(),
+    });
+  }
+
+  /// Saves a correction and retires at most three matching active memories.
+  Future<int> addCorrection(String content,
+      {required String replaces,
+      String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source,
+      String actor = 'rules',
+      DateTime? observedAt,
+      int? observationOffsetMin}) async {
+    // Checked before _add, so a rejected correction retires nothing.
+    _rejectInstruction(content);
+    return _storageTransaction(
+        db,
+        (tx) => MemoryRepo(tx, clock: clock)._addCorrection(content,
+            replaces: replaces,
+            category: category,
+            importance: importance,
+            opId: opId,
+            source: source,
+            actor: actor,
+            observedAt: observedAt,
+            observationOffsetMin: observationOffsetMin));
+  }
+
+  Future<int> _addCorrection(String content,
+      {required String replaces,
+      String category = 'fact',
+      double importance = 0.5,
+      String? opId,
+      String? source,
+      String actor = 'rules',
+      DateTime? observedAt,
+      int? observationOffsetMin}) async {
+    // Plan 1.4: a correction is a lasting change of state ("I no longer
+    // live in Pune"); it never expires, so what it retires stays retired.
+    final saved = await _add(content,
+        permanent: true,
+        category: category,
+        importance: importance,
+        opId: opId,
+        source: source,
+        actor: actor,
+        observedAt: observedAt,
+        observationOffsetMin: observationOffsetMin);
+    final words = terms(replaces);
+    if (words.isEmpty) return saved;
+    final candidates = (await db.rawQuery(
+      'SELECT m.* FROM memories m JOIN memories_fts f ON f.docid = m.id '
+      "WHERE memories_fts MATCH ? AND $_liveM AND m.id != ?",
+      [words.map((word) => '"$word"').join(' '), saved],
+    ))
+        .map(Memory.new)
+        .where((m) => words.every(terms(m.content).contains))
         .toList();
-    final now = _now();
-    double score(Map<String, Object?> r) {
-      final text = (r['content'] as String).toLowerCase();
-      final hits = ts.where(text.contains).length / ts.length;
+    if (candidates.length <= 3) {
+      for (final memory in candidates) {
+        await _supersede(memory.id, saved, actor: actor, opId: opId);
+      }
+    }
+    return saved;
+  }
+
+  /// Content lookup only. This is never proof that a source wrote memory;
+  /// replay and extraction skips must use the durable source marker.
+  Future<int?> activeIdForContent(String content) async {
+    final normalized = content
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[.!?]+$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final hash = sha256.convert(utf8.encode(normalized)).toString();
+    final rows = await db.query('memories',
+        columns: ['id'],
+        where: "status = 'active' AND content_hash = ?",
+        whereArgs: [hash],
+        limit: 1);
+    return rows.isEmpty ? null : rows.single['id'] as int;
+  }
+
+  Future<List<Map<String, Object?>>> history(int memoryId) =>
+      db.query('memory_history',
+          where: 'memory_id = ?', whereArgs: [memoryId], orderBy: 'id');
+
+  /// Decodes FTS4's p, c, n, a, l, x blocks without loading memory content.
+  static double _normalizedBm25(Uint8List bytes, int termCount) {
+    final data = ByteData.sublistView(bytes);
+    int at(int i) => data.getUint32(i * 4, Endian.little);
+    final phrases = at(0), columns = at(1), documents = at(2);
+    var bm25 = 0.0;
+    for (var phrase = 0; phrase < phrases; phrase++) {
+      for (var column = 0; column < columns; column++) {
+        final offset = 3 + 2 * columns + 3 * (phrase * columns + column);
+        final frequency = at(offset);
+        if (frequency == 0) continue;
+        final documentFrequency = at(offset + 2);
+        final averageLength = math.max(1, at(3 + column));
+        final length = at(3 + columns + column);
+        // Positive, smoothed IDF keeps even ubiquitous terms useful.
+        final idf = math.log(1 +
+            (documents - documentFrequency + 0.5) / (documentFrequency + 0.5));
+        const k1 = 1.2, b = 0.75;
+        bm25 += idf *
+            frequency *
+            (k1 + 1) /
+            (frequency + k1 * (1 - b + b * length / averageLength));
+      }
+    }
+    // mem0/utils/scoring.py:get_bm25_params, using deduplicated query terms.
+    final (midpoint, steepness) = switch (termCount) {
+      <= 3 => (5.0, 0.7),
+      <= 6 => (7.0, 0.6),
+      <= 9 => (9.0, 0.5),
+      <= 15 => (10.0, 0.5),
+      _ => (12.0, 0.5),
+    };
+    return 1 / (1 + math.exp(-steepness * (bm25 - midpoint)));
+  }
+
+  /// Rank active FTS metadata first; load only a bounded content shortlist.
+  /// Database calls already wait behind open transactions; a caller-owned tx
+  /// also needs the storage queue so its access stamp survives sibling failure.
+  Future<List<Memory>> search(String query, {int limit = 3}) => db
+          is Transaction
+      ? _storageTransaction(
+          db, (tx) => MemoryRepo(tx, clock: clock)._search(query, limit: limit))
+      : _search(query, limit: limit);
+
+  Future<List<Memory>> _search(String query, {int limit = 3}) async {
+    final ts = terms(query);
+    if (ts.isEmpty || limit <= 0) return [];
+    final now = clock().millisecondsSinceEpoch;
+    final candidates = await db.rawQuery(
+        'SELECT m.id, m.importance, m.updated_at, '
+        "matchinfo(memories_fts, 'pcnalx') AS mi "
+        'FROM memories_fts JOIN memories m ON m.id = memories_fts.docid '
+        'WHERE memories_fts MATCH ? AND ${_liveAt(now, 'm.')}',
+        // Prefix matching already includes exact tokens. Do not count both
+        // as separate BM25 phrases for the same query term.
+        [ts.map((t) => '$t*').join(' OR ')]);
+    if (candidates.isEmpty) return [];
+    double metadataScore(Map<String, Object?> r) {
       final ageDays = (now - (r['updated_at'] as int)) / 86400000;
-      return hits * 2 + (r['importance'] as num) + 1 / (1 + ageDays / 30);
+      return (r['importance'] as num) + 1 / (1 + ageDays / 30);
     }
 
-    rows.sort((a, b) => score(b).compareTo(score(a)));
+    final ranked = candidates
+        .map((r) => (
+              id: r['id'] as int,
+              score: _normalizedBm25(r['mi'] as Uint8List, ts.length) * 2 +
+                  metadataScore(r),
+            ))
+        .toList()
+      ..sort((a, b) {
+        final comparison = b.score.compareTo(a.score);
+        return comparison != 0 ? comparison : a.id.compareTo(b.id);
+      });
+    final scores = {
+      for (final candidate in ranked.take(math.max(limit * 4, 60)))
+        candidate.id: candidate.score,
+    };
+    final placeholders = List.filled(scores.length, '?').join(',');
+    final rows = (await db.rawQuery(
+            'SELECT * FROM memories WHERE ${_liveAt(now)} '
+            'AND id IN ($placeholders)',
+            scores.keys.toList()))
+        .toList();
+    double exactScore(Map<String, Object?> r) {
+      final text = (r['content'] as String).toLowerCase();
+      return ts.where(text.contains).length / ts.length * 2 + metadataScore(r);
+    }
+
+    final exactScores = {
+      for (final r in rows) r['id'] as int: exactScore(r),
+    };
+    rows.sort((a, b) {
+      final aId = a['id'] as int, bId = b['id'] as int;
+      final comparison = scores[bId]!.compareTo(scores[aId]!);
+      if (comparison != 0) return comparison;
+      final exactComparison = exactScores[bId]!.compareTo(exactScores[aId]!);
+      return exactComparison != 0 ? exactComparison : aId.compareTo(bId);
+    });
     final top = rows.take(limit).toList();
-    for (final r in top) {
+    if (top.isNotEmpty) {
+      final accessedIds = top.map((r) => r['id']).toList();
+      final accessedPlaceholders = List.filled(top.length, '?').join(',');
       await db.update('memories', {'last_accessed_at': now},
-          where: 'id = ?', whereArgs: [r['id']]);
+          where: "status = 'active' AND id IN ($accessedPlaceholders)",
+          whereArgs: accessedIds);
     }
     return top.map(Memory.new).toList();
   }
 
-  Future<bool> delete(int id) async {
+  Future<bool> delete(int id, {String actor = 'user', String? opId}) =>
+      _storageTransaction(
+          db,
+          (tx) => MemoryRepo(tx, clock: clock)
+              ._delete(id, actor: actor, opId: opId));
+
+  Future<bool> _delete(int id, {String actor = 'user', String? opId}) async {
+    final rows = await db.query('memories',
+        columns: ['content'],
+        where: "id = ? AND status = 'active'",
+        whereArgs: [id]);
+    if (rows.isEmpty) return false;
+    final changed = await db.update(
+        'memories',
+        {
+          'status': 'deleted',
+          'deleted_at': clock().millisecondsSinceEpoch,
+        },
+        where: "id = ? AND status = 'active'",
+        whereArgs: [id]);
+    if (changed == 0) return false;
     await db.delete('memories_fts', where: 'docid = ?', whereArgs: [id]);
-    return await db.delete('memories', where: 'id = ?', whereArgs: [id]) > 0;
+    await _log('delete', id,
+        old: rows.single['content'] as String, actor: actor, opId: opId);
+    return true;
   }
 
-  Future<List<Memory>> all() async => (await db.query('memories',
-          where: "status = 'active'", orderBy: 'id DESC'))
+  Future<List<Memory>> deleted() async => (await db.query('memories',
+          where: "status = 'deleted'", orderBy: 'deleted_at DESC, id DESC'))
       .map(Memory.new)
       .toList();
 
-  Future<List<Memory>> important({int limit = 3}) async {
+  /// The deletion remains recoverable through the inclusive 30-day boundary.
+  Future<RestoreResult> restore(int id) => _storageTransaction(
+      db, (tx) => MemoryRepo(tx, clock: clock)._restore(id));
+
+  Future<RestoreResult> _restore(int id) async {
     final rows = await db.query('memories',
-        where: "status = 'active'",
-        orderBy: 'importance DESC, updated_at DESC');
-    return rows
-        .map(Memory.new)
-        .where((memory) => isUsefulPersonalMemory(memory.content))
-        .take(limit)
-        .toList();
+        where: "id = ? AND status = 'deleted' AND deleted_at >= ?",
+        whereArgs: [
+          id,
+          clock().subtract(const Duration(days: 30)).millisecondsSinceEpoch
+        ]);
+    if (rows.isEmpty) return const RestoreResult(RestoreStatus.gone);
+    final row = rows.single;
+    final duplicates = await db.query('memories',
+        columns: ['id'],
+        where: '$_live AND content_hash = ?',
+        whereArgs: [row['content_hash']],
+        limit: 1);
+    if (duplicates.isNotEmpty) {
+      return RestoreResult(
+          RestoreStatus.duplicate, duplicates.single['id'] as int);
+    }
+    if (row['subject_key'] != null && row['attribute_key'] != null) {
+      final occupied = await db.query('memories',
+          columns: ['id'],
+          where: '$_live AND subject_key = ? AND attribute_key = ?',
+          whereArgs: [row['subject_key'], row['attribute_key']],
+          limit: 1);
+      if (occupied.isNotEmpty)
+        return const RestoreResult(RestoreStatus.slotTaken);
+    }
+    // Plan 1.4: restoring a fact that expired (and was retired by
+    // [purgeDeleted]) is the user keeping it, so it no longer expires; one
+    // deleted before its expiry keeps that expiry.
+    final expiresAt = row['expires_at'] as int?;
+    await db.update(
+        'memories',
+        {
+          'status': 'active',
+          'deleted_at': null,
+          if (expiresAt != null && expiresAt <= _nowMs) 'expires_at': null,
+        },
+        where: 'id = ?',
+        whereArgs: [id]);
+    await db.insert('memories_fts', {'docid': id, 'content': row['content']},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+    await _log('restore', id, now: row['content'] as String, actor: 'user');
+    return RestoreResult(RestoreStatus.restored, id);
+  }
+
+  /// Explicit privacy path; always succeeds for an existing row. Legacy
+  /// replacement copies that cannot be attributed are redacted in the same
+  /// transaction (see [_redactUnattributedCopies]); only automatic purge and
+  /// suggestion acceptance still fail closed on them.
+  Future<bool> deletePermanently(int id) => _storageTransaction(
+      db, (tx) => MemoryRepo(tx, clock: clock)._deletePermanently(id));
+
+  Future<bool> _deletePermanently(int id) async {
+    final rows = await db.query('memories',
+        columns: ['id'], where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return false;
+    // The user's explicit erase never fails on legacy history: copies that
+    // cannot be attributed are discarded with it, in this same transaction.
+    await _redactUnattributedCopies();
+    await _eraseMemory(id);
+    return true;
+  }
+
+  /// Nulls the replacement text of every legacy supersede event. Those events
+  /// have no target identity, so any of them may hold text of the memory being
+  /// erased; the successor keeps its own text in its own add/edit history, so
+  /// only the redundant audit copy is lost. Event, actor, op and time stay.
+  Future<void> _redactUnattributedCopies() => db.update(
+      'memory_history', {'new_content': null},
+      where: "event = 'supersede' AND new_content IS NOT NULL "
+          "AND new_content != ''");
+
+  /// Only after the global guard, on the same transaction and snapshot.
+  Future<void> _eraseMemory(int id) async {
+    await db.delete('memories', where: 'id = ?', whereArgs: [id]);
+    await db.update('memories', {'superseded_by': null},
+        where: 'superseded_by = ?', whereArgs: [id]);
+    await db.update(
+        'memory_history', {'old_content': null, 'new_content': null},
+        where: 'memory_id = ?', whereArgs: [id]);
+    await _log('purge', id, actor: 'system');
+  }
+
+  Future<void> _requireErasableHistory(int id) async {
+    // The current link, text equality, timestamps and event ordering are not
+    // per-event provenance. Even an apparently unrelated copy may be an older
+    // version of this memory. Include orphan history and the target's own
+    // supersede events (whose replacement text may belong to a survivor).
+    // Deliberately global: narrower matching would claim erasure we cannot
+    // establish. Old backups remain readable/exportable, but destructive
+    // decisions require resolution outside this schema when copies exist.
+    final historyId = await _unattributedHistoryId();
+    if (historyId != null) throw MemoryPrivacyBlocked(id, historyId);
+  }
+
+  /// Recomputed from retained history, including after restart/import. This
+  /// reports the blocker, not a past erasure attempt or user consent.
+  Future<bool> legacyErasureBlocked() async =>
+      await _unattributedHistoryId() != null;
+
+  Future<int?> _unattributedHistoryId() async {
+    final rows = await db.query('memory_history',
+        columns: ['id'],
+        where: "event = 'supersede' AND new_content IS NOT NULL "
+            "AND new_content != ''",
+        orderBy: 'id',
+        limit: 1);
+    return rows.isEmpty ? null : rows.single['id'] as int;
+  }
+
+  /// Retire expiry independently of hard erasure. Each stage has its own
+  /// transaction/savepoint; a caller's outer transaction can still roll back
+  /// both stages. No legacy text is automatically discarded to unblock purge.
+  Future<MemoryCleanupResult> cleanupDeleted({
+    Duration olderThan = const Duration(days: 30),
+  }) async {
+    final retired = await _storageTransaction(
+        db, (tx) => MemoryRepo(tx, clock: clock)._retireExpired());
+    try {
+      final purged = await _storageTransaction(
+          db,
+          (tx) =>
+              MemoryRepo(tx, clock: clock)._purgeDeleted(olderThan: olderThan));
+      return MemoryCleanupResult(retired: retired, purged: purged);
+    } on MemoryPrivacyBlocked catch (blocked) {
+      return MemoryCleanupResult(retired: retired, purged: 0, blocked: blocked);
+    }
+  }
+
+  /// Compatibility count API. A blocked purge still throws, but expiry
+  /// retirement has already committed. Use [cleanupDeleted] for partial status.
+  Future<int> purgeDeleted(
+      {Duration olderThan = const Duration(days: 30)}) async {
+    final result = await cleanupDeleted(olderThan: olderThan);
+    if (result.blocked != null) throw result.blocked!;
+    return result.purged;
+  }
+
+  Future<int> _retireExpired() async {
+    var retired = 0;
+    for (final row in await db.query('memories',
+        columns: ['id'],
+        where:
+            "status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?",
+        whereArgs: [_nowMs])) {
+      if (await _delete(row['id'] as int, actor: 'system')) retired++;
+    }
+    return retired;
+  }
+
+  Future<int> _purgeDeleted({required Duration olderThan}) async {
+    final rows = await db.query('memories',
+        columns: ['id'],
+        where: "status = 'deleted' AND deleted_at < ?",
+        whereArgs: [clock().subtract(olderThan).millisecondsSinceEpoch]);
+    if (rows.isEmpty) return 0;
+    // Once per batch, within the same transaction as every erasure. No other
+    // writer can add a legacy copy between this check and the hard deletes.
+    await _requireErasableHistory(rows.first['id'] as int);
+    for (final row in rows) {
+      await _eraseMemory(row['id'] as int);
+    }
+    return rows.length;
+  }
+
+  Future<List<Memory>> all() async =>
+      (await db.query('memories', where: _live, orderBy: 'id DESC'))
+          .map(Memory.new)
+          .toList();
+
+  Future<List<Memory>> important({int limit = 3}) async {
+    if (limit <= 0) return [];
+    const pageSize = 50, maxPages = 5;
+    final live = _live;
+    final results = <Memory>[];
+    for (var page = 0; page < maxPages; page++) {
+      final rows = await db.query('memories',
+          where: "$live AND category IN ('preference','fact','person')",
+          orderBy: 'importance DESC, updated_at DESC, id',
+          limit: pageSize,
+          offset: page * pageSize);
+      for (final row in rows) {
+        final memory = Memory(row);
+        if (isUsefulPersonalMemory(memory.content)) {
+          results.add(memory);
+          if (results.length == limit) return results;
+        }
+      }
+      if (rows.length < pageSize) break;
+    }
+    return results;
   }
 
   /// Retrieves relevant active durable memories for injecting into planning
@@ -1339,7 +2497,7 @@ class MemoryRepo {
     if (results.length < limit) {
       final prefs = (await db.query('memories',
               where:
-                  "status = 'active' AND (category = 'preference' OR content LIKE '%prefer%')",
+                  "$_live AND (category = 'preference' OR content LIKE '%prefer%')",
               orderBy: 'importance DESC, updated_at DESC',
               limit: limit))
           .map(Memory.new)
@@ -1386,6 +2544,86 @@ bool isUsefulPersonalMemory(String content) {
     r"i\s+(?:(?:usually|normally|always|never)\s+)?(?:am|'m|work|live|prefer|like|love|hate|dislike|study|use)\b|"
     r"i\s+have\s+(?:a|an|one|two|three|four|five)\b|my\s+(?:name|job|role|goal|preference|sister|brother|mother|father)\b|[a-z]+\s+(?:prefers?|likes?|loves?|hates?|dislikes?|lives?|works?)\b)",
   ).hasMatch(value);
+}
+
+/// The `expires_at` [MemoryRepo.add] stores for [content] said at
+/// [observedAt] with UTC offset [observationOffsetMin] (plan 1.4); null when
+/// it never expires. Habits and preferences ("usually", "every", "prefer")
+/// and lasting slot facts (residence, job, preferences) never expire; a
+/// short-lived fact ([RuleEngine.isTemporary]) ends with its window, and
+/// another one-off dated fact 30 days after its day (see [factExpiresAt]).
+/// Deterministic for the same integers, so journal replay agrees.
+int? memoryExpiresAt(String content,
+    {required DateTime observedAt, required int observationOffsetMin}) {
+  final text = content.toLowerCase();
+  if (RuleEngine.isDurable(text)) return null;
+  final temporary = RuleEngine.isTemporary(text);
+  if (!temporary && extractMemorySlot(content) != null) return null;
+  final utc = observedAt.toUtc();
+  final local = utc.add(Duration(minutes: observationOffsetMin));
+  return factExpiresAt(content,
+      observedUtcMs: utc.millisecondsSinceEpoch,
+      offsetMin: observationOffsetMin,
+      factDate: resolveFactDate(content, local)?.value,
+      temporary: temporary);
+}
+
+/// [content] with the absolute date of its `fact_date` (plan 1.3), so a
+/// relative day said earlier ("my exam is on Monday") cannot be re-read
+/// against today: "User's exam is on Monday (2 Nov 2026)", or for a yearly
+/// date "(every year on 4 June)". Unchanged when [factDate] is null or not a
+/// stored date shape.
+String withFactDate(String content, String? factDate) {
+  if (factDate == null) return content;
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
+  ];
+  const longMonths = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
+  ];
+  final String label;
+  final full = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(factDate);
+  final yearly = RegExp(r'^--(\d{2})-(\d{2})$').firstMatch(factDate);
+  if (full != null) {
+    final month = int.parse(full.group(2)!);
+    if (month < 1 || month > 12) return content;
+    label = '${int.parse(full.group(3)!)} ${months[month - 1]} '
+        '${full.group(1)}';
+  } else if (yearly != null) {
+    final month = int.parse(yearly.group(1)!);
+    if (month < 1 || month > 12) return content;
+    label = 'every year on ${int.parse(yearly.group(2)!)} '
+        '${longMonths[month - 1]}';
+  } else {
+    return content;
+  }
+  final end = RegExp(r'[.!?]+$').firstMatch(content.trimRight());
+  final body = end == null
+      ? content.trimRight()
+      : content.trimRight().substring(0, end.start);
+  return '$body ($label)${end?.group(0) ?? ''}';
 }
 
 String buildPersonalContext(UserProfile profile, List<String> memories) {
@@ -1613,12 +2851,14 @@ class PendingRepo {
 class Operation {
   final String id, chatId, textHash, status;
   final String? action, receipt;
+  final int? sourceMessageId;
   final DateTime createdAt, updatedAt;
   Operation(Map<String, Object?> r)
       : id = r['op_id'] as String,
         chatId = r['chat_id'] as String,
         textHash = r['text_hash'] as String,
         status = r['status'] as String,
+        sourceMessageId = r['source_message_id'] as int?,
         action = r['action'] as String?,
         receipt = r['receipt'] as String?,
         createdAt = _dt(r['created_at'])!,
@@ -1626,7 +2866,7 @@ class Operation {
 }
 
 class OperationJournal {
-  final Database db;
+  final DatabaseExecutor db;
   final Set<String> _activeOps = {};
 
   OperationJournal(this.db);
@@ -1641,14 +2881,47 @@ class OperationJournal {
       replied = 'replied',
       noWrite = 'no_write',
       failed = 'failed',
-      abandoned = 'abandoned';
+      abandoned = 'abandoned',
+      recoveryUnresolved = 'recovery_unresolved';
 
   Future<Operation?> get(String id) async {
     final r = await db.query('operations', where: 'op_id = ?', whereArgs: [id]);
     return r.isEmpty ? null : Operation(r.first);
   }
 
-  /// Records a new submitted turn; an existing id is left as it is.
+  /// New turns only: the source and journal have no observable half-state.
+  /// A racing/retried id must refer to the exact same chat and message hash.
+  Future<int> beginTurn(
+          String id, String chatId, String textHash, String text) =>
+      _storageTransaction(db, (tx) async {
+        final prior =
+            await tx.query('operations', where: 'op_id = ?', whereArgs: [id]);
+        if (prior.isNotEmpty) {
+          final op = Operation(prior.single);
+          final source = await MemoryWriteSource.forOperation(tx, id);
+          if (op.chatId != chatId ||
+              op.textHash != textHash ||
+              source == null) {
+            throw ArgumentError('Operation identity mismatch');
+          }
+          return source.messageId;
+        }
+        final messageId =
+            await ConversationRepo._insert(tx, chatId, 'user', text);
+        await tx.insert('operations', {
+          'op_id': id,
+          'chat_id': chatId,
+          'text_hash': textHash,
+          'source_message_id': messageId,
+          'status': started,
+          'created_at': _now(),
+          'updated_at': _now(),
+        });
+        return messageId;
+      });
+
+  /// Legacy/imported journal only. No historical message link is inferred.
+  /// New foreground turns must use beginTurn.
   Future<void> begin(String id, String chatId, String textHash) => db.insert(
       'operations',
       {
@@ -1674,9 +2947,62 @@ class OperationJournal {
           where: 'op_id = ?',
           whereArgs: [id]);
 
+  /// Publish a final receipt and its transcript row together. Unresolved
+  /// recovery keeps its status, so the receipt records publication explicitly.
+  Future<void> publishReply(String id, String reply, String status,
+          Map<String, Object?> receipt, {bool replay = false}) =>
+      _storageTransaction(db, (tx) async {
+        final rows = await tx.query('operations',
+            where: 'op_id = ?', whereArgs: [id]);
+        final op = Operation(rows.single);
+        final prior = op.receipt == null ? null : jsonDecode(op.receipt!) as Map;
+        var messageId =
+            replay ? (prior?['assistant_message_id'] as int?) : null;
+        // Older unresolved final receipts have no publication marker. Reuse
+        // their already-persisted reply, bounded to that operation's lifetime.
+        if (replay && messageId == null && op.status == recoveryUnresolved) {
+          final published = await tx.query('conversations',
+              columns: ['id'],
+              where: "session_id = ? AND role = 'assistant' AND content = ? "
+                  'AND created_at >= ? AND created_at <= ?',
+              whereArgs: [
+                op.chatId,
+                reply,
+                op.createdAt.millisecondsSinceEpoch,
+                op.updatedAt.millisecondsSinceEpoch
+              ],
+              orderBy: 'id DESC',
+              limit: 1);
+          messageId = published.firstOrNull?['id'] as int?;
+        }
+        messageId ??=
+            await ConversationRepo._insert(tx, op.chatId, 'assistant', reply);
+        await tx.update('operations', {
+          'status': status,
+          'receipt': jsonEncode({...receipt, 'assistant_message_id': messageId}),
+          'updated_at': _now(),
+        }, where: 'op_id = ?', whereArgs: [id]);
+      });
+
+  static bool _hasMemoryAction(String? action) {
+    if (action == null) return false;
+    try {
+      bool containsMemory(Object? value) => switch (value) {
+            Map m => m['tool'] == 'save_memory' || m.values.any(containsMemory),
+            List l => l.any(containsMemory),
+            _ => false,
+          };
+      return containsMemory(jsonDecode(action));
+    } catch (_) {
+      return true; // malformed legacy intent cannot establish provenance
+    }
+  }
+
   /// Startup: turns left `started`/`executing` by a crash are settled without
-  /// running anything. A write whose rows exist (stamped `op_id`) is
-  /// committed; anything else is abandoned only if it is not currently active
+  /// running anything. Task/reminder op ids and verified memory markers prove
+  /// commits, even after memory purge or duplicate bumps. Ambiguous unlinked
+  /// memory intent becomes recovery_unresolved; replay withholds only memory.
+  /// Otherwise abandon only if the operation is not currently active
   /// in memory or recently updated within [olderThan] (defaulting to 2 minutes
   /// to avoid abandoning turns still computing in an engine).
   /// Returns the ids settled.
@@ -1698,13 +3024,36 @@ class OperationJournal {
       if (cutoff != null && updated > cutoff) {
         continue;
       }
-      final rows = (await db.query('tasks',
-                  columns: ['id'], where: 'op_id = ?', whereArgs: [id]))
-              .length +
-          (await db.query('reminders',
-                  columns: ['id'], where: 'op_id = ?', whereArgs: [id]))
-              .length;
-      await mark(id, rows > 0 ? committed : abandoned);
+      final source = await MemoryWriteSource.forOperation(db, id);
+      final memoryWritten = source != null &&
+          await MemoryWriteSource.wasWritten(
+              db, source.chatId, source.messageId);
+      final prefix = '$id#';
+      final stamped = await db.rawQuery(
+          'SELECT t.op_id FROM tasks t WHERE t.op_id = ? OR '
+          '(substr(t.op_id, 1, ?) = ? AND NOT EXISTS '
+          '(SELECT 1 FROM operations o WHERE o.op_id = t.op_id)) '
+          'UNION ALL '
+          'SELECT r.op_id FROM reminders r WHERE r.op_id = ? OR '
+          '(substr(r.op_id, 1, ?) = ? AND NOT EXISTS '
+          '(SELECT 1 FROM operations o WHERE o.op_id = r.op_id))',
+          [id, prefix.length, prefix, id, prefix.length, prefix]);
+      final rows = stamped.where((row) {
+            final stamp = row['op_id'] as String;
+            return stamp == id || indexedOperationParent(stamp) == id;
+          }).length +
+          (memoryWritten ? 1 : 0);
+      // Unlinked memory intent is unknowable, even if an unrelated matching
+      // row exists. Withhold it on replay; task/reminder recovery stays usable.
+      final unknownMemory =
+          source == null && _hasMemoryAction(r['action'] as String?);
+      await mark(
+          id,
+          unknownMemory
+              ? recoveryUnresolved
+              : rows > 0
+                  ? committed
+                  : abandoned);
       out.add(id);
     }
     return out;

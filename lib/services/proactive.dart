@@ -238,10 +238,34 @@ extension ProactiveDelivery on AppServices {
 
   /// Startup, resume, boot, time or time-zone change. Files at most the
   /// latest missed check-in per task from the last 12 hours, silently;
+  /// summarizes and retires older reminders in one main-chat message;
   /// moves daily tasks past missed days (never replayed); catches up
   /// tonight's review silently before quiet hours.
   Future<void> catchUp({DateTime? now}) async {
     now ??= DateTime.now();
+    final older = (await db.query('reminders',
+            where: 'enabled = 1 AND trigger_at <= ?',
+            whereArgs: [now.subtract(_catchUpWindow).millisecondsSinceEpoch],
+            orderBy: 'trigger_at DESC, id DESC'))
+        .map(Reminder.new)
+        .toList();
+    if (older.isNotEmpty) {
+      final items = older.take(5).map((r) =>
+          '- ${r.title} (${dayKey(r.triggerAt)} ${_clock(r.triggerAt)})');
+      final text = 'While the app was closed, ${older.length} '
+          '${older.length == 1 ? 'reminder passed' : 'reminders passed'}:\n'
+          '${items.join('\n')}'
+          '${older.length > 5 ? '\nand ${older.length - 5} more' : ''}';
+      await conversations.addProactive('missed-summary:${dayKey(now)}', text,
+          kind: 'missed');
+      await db.transaction((tx) async {
+        for (final r in older) {
+          await tx.update('reminders', {'enabled': 0, 'sync': 'cancel'},
+              where: 'id = ? AND trigger_at = ? AND enabled = 1',
+              whereArgs: [r.id, r.triggerAt.millisecondsSinceEpoch]);
+        }
+      });
+    }
     final missed = (await db.query('reminders',
             where: 'enabled = 1 AND trigger_at <= ? AND trigger_at > ?',
             whereArgs: [

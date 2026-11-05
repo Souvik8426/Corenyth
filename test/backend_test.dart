@@ -156,7 +156,7 @@ class FakeMemory extends MemoryRepo {
       {String category = 'fact',
       double importance = 0.5,
       String? opId,
-      String? source}) async {
+      String? source, String actor = 'rules', DateTime? observedAt, int? observationOffsetMin}) async {
     log.add('memory:$content');
     items.add(content);
     return items.length;

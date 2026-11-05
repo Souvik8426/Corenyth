@@ -9,10 +9,12 @@ import 'package:flutter/services.dart';
 import '../data/repos.dart';
 import '../mascot/mascot_emotion.dart';
 import 'authorization.dart';
+import 'batch.dart';
 import 'calculator.dart';
 import 'core_policy.dart';
 import 'engine.dart';
 import 'follow_through.dart';
+import 'model_scheduler.dart';
 import 'rule_engine.dart';
 import 'semantic.dart';
 import 'temporal.dart';
@@ -29,6 +31,15 @@ export 'turn_contract.dart'
         ExecutionReceipt,
         ReceiptStatus,
         AlarmStatus;
+
+part 'session/session_pending.dart';
+part 'session/session_batch.dart';
+part 'session/session_semantic.dart';
+part 'session/session_history.dart';
+part 'session/session_reply.dart';
+part 'session/session_receipts.dart';
+part 'session/session_commit.dart';
+part 'session/session_mood.dart';
 
 enum SessionState {
   idle,
@@ -125,6 +136,12 @@ class AssistantSession {
 
   /// Per-turn mood persistence; null (tests) keeps moods in memory only.
   final MoodRepo? moods;
+
+  /// Every model generation of this session goes through it. AppServices
+  /// passes its single app-wide instance, so chat and voice sessions (each
+  /// with its own engine) never overlap in this isolate and a turn in one
+  /// preempts optional work of another. Null (tests) = a private scheduler.
+  final ModelScheduler models;
 
   /// Conversation id (`conversations.session_id` / `chats.id`).
   final String id;
@@ -231,6 +248,8 @@ class AssistantSession {
   /// Evening-review participation: a task the user talks about is answered.
   final ReviewRepo? review;
   String? _memDraft, _memPick;
+  String? _memBatch, _batchUpdate;
+  bool _batchTouched = false, _batchHandled = false;
 
   /// The task this chat last created/changed (from SQLite ids), for "that one".
   /// Cleared when a list or "Which one?" was shown: a pronoun then must ask.
@@ -258,6 +277,13 @@ class AssistantSession {
   Future<List<String>>? _closing;
   bool _closeRequested = false, _cancelled = false;
   final _saved = <String>[];
+
+  /// Hook for backup import (SessionRegistry): while true, [handle] refuses
+  /// new turns so nothing writes during a restore.
+  bool writesPaused = false;
+
+  /// Hook for backup import: a turn (or read-only comparison) is in flight.
+  bool get hasActiveTurn => _active != null;
 
   // ---- per-interpretation state (reset by [_resetTurn]) ----
   late Interpreter _mode = interpreter;
@@ -302,9 +328,11 @@ class AssistantSession {
     this.modelDiagnostics,
     this.operations,
     this.moods,
+    ModelScheduler? modelScheduler,
     Interpreter? interpreter,
     CorePolicyStore? policyStore,
   })  : id = conversationId ?? ConversationRepo.newChatId(),
+        models = modelScheduler ?? ModelScheduler(),
         clock = clock ?? DateTime.now,
         interpreter = interpreter ?? defaultInterpreter {
     _corePolicy = CorePolicy(store: policyStore, chatId: id);
@@ -346,6 +374,24 @@ class AssistantSession {
     _idle = Timer(idleTimeout, () => onIdleTimeout?.call());
   }
 
+  /// [ModelScheduler.noteTurn]; a disposed scheduler (app teardown) only
+  /// rejects model calls, it never fails a rule-only turn.
+  int _noteSchedulerTurn() {
+    try {
+      return models.noteTurn();
+    } on StateError {
+      return models.currentTurn;
+    }
+  }
+
+  void _noteSchedulerActivity() {
+    try {
+      models.noteActivity();
+    } on StateError {
+      // disposed: nothing left to schedule
+    }
+  }
+
   /// Handles one finalized utterance (typed now, ASR transcript later).
   /// [onText] gets the cumulative reply text (streamed from the model when it
   /// answers in prose, then the final reply). [onStream] gets the cumulative
@@ -370,6 +416,9 @@ class AssistantSession {
       String? operationId}) {
     text = text.trim();
     if (text.isEmpty) return Future.value('');
+    if (writesPaused) {
+      return Future.error(StateError('writes are paused for a backup import'));
+    }
     if (_s != SessionState.listening || _closeRequested || _active != null) {
       return Future.error(StateError('session is not listening ($_s)'));
     }
@@ -402,6 +451,9 @@ class AssistantSession {
 
   void _resetTurn(String text, {Interpreter? mode, bool dryRun = false}) {
     _generationEpoch++;
+    _batchUpdate = null;
+    _batchTouched = true;
+    _batchHandled = false;
     _note = null;
     _header = null;
     _prefix = null;
@@ -409,7 +461,9 @@ class AssistantSession {
     _subject = null;
     _leadMin = null;
     // "not tonight, but remind me…": the request after "but" is the turn.
-    text = RuleEngine.contrastRequest(text) ?? text;
+    if (readBatch(text) == null) {
+      text = RuleEngine.contrastRequest(text) ?? text;
+    }
     _said = text;
     _turnNow = _now();
     _userRowId = null;
@@ -474,6 +528,20 @@ class AssistantSession {
     OperationJournal.noWrite,
   };
 
+  bool _hasFinalReceipt(Operation op) {
+    if (op.receipt == null) return false;
+    if (_final.contains(op.status)) return true;
+    if (op.status != OperationJournal.recoveryUnresolved) return false;
+    // Withholding memory must not turn a failed independent action into a
+    // final result. Such retries still recover that action from the journal.
+    final receipts = (jsonDecode(op.receipt!) as Map)['receipts'] as List?;
+    return receipts != null &&
+        !receipts.any((r) =>
+            r is Map &&
+            r['tool'] != 'save_memory' &&
+            r['status'] == ReceiptStatus.failed.name);
+  }
+
   Future<String> _turn(String text, void Function(String)? onText) async {
     _go(SessionState.processing);
     final total = Stopwatch()..start();
@@ -481,23 +549,34 @@ class AssistantSession {
     _timing = timing;
     final journal = operations;
     journal?.registerActive(_op);
+    void Function()? moodJob;
+    // App-wide: drops queued optional work and cancels a running optional
+    // job on whichever engine owns it (any session). Foreground generation
+    // waits for that cancellation inside the scheduler; a rule-only turn
+    // does not. The token keeps this turn's mood job from outliving a newer
+    // turn in any session.
+    final schedulerTurn = _noteSchedulerTurn();
     try {
       final hash = _hash(text);
       final prior = journal == null ? null : await journal.get(_op);
-      if (prior != null && prior.textHash != hash) {
+      if (prior != null && (prior.textHash != hash || prior.chatId != id)) {
         throw ArgumentError('operation $_op belongs to a different message');
       }
       _diag['op'] = _op;
-      if (prior != null &&
-          prior.receipt != null &&
-          _final.contains(prior.status)) {
+      if (prior != null && _hasFinalReceipt(prior)) {
         return await _replay(prior, onText);
       }
       if (prior == null) {
-        _userRowId = await conversations.add(id, 'user', text);
-        lastUserRowId = _userRowId;
-        await journal?.begin(_op, id, hash);
+        _userRowId = journal == null
+            ? await conversations.add(id, 'user', text)
+            : await journal.beginTurn(_op, id, hash, text);
+      } else {
+        // Durable identity only. Legacy rows stay unlinked; never find a
+        // replacement by newest row, matching content, or timestamp.
+        final source = await MemoryWriteSource.forOperation(journal!.db, _op);
+        _userRowId = source?.messageId;
       }
+      lastUserRowId = _userRowId;
       _diag['interpreter'] = _mode.name;
       _diag['auth'] = _auth.kind.name;
       var status = OperationJournal.noWrite;
@@ -505,13 +584,21 @@ class AssistantSession {
       try {
         final route = Stopwatch()..start();
         final recovering = (prior?.status == OperationJournal.executing ||
-                prior?.status == OperationJournal.committed) &&
+                prior?.status == OperationJournal.committed ||
+                prior?.status == OperationJournal.recoveryUnresolved) &&
             prior?.action != null;
         final CandidatePlan plan;
         if (recovering) {
           // Crashed while writing: finish the journaled validated action;
           // rows it already committed are found by their op id, not redone.
           plan = CandidatePlan.fromActionJson(prior!.action!, _mode, _auth);
+          // The turn's memory write, journaled beside the plan (plan 1.3),
+          // replays with its original arguments and observation time.
+          final journaledMemory = (jsonDecode(prior.action!) as Map)['memory'];
+          if (journaledMemory is Map) {
+            _memoryEffect =
+                decodeCall(Map<String, Object?>.from(journaledMemory));
+          }
           _routeId = RouteId.retryRecover;
           _diag['route'] = routeName(RouteId.retryRecover);
           _note = plan.note;
@@ -543,6 +630,14 @@ class AssistantSession {
         reply = e.message;
         status = OperationJournal.failed;
       }
+      if (lastTurn?.receipts.any((r) => r.error == memoryRecoveryUnresolved) ==
+          true) {
+        status = OperationJournal.recoveryUnresolved;
+        _diag['memory'] = 'recovery_unresolved';
+        if (!reply.contains(_memoryRecoveryWithheld)) {
+          reply = '$reply $_memoryRecoveryWithheld';
+        }
+      }
       if (_header != null) reply = '$_header:\n$reply';
       if (_prefix != null) reply = '$_prefix $reply';
       if (_note != null) reply = '$reply $_note';
@@ -552,28 +647,36 @@ class AssistantSession {
         reply = '$reply $_modelLine';
         _diag['reply'] = 'model_line';
       }
-      await conversations.add(id, 'assistant', reply);
-      await journal?.mark(_op, status,
-          receipt: jsonEncode({...?lastTurn?.toJson(), 'reply': reply}));
+      if (journal == null) {
+        await conversations.add(id, 'assistant', reply);
+      } else {
+        await journal.publishReply(
+            _op, reply, status, {...?lastTurn?.toJson(), 'reply': reply});
+      }
       onText?.call(reply);
       _go(SessionState.speaking);
       if (!_cancelled) await speak?.call(reply);
 
       // Foreground confirmation settles before optional mood; mood work runs with
       // captured immutable inputs without delaying or blocking foreground replies.
+      // Dispatched at the end of `finally`, after this turn's diagnostics are
+      // final, so the job's mood diagnostics are never overwritten by them.
       if (!_scopeRefused &&
+          !_batchHandled &&
           _budget.plan + _budget.reply == 0 &&
           !_dryRun &&
           !_cancelled &&
           engineInUse == engine.name &&
           engine is! RuleEngine &&
           !_mechanicalRoutes.contains(_routeId)) {
-        _dispatchOptionalMood(
-          text: text,
-          opId: _op,
-          userRowId: _userRowId,
-          moodSink: _moodSink,
-        );
+        final opId = _op, rowId = _userRowId, sink = _moodSink;
+        moodJob = () => _dispatchOptionalMood(
+              text: text,
+              opId: opId,
+              userRowId: rowId,
+              moodSink: sink,
+              schedulerTurn: schedulerTurn,
+            );
       }
       return reply;
     } finally {
@@ -597,32 +700,9 @@ class AssistantSession {
       if (_s != SessionState.listening) _go(SessionState.listening);
       if (!_closeRequested) _armIdle();
       journal?.unregisterActive(_op);
+      _noteSchedulerActivity(); // speech/rules ended: background idle restarts
+      if (moodJob != null && !_cancelled && !_closeRequested) moodJob();
     }
-  }
-
-  /// A retried turn whose result was final: the same reply, no new writes.
-  Future<String> _replay(Operation prior, void Function(String)? onText) async {
-    final reply = (jsonDecode(prior.receipt!) as Map)['reply'] as String? ?? '';
-    _routeId = RouteId.retryReplay;
-    _diag['route'] = routeName(RouteId.retryReplay);
-    if (prior.status == OperationJournal.committed) {
-      // Committed but its reply was never shown (crash): show it once.
-      await conversations.add(id, 'assistant', reply);
-      await operations!.mark(_op, OperationJournal.replied);
-    }
-    onText?.call(reply);
-    _go(SessionState.speaking);
-    if (!_cancelled) await speak?.call(reply);
-    return reply;
-  }
-
-  /// Cancelled before commit: nothing was written; the "Which one?" this
-  /// turn consumed is dropped as before.
-  Future<void> _abandon(OperationJournal? journal) async {
-    try {
-      await journal?.mark(_op, OperationJournal.abandoned);
-      if (_pickStored) await _storePick(null);
-    } catch (_) {}
   }
 
   /// Inputs whose answer is purely mechanical; spending a model call to read
@@ -633,91 +713,18 @@ class AssistantSession {
     RouteId.pendingAnswer,
   };
 
-  /// Dispatches optional mood work with captured immutable inputs, completely
-  /// independent of foreground turn settlement and mutable turn budget.
-  void _dispatchOptionalMood({
-    required String text,
-    required String opId,
-    required int? userRowId,
-    required void Function(TurnMood mood)? moodSink,
-  }) {
-    final epoch = _generationEpoch;
-    final now = _turnNow ?? _now();
-    lastOptionalMoodJob = _runOptionalMood(
-      text: text,
-      opId: opId,
-      userRowId: userRowId,
-      moodSink: moodSink,
-      now: now,
-      epoch: epoch,
-    );
-  }
-
-  Future<void> _runOptionalMood({
-    required String text,
-    required String opId,
-    required int? userRowId,
-    required void Function(TurnMood mood)? moodSink,
-    required DateTime now,
-    required int epoch,
-  }) async {
-    if (_cancelled || epoch != _generationEpoch || _closeRequested) return;
-    try {
-      final p = Prompt(PromptKind.reply, text,
-          tone: (await profile.get())?.tone,
-          now: now,
-          context: 'Goal: a mascot mood reading of the user\'s current message. '
-              'The reply text is not shown or used.',
-          personalContext: buildPersonalContext(
-              await profile.get() ?? const UserProfile(), const []));
-      await engine.completeStreaming(p, onRaw: (chunk) {
-        if (_cancelled || epoch != _generationEpoch || _closeRequested) return;
-        final reading = planStreamView(chunk).mood;
-        if (reading != null) {
-          final record = TurnMood(
-            source: 'model:reply',
-            conversationId: id,
-            turnId: opId,
-            generationId: '$opId/optional_mood',
-            emotion: reading.mood == null
-                ? null
-                : MascotEmotion(reading.mood!, reading.intensity),
-            confidence: reading.confidence,
-            messageRowId: userRowId,
-          );
-          moodSink?.call(record);
-          final repo = moods;
-          if (repo != null && userRowId != null) {
-            repo
-                .save(
-                  messageId: userRowId,
-                  chatId: id,
-                  source: 'model:reply',
-                  mood: reading.mood?.name,
-                  intensity: reading.intensity,
-                  confidence: reading.confidence,
-                )
-                .catchError((_) {});
-          }
-        }
-      });
-      _diag['model_calls'] = '${_budget.plan}p${_budget.reply + 1}r';
-      _diag['mood'] = 'emitted';
-      lastDiagnostics = Map.unmodifiable(_diag);
-    } on PlatformException {
-    } catch (_) {}
-  }
-
   // ---- interpretation: one route -> a candidate plan, no writes ----
 
   Future<CandidatePlan> _plan(String text, void Function(String)? onText,
       Map<String, int> timing) async {
-    text = RuleEngine.contrastRequest(text) ?? text;
+    final batch = readBatch(text);
+    if (batch == null) text = RuleEngine.contrastRequest(text) ?? text;
     final hasPending = await _draft() != null;
+    final hasBatch = batch != null || await _loadBatch() != null;
     final isCalc = calculate(text) != null;
     // Pending answers and arithmetic keep route precedence but still advance
     // policy so an outside topic does not linger across them.
-    if (hasPending || isCalc) {
+    if (hasPending || hasBatch || isCalc) {
       _corePolicy.noteCoreTurn();
       _scopeRefused = false;
       _persistedOutside = false;
@@ -736,43 +743,73 @@ class AssistantSession {
           call: _say(CorePolicy.refusal),
           authorization: _auth);
     }
-    final explicit = RuleEngine.isExplicitRemember(text);
-    final memo = _memoryCandidate(text, explicit);
+    final explicit = batch == null && RuleEngine.isExplicitRemember(text);
+    var memo = batch != null ? null : _memoryCandidate(text, explicit);
+    // Plan 1.5: an instruction for the assistant is not a memory. An explicit
+    // request is refused below; an implicit candidate is dropped silently and
+    // the turn goes on. Nothing is stored either way.
+    final memoRejected = batch == null &&
+        (explicit || memo != null) &&
+        _instructionLikeMemory(text, memo?.content);
+    if (memoRejected) {
+      memo = null;
+      _diag['memory'] = 'instruction_rejected';
+    }
+    int? memoExpiresAt;
     if (memo != null) {
       final replaces = RuleEngine.correctedObject(text);
+      final at = _turnNow ?? _now();
+      // Plan 1.4: the same expiry the executor will store from these args
+      // (corrections never expire), for the confirmation reply.
+      memoExpiresAt = replaces != null
+          ? null
+          : memoryExpiresAt(memo.content,
+              observedAt: at,
+              observationOffsetMin: at.timeZoneOffset.inMinutes);
       _memoryEffect = ToolCall('save_memory', {
         'content': memo.content,
         'category': memo.category,
         'source': 'chat:$id',
+        if (explicit) 'explicit': true,
         if (replaces != null) 'replaces': replaces,
+        // Plan 1.3: when it was said, as integers so a journal replay
+        // stores the same instant (see ToolExecutor `save_memory`).
+        'observed_at_utc': at.toUtc().millisecondsSinceEpoch,
+        'observation_offset_min': at.timeZoneOffset.inMinutes,
       });
     }
     final ToolCall call;
     final forget = RegExp(r'^(?:please\s+)?forget\s+(?:that\s+)?(.+)$',
             caseSensitive: false)
         .firstMatch(text.trim());
-    if (forget != null &&
+    if (batch == null &&
+        forget != null &&
         _auth.permitsWrite &&
         !RegExp(r'^(?:it|about it|that|that one|one)$', caseSensitive: false)
             .hasMatch(forget.group(1)!.trim())) {
       _routeId = RouteId.explicitMemory;
       _memoryEffect = null;
       final raw = forget.group(1)!;
-      final fact = _fallback.extractMemory(raw)['memory'] as String? ?? raw;
-      final candidates = await memory.search(fact, limit: 10);
-      final exactMatches = candidates
-          .where((m) =>
-              m.content.toLowerCase().replaceAll(RegExp(r'[.!?]+$'), '') ==
-              fact.toLowerCase())
-          .toList();
-      final matches = exactMatches.isNotEmpty
-          ? exactMatches
-          : (candidates.length == 1 ? candidates : const <Memory>[]);
-      if (matches.length == 1) {
-        _evidence['target'] = 'exact_memory';
-        call = ToolCall('delete_memory', {'id': matches.single.id});
+      final fact =
+          _fallback.extractMemory(raw, timeBound: true)['memory'] as String? ??
+              raw;
+      final match = await memory.matchForForget(fact);
+      if (match.evidence == ForgetEvidence.exact ||
+          match.evidence == ForgetEvidence.slot) {
+        _evidence['target'] = match.evidence == ForgetEvidence.exact
+            ? 'exact_memory'
+            : 'slot_memory';
+        call = ToolCall('delete_memory', {'id': match.memories.single.id});
+      } else if (match.evidence == ForgetEvidence.candidates) {
+        _setPick(TargetPick(
+            tool: 'delete_memory',
+            args: const {},
+            ids: match.memories.map((m) => m.id).toList(),
+            askedAt: _now()));
+        call = _say('Which memory should I forget?\n'
+            '${match.memories.map((m) => '#${m.id} ${m.content}').join('\n')}');
       } else {
-        call = _say(candidates.isEmpty
+        call = _say(!match.severalMatch
             ? "I couldn't identify that saved memory. You can review or delete it in Memories."
             : 'Several memories match. Please choose one in Memories.');
       }
@@ -780,13 +817,18 @@ class AssistantSession {
       _routeId = RouteId.explicitMemory;
       timing['route'] = 0;
       // The memory is written (as an effect) before this reply is shown.
-      call = _say(memo != null
-          ? "Okay, I'll remember that."
-          : (RuleEngine.isTemporary(text)
-              ? "I won't store short-lived plans as memories. Want a reminder or task instead?"
-              : "That's too long for me to remember; try a shorter sentence."));
+      call = _say(memoRejected
+          ? memoryInstructionRefusal
+          : memo != null
+              ? (memoExpiresAt == null
+                  ? "Okay, I'll remember that."
+                  : "Okay, I'll remember that through "
+                      '${_lastDayBefore(memoExpiresAt, _turnNow ?? _now())}.')
+              : (RuleEngine.isTemporary(text)
+                  ? "I won't store short-lived plans as memories. Want a reminder or task instead?"
+                  : "That's too long for me to remember; try a shorter sentence."));
     } else {
-      final grounded = await _groundedTurn(text);
+      final grounded = batch != null ? null : await _groundedTurn(text);
       if (grounded != null) {
         _routeId = RouteId.rules;
         call = grounded;
@@ -937,6 +979,12 @@ class AssistantSession {
       timing['route'] = route.elapsedMilliseconds;
       return early;
     }
+    final batch = await _batchRoute(text);
+    if (batch != null) {
+      _routeId = RouteId.pendingAnswer;
+      timing['route'] = route.elapsedMilliseconds;
+      return batch;
+    }
     final lead = leadOverride(text, _now());
     if (lead != null) {
       _leadMin = lead.minutes;
@@ -982,6 +1030,7 @@ class AssistantSession {
       (RouteId.pendingPick, () => _pickRoute(t)),
       (RouteId.calculator, () async => _calcRoute(t)),
       (RouteId.pendingAnswer, () => _pendingAnswerRoute(t)),
+      (RouteId.pendingAnswer, () => _batchRoute(t)),
       (
         RouteId.complaint,
         () async {
@@ -1013,10 +1062,7 @@ class AssistantSession {
         }
       ),
       (RouteId.rules, () => _rules(t)),
-      (
-        RouteId.rulePlan,
-        () async => _rulePlanCall(t)
-      ),
+      (RouteId.rulePlan, () async => _rulePlanCall(t)),
     ];
     for (final (id, handler) in table) {
       final c = await handler();
@@ -1030,118 +1076,6 @@ class AssistantSession {
   }
 
   static ToolCall _say(String s) => ToolCall('respond', {'text': s});
-
-  /// Settled without the model: "#3" for this chat's "which one?", a
-  /// calculation, or a reply that only gives the pending question's time.
-  Future<ToolCall?> _early(String text) async {
-    for (final (id, c) in [
-      (RouteId.pendingPick, await _pickRoute(text)),
-    ]) {
-      if (c != null) {
-        _routeId = id;
-        return c;
-      }
-    }
-    final calc = _calcRoute(text);
-    if (calc != null) {
-      _routeId = RouteId.calculator;
-      return calc;
-    }
-    final answer = await _pendingAnswerRoute(text);
-    if (answer != null) _routeId = RouteId.pendingAnswer;
-    return answer;
-  }
-
-  /// A reply to the "Which one?" this chat asked last turn.
-  Future<ToolCall?> _pickRoute(String text) async {
-    final pick = await _loadPick();
-    final n = RegExp(r'^(?:#|number |task )?(\d+)$', caseSensitive: false)
-        .firstMatch(text.trim());
-    int? selected = n == null ? null : int.parse(n.group(1)!);
-    if (pick != null &&
-        selected == null &&
-        pick.args['text'] is String &&
-        !_isCommand(text) &&
-        !hasCommandWord(text) &&
-        !isQuestionLike(text) &&
-        !isProgressUpdate(text) &&
-        !looksLikeOutcome(text)) {
-      final choices = <Task>[];
-      for (final id in pick.ids) {
-        final task = await taskRepo.get(id);
-        if (task != null) choices.add(task);
-      }
-      final matches = named(choices, text);
-      if (matches.length == 1) selected = matches.single.id;
-      if (matches.length > 1) {
-        _setPick(pick);
-        return _say('Which one? Please give the full name or task number.');
-      }
-    }
-    if (pick != null && selected != null) {
-      final id = selected;
-      if (pick.ids.contains(id)) {
-        final said = pick.args['text'];
-        if (said is! String) return _withId(pick, id, 'pick');
-        final t = await taskRepo.get(id);
-        if (t == null)
-          return _say(
-              'That task no longer exists, so I left everything as it was.');
-        return switch (pick.tool) {
-          'discuss' => await _discuss(t, said),
-          'outcome' => await _recordOutcome(t, said),
-          _ => await _applyDetails(t, said) ??
-              _say("I couldn't read those details."),
-        };
-      }
-      _setPick(pick);
-      return _say(
-          "That isn't one of ${pick.ids.map((i) => '#$i').join(', ')}. Which one?");
-    }
-    return null;
-  }
-
-  ToolCall? _calcRoute(String text) {
-    final calc = calculate(text.trim());
-    return calc == null ? null : _say(calc);
-  }
-
-  Future<ToolCall?> _pendingAnswerRoute(String text) async {
-    final draft = await _draft();
-    if (draft == null) return null;
-    var answer = text;
-    String? subject;
-    // An event's time question may be answered with its topic too.
-    final about = draft.day == null
-        ? null
-        : RegExp(
-                r"^(.+?)[,;.]?\s+(?:and\s+)?(?:it'?s\s+|it is\s+)?about\s+(.+?)[.!]*$",
-                caseSensitive: false)
-            .firstMatch(text.trim());
-    if (about != null && _fallback.isTimeAnswer(draft, about.group(1)!)) {
-      answer = about.group(1)!;
-      subject = about.group(2)!;
-    }
-    if (_fallback.isTimeAnswer(draft, answer)) {
-      final c =
-          await _answer(draft, _fallback.resolveClarify(draft, answer), answer);
-      if (c != null && c.tool != 'respond') _subject = subject;
-      return c;
-    }
-    return null;
-  }
-
-  /// Applies a clarification result: done (or cancelled) clears the draft.
-  Future<ToolCall?> _answer(ClarifyDraft draft,
-      ({Map<String, Object?> call, bool keep})? r, String answer) async {
-    if (r == null) return null;
-    if (!r.keep) _clearDraft();
-    _evidence['title'] = 'pending';
-    final words = _fallback.readWhen(answer).spans.map((s) => s.text);
-    if (words.isNotEmpty) _evidence['time'] = 'answer: ${words.join(' | ')}';
-    if (draft.time != null) _evidence['time'] ??= 'pending: ${draft.time}';
-    return _call(r.call);
-  }
 
   // ---- follow-through: daily schedules, meeting details/outcomes, updates ----
 
@@ -1212,6 +1146,14 @@ class AssistantSession {
   }
 
   Future<ToolCall?> _detailsRoute(String text) async {
+    final sentences = _sentences(text);
+    if (sentences.length > 1) {
+      for (final sentence in sentences) {
+        final call = await _detailsRoute(sentence);
+        if (call != null) return call;
+      }
+      return null;
+    }
     final details = [
       for (final t in await taskRepo.awaitingAnswers())
         if (t.awaiting == TaskRepo.details && !t.done && t.dueAt != null) t
@@ -1226,6 +1168,14 @@ class AssistantSession {
   }
 
   Future<ToolCall?> _outcomeRoute(String text) async {
+    final sentences = _sentences(text);
+    if (sentences.length > 1) {
+      for (final sentence in sentences) {
+        final call = await _outcomeRoute(sentence);
+        if (call != null) return call;
+      }
+      return null;
+    }
     final outcomes = [
       for (final t in await taskRepo.awaitingAnswers())
         if (t.awaiting == TaskRepo.outcomeQuestion) t
@@ -1251,6 +1201,14 @@ class AssistantSession {
   }
 
   Future<ToolCall?> _progressRoute(String text) async {
+    final sentences = _sentences(text);
+    if (sentences.length > 1) {
+      for (final sentence in sentences) {
+        final call = await _progressRoute(sentence);
+        if (call != null) return call;
+      }
+      return null;
+    }
     if (!isProgressUpdate(text) || _isCommand(text)) return null;
     final open = await taskRepo.list();
     var l = named(open, text);
@@ -1274,10 +1232,21 @@ class AssistantSession {
     return null;
   }
 
-  ToolCall? _briefingRoute(String text) =>
-      isBriefingRequest(text) && _fallback.parseCreate(text) == null
-          ? ToolCall('briefing', const {})
-          : null;
+  static List<String> _sentences(String text) => text
+      .split(RegExp(r'(?<=[.!?])\s+|[\r\n]+'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  ToolCall? _briefingRoute(String text) {
+    for (final sentence in _sentences(text)) {
+      if (isBriefingRequest(sentence) &&
+          _fallback.parseCreate(sentence) == null) {
+        return ToolCall('briefing', const {});
+      }
+    }
+    return null;
+  }
 
   static final _reminderWord = RegExp(
       r'\b(?:remind|alert|notify|alarm|nudge|ping)',
@@ -1287,12 +1256,20 @@ class AssistantSession {
   /// it exist. Nothing is created or cancelled here; the reply names the
   /// saved reminders and a typed pick lets "#12" cancel the intended one.
   Future<ToolCall?> _negatedCancelRoute(String text) async {
+    final sentences = _sentences(text);
+    if (sentences.length > 1) {
+      for (final sentence in sentences) {
+        final call = await _negatedCancelRoute(sentence);
+        if (call != null) return call;
+      }
+      return null;
+    }
     // "the gym reminder isn't needed, cancel it" asks to drop it: once the
     // not-needed words are set aside nothing is refused ("don't cancel the
     // gym reminder" still is).
     final unneeded = _notNeeded.hasMatch(text) &&
         !RuleEngine.isNegated(text.replaceAll(_notNeeded, ' '));
-    if ((_auth.kind != Authorization.negated && !unneeded) ||
+    if ((readAuthorization(text).kind != Authorization.negated && !unneeded) ||
         !_reminderWord.hasMatch(text)) {
       return null;
     }
@@ -1488,797 +1465,19 @@ class AssistantSession {
 
   static String _cut(String s) => s.length > 160 ? s.substring(0, 160) : s;
 
-  /// The last few turns of this chat for a prose reply, this turn excluded.
-  /// Check-ins and replies listing tasks stay out: task facts come from SQLite.
-  Future<List<Message>> _chatHistory() async {
-    try {
-      final l = await conversations.recent(id, n: 7);
-      if (l.isNotEmpty &&
-          l.last.role == 'user' &&
-          l.last.content.trim() == _said) {
-        l.removeLast();
-      }
-      return [
-        for (final m in l)
-          if (m.role == 'user' &&
-              m.content.trim() != _said &&
-              _safeHistorical(m.content))
-            Message(m.role, _cut(m.content))
-      ];
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  /// "That was dumb, give a proper reply to my previous prompt": the last
-  /// reply missed, so answer the user's earlier message again (no writes).
-  Future<ToolCall> _complaint() async {
-    String? earlier;
-    try {
-      final l = await conversations.recent(id, n: 12);
-      var skipped = false;
-      for (final m in l.reversed) {
-        if (m.role != 'user') continue;
-        if (!skipped && m.content.trim() == _said) {
-          skipped = true;
-          continue;
-        }
-        if (!isComplaint(m.content)) {
-          earlier = m.content.trim();
-          break;
-        }
-      }
-    } catch (_) {}
-    if (earlier == null) {
-      return _say("Sorry, that wasn't helpful. What would you like me to do? "
-          'I can add tasks, set reminders, or go over your plans.');
-    }
-    final last = _lastTask == null ? null : await taskRepo.get(_lastTask!);
-    final t = last != null && named([last], earlier).isNotEmpty ? last : null;
-    final String fallback;
-    if (t == null) {
-      fallback =
-          'Sorry, that reply missed the point. About "${_cut(earlier)}": '
-          'should I make it a task or a reminder, or did you just want to talk it through?';
-    } else if (t.done) {
-      fallback =
-          'Sorry, that reply missed the point. #${t.id} ${t.title} is marked done'
-          '${t.outcome == null ? '' : ', and I noted: ${_cut(t.outcome!)}'}. '
-          'Want a reminder to follow up on it later?';
-    } else {
-      fallback =
-          'Sorry, that reply missed the point. About #${t.id} ${t.title}: '
-          'should I mark it done, or move it to another day?';
-    }
-    return _say(await _converse(
-        earlier,
-        [
-          if (t != null) 'Task: ${_line(t)}',
-          if (t?.outcome != null) 'Outcome noted: ${t!.outcome}',
-        ],
-        fallback,
-        'Your previous reply was unhelpful. Start with a short apology, then respond properly to this message and offer one useful next step.',
-        history: await _chatHistory()));
-  }
-
-  /// The user's own earlier messages from any chat sharing words with [text]
-  /// (this turn excluded). Optional context: a failed read is just none.
-  Future<List<Message>> _related(String text) async {
-    try {
-      return (await conversations.relevant(text, limit: 4))
-          .where((m) =>
-              _safeHistorical(m.content) &&
-              m.content.trim() != _said &&
-              m.content.trim() != text.trim())
-          .take(3)
-          .toList();
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  // Durable personal facts are sourced only from active memory rows. Replaying
-  // old chat statements would resurrect deleted or superseded preferences.
-  bool _safeHistorical(String text) =>
-      !RuleEngine.isExplicitRemember(text) &&
-      !isUsefulPersonalMemory(
-          (_fallback.extractMemory(text)['memory'] as String?) ?? text) &&
-      !text.toLowerCase().contains('remember');
-
-  Future<List<String>> _personalMemories(String text) async {
-    if (RuleEngine.isGeneralKnowledge(text)) return const [];
-    try {
-      return (await memory.relevantForContext(text, limit: 3))
-          .map((m) => _cut(m.content))
-          .toList();
-    } catch (_) {
-      _diag['memory'] = 'retrieval_failed';
-      return const [];
-    }
-  }
-
-  /// Sends [p] to the model within this turn's [_ModelBudget]: null when the
-  /// budget for its kind is spent. An identical prompt reuses its output (a
-  /// cache hit — the callbacks of the original call do not replay).
-  /// [onRaw] receives the cumulative raw output while the model generates;
-  /// [onText] the cumulative user-visible respond text, when the contract has
-  /// one.
-  Future<String?> _complete(Prompt p,
-      {void Function(String raw)? onRaw,
-      void Function(String visible)? onText}) async {
-    final key = '${p.kind.name}\u0000${p.contract}\u0000${p.render()}';
-    final seen = _budget._seen[key];
-    if (seen != null) return seen;
-    if (p.kind == PromptKind.plan) {
-      if (_budget.plan >= _ModelBudget.maxPlan) return null;
-      _budget.plan++;
-    } else {
-      if (_budget.reply >= _ModelBudget.maxReply) return null;
-      _budget.reply++;
-    }
-    final raw = await engine.completeStreaming(p, onText: onText, onRaw: onRaw);
-    _budget._seen[key] = raw;
-    return raw;
-  }
-
-  /// Publishes one live-draft update: cumulative visible reply text (''
-  /// withdraws the draft). Records the first-visible-text latency once.
-  void _sendLive(String text) {
-    if (text == _liveSent) return;
-    _liveSent = text;
-    final t = _timing;
-    if (text.isNotEmpty && t != null && !t.containsKey('first_text')) {
-      t['first_text'] = _turnClock.elapsedMilliseconds;
-    }
-    _streamSink?.call(text);
-  }
-
-  /// The streaming gate shared by the plan and reply paths: given one
-  /// cumulative chunk of visible reply text and [passes] — the same checks
-  /// the completed answer must pass — returns the text to publish (cumulative
-  /// replace; '' withdraws), or null when nothing new may be shown.
-  ///
-  /// Guarantees: an *established* violation (ungrounded completed number,
-  /// action claim, JSON, oversized text, echo) permanently blocks the stream —
-  /// these checks only ever flip from pass to fail as text grows, so nothing
-  /// that later fails was ever displayed. An *undecidable* suffix (a number or
-  /// claim-verb word still arriving) is held, not judged: 'Those 1' waits,
-  /// then 'Those 12 ideas' is released whole when 12 is grounded. Held tails
-  /// surface at finalization, when the authoritative answer replaces the
-  /// draft. Write plans never reach this gate at all: their replies stay
-  /// buffered until the operation commits.
-  String? _streamedDraft(String cumulative, bool Function(String) passes) {
-    if (_streamBlocked) return null;
-    final hold = undecidableSuffixLength(cumulative);
-    final decidable = cumulative.substring(0, cumulative.length - hold);
-    if (decidable.isEmpty) return null;
-    if (passes(decidable)) return decidable;
-    _streamBlocked = true;
-    return '';
-  }
-
-  /// Emits this turn's mood at most once (the first valid reading wins),
-  /// reports its arrival latency, and stores it against the turn's user
-  /// message row. A storage failure never affects the reply.
-  void _emitMood(MoodReading reading, {required String source}) {
-    if (_moodEmitted) return;
-    _moodEmitted = true;
-    final t = _timing;
-    if (t != null && !t.containsKey('mood')) {
-      t['mood'] = _turnClock.elapsedMilliseconds;
-    }
-    final record = TurnMood(
-      source: source,
-      conversationId: id,
-      turnId: _op,
-      generationId: '$_op/$source#${_budget.plan}p${_budget.reply}r',
-      emotion: reading.mood == null
-          ? null
-          : MascotEmotion(reading.mood!, reading.intensity),
-      confidence: reading.confidence,
-      messageRowId: _userRowId,
-    );
-    _moodSink?.call(record);
-    _diag['mood'] = '${reading.mood?.name ?? 'unknown'}($source)';
-    final repo = moods;
-    final row = _userRowId;
-    if (repo != null && row != null) {
-      _moodSave = repo
-          .save(
-            messageId: row,
-            chatId: id,
-            source: source,
-            mood: reading.mood?.name,
-            intensity: reading.intensity,
-            confidence: reading.confidence,
-          )
-          .catchError((_) {}); // display already updated; retried next turn
-    }
-  }
-
-  /// A short reply from the local model about facts the app read, in the
-  /// user's tone. Only prose: anything claiming an action, carrying an
-  /// ungrounded number, parroting the message, or not a plain reply falls
-  /// back to [fallback]. [history]: recent turns from [_chatHistory].
-  /// A dry run ([compareInterpreters]) never calls the model here.
-  ///
-  /// The reply is streamed into the live draft as it grows: each cumulative
-  /// chunk is shown only while it still passes the same checks the final text
-  /// must pass, so no unverified claim is ever displayed. A chunk that fails
-  /// a check stops the stream and withdraws the draft; the final reply (or
-  /// the fallback) is decided afterwards exactly as before.
-  Future<String> _converse(
-      String text, List<String> facts, String fallback, String goal,
-      {List<Message> history = const []}) async {
-    if (_dryRun) return fallback;
-    if (engineInUse != engine.name || engine is RuleEngine) return fallback;
-    if (loadEngine != null) {
-      try {
-        if (!await loadEngine!()) return fallback;
-      } catch (_) {
-        return fallback;
-      }
-    }
-    if (_cancelled) throw ToolError('cancelled');
-    final context = ['Goal: $goal', ...facts].join('\n');
-    final p = Prompt(PromptKind.reply, text,
-        tone: (await profile.get())?.tone,
-        now: _now(),
-        context: context,
-        history: history,
-        personalContext: buildPersonalContext(
-            await profile.get() ?? const UserProfile(),
-            await _personalMemories(text)));
-    String? raw;
-    try {
-      if (_liveSent.isNotEmpty) _sendLive(''); // a replaced draft starts clean
-      final grounding = '$context\n$text';
-      raw = await _complete(p, onRaw: (chunk) {
-        if (_cancelled) return;
-        if (!_moodEmitted) {
-          final reading = planStreamView(chunk).mood;
-          if (reading != null) _emitMood(reading, source: 'model:reply');
-        }
-        final v = visibleRespondText(chunk);
-        if (v == null || v.isEmpty) return;
-        final next = _streamedDraft(
-            v,
-            (t) =>
-                safeReply(t, grounding) &&
-                !echoes(t, text) &&
-                !echoes(t, _said));
-        if (next == null) return;
-        _sendLive(next);
-        _diag['stream'] = next.isEmpty ? 'withheld' : 'reply';
-      });
-      if (raw == null) _diag['reply_budget'] = 'spent';
-    } on PlatformException catch (e) {
-      if (e.code == 'llama_cancelled') _cancelled = true;
-    } catch (_) {}
-    if (_cancelled) throw ToolError('cancelled');
-    _diag['reply'] = 'fallback';
-    if (raw == null) return fallback;
-    try {
-      final c = parseToolCall(raw);
-      final r = c.args['text'];
-      if (c.tool == 'respond' &&
-          r is String &&
-          safeReply(r, '$context\n$text') &&
-          !echoes(r, text) &&
-          !echoes(r, _said)) {
-        _diag['reply'] = 'model';
-        return r.trim();
-      }
-    } on ToolError {
-      // not a plain reply: the deterministic text stands
-    }
-    return fallback;
-  }
-
-  /// Rewrites a validated call by app rules only: a timed meeting the user
-  /// said they have gets its alerts (task-linked reminders on) even without
-  /// "remind me"; "15 minutes before" is that item's own early alert.
-  Future<ToolCall> _adjust(ToolCall c) async {
-    final a = c.args, due = a['due'];
-    final r = c.tool.startsWith('create_') ? _fallback.readWhen(_said) : null;
-    if (c.tool == 'create_task' &&
-        due is DateTime &&
-        r != null &&
-        r.dated &&
-        !r.timed &&
-        RegExp(r'^call(?: with .+)?$', caseSensitive: false)
-            .hasMatch((a['title'] as String).trim())) {
-      final draft = ClarifyDraft(
-          tool: c.tool,
-          title: a['title'] as String,
-          day: due.toIso8601String().substring(0, 10));
-      _diag['clarify'] = 'event_time';
-      _note = null;
-      await _setDraft(draft);
-      return _say(draft.prompt);
-    }
-    final rel = r?.anchor?.relation;
-    final deadline = r != null &&
-        r.role == TemporalRole.deadline &&
-        (rel == TemporalRelation.within || rel == TemporalRelation.before);
-    if (deadline && c.tool == 'create_reminder' && r.at == a['at']) {
-      _note = _note == null ? _deadlineNote : '$_note $_deadlineNote';
-    }
-    if (c.tool == 'create_task' &&
-        !deadline &&
-        tools.preferences != null &&
-        due is DateTime &&
-        due.isAfter(_now()) &&
-        (isEventTitle(a['title'] as String) ||
-            (await tools.preferences!.get()).multiple)) {
-      c = ToolCall('create_reminder', {'title': a['title'], 'at': due});
-    }
-    if (c.tool == 'create_reminder' && _leadMin != null) {
-      c = ToolCall(c.tool, {
-        ...c.args,
-        'lead': [_leadMin!]
-      });
-    }
-    if (c.tool == 'create_reminder' &&
-        tools.preferences != null &&
-        !isEventTitle(c.args['title'] as String) &&
-        !c.args.containsKey('follow_up')) {
-      c = ToolCall(c.tool, {...c.args, 'follow_up': false});
-    }
-    return c;
-  }
-
   static const _deadlineNote =
       "That's the deadline you gave; tell me if you want an earlier alert.";
 
-  /// Grounding for [c]'s fields, as the route recorded it, else read from
-  /// the message itself: a title said (at least half its words), the user's
-  /// own time words, an id the user typed or an exact title they gave.
-  Map<String, String> _evidenceFor(ToolCall c) {
-    final e = {..._evidence};
-    final f = familyOf(c.tool);
-    if (f == ActionFamily.create) {
-      final title = c.args['title'];
-      if (e['title'] == null && title is String && _grounded(title, _said)) {
-        e['title'] = 'said';
-      }
-      final timed = c.args['at'] != null || c.args['due'] != null;
-      if (e['time'] == null && timed) {
-        final r = _fallback.readWhen(_said);
-        if (r.spans.isNotEmpty) {
-          e['time'] = r.spans.map((s) => s.text).join(' | ');
-        } else if (r.at != null || _fallback.findWhen(_said).at != null) {
-          e['time'] = 'resolved';
-        }
-      }
-    } else if (f == ActionFamily.change && e['target'] == null) {
-      final id = c.args['id'];
-      final sel = c.args['title'] ?? c.args['target_title'];
-      if (id is int && RegExp('(?:#|\\b)$id\\b').hasMatch(_said)) {
-        e['target'] = 'typed';
-      } else if (sel is String && _grounded(sel, _said, all: true)) {
-        e['target'] = 'exact_title';
-      }
-    }
-    return e;
-  }
-
-  /// The task a completion is about, read before it runs (its follow-up is
-  /// cancelled by it): is it a meeting-like event?
-  Future<({Task task, bool event})?> _before(ToolCall c) async {
-    if (c.tool != 'complete_task') return null;
-    try {
-      final ref = c.args['id'], title = c.args['title'];
-      Task? t;
-      if (ref is int) {
-        t = await taskRepo.get(ref);
-      } else if (title is String) {
-        final l = await taskRepo.byTitle(title);
-        t = l.length == 1 ? l.single : null;
-      }
-      if (t == null || t.done) return null;
-      final id = t.id;
-      final follow = (await tools.reminders.upcoming())
-          .any((r) => r.taskId == id && r.kind == 'follow_up');
-      return (
-        task: t,
-        event: follow ||
-            t.endsAt != null ||
-            t.subject != null ||
-            isEventTitle(t.title)
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// After a committed write: a new meeting asks its optional details; a
-  /// finished one asks how it went (follow-ups on) or notes the outcome the
-  /// message already gave. Metadata only, through the executor ([run]); a
-  /// failure here never hides the write's own reply.
-  Future<String> _after(
-      ToolCall c,
-      ({Task task, bool event})? before,
-      String reply,
-      String text,
-      Future<ExecutionReceipt> Function(ToolCall) run) async {
-    try {
-      if (_subject != null &&
-          c.tool.startsWith('create_') &&
-          _lastTask != null) {
-        await run(ToolCall(
-            'set_event_details', {'id': _lastTask, 'subject': _subject}));
-      }
-      if (c.tool == 'create_reminder' && _lastTask != null) {
-        final found = await taskRepo.get(_lastTask!);
-        if (found == null || found.done || !isEventTitle(found.title)) {
-          return reply;
-        }
-        var t = found;
-        // "meeting in 10 minutes for half an hour": its end, not its start.
-        final r = _fallback.readWhen(text);
-        if (r.end != null && t.dueAt == r.at && t.endsAt == null) {
-          try {
-            await run(
-                ToolCall('set_event_details', {'id': t.id, 'ends_at': r.end}));
-            t = await taskRepo.get(t.id) ?? t;
-          } on ToolError {
-            // not after the start: the optional question below still asks
-          }
-        }
-        final more = <String>[];
-        if (t.awaiting == null && t.endsAt == null && t.subject == null) {
-          await run(ToolCall(
-              'set_awaiting', {'id': t.id, 'question': TaskRepo.details}));
-          final follow = (await tools.reminders.upcoming())
-              .any((r) => r.taskId == t.id && r.kind == 'follow_up');
-          more.add(follow
-              ? 'When does it end, and what is it about? Then I can check in right after it ends. (Optional.)'
-              : 'Optional: when does it end, and what is it about?');
-        }
-        final k = keyWords(t.title)
-            .where((w) => !isEventTitle(w) && w != 'meet')
-            .toSet();
-        for (final o in await taskRepo.list()) {
-          if (o.id != t.id &&
-              isArrangement(o.title) &&
-              keyWords(o.title).any(k.contains)) {
-            more.add(
-                'Your task #${o.id} "${o.title}" is still open; say "complete task #${o.id}" '
-                'when setting it up is done.');
-            break;
-          }
-        }
-        return [reply, ...more].join(' ');
-      }
-      if (c.tool != 'complete_task' ||
-          before == null ||
-          (!before.event && c.args['outcome'] == null)) return reply;
-      final t = before.task;
-      await run(ToolCall('review_answered', {'id': t.id}));
-      final outcome =
-          (c.args['outcome'] as String?) ?? eventDone(text)?.outcome;
-      if (outcome != null) {
-        final sp = splitRequest(outcome);
-        if (t.awaiting == TaskRepo.details) {
-          await run(ToolCall('set_awaiting', {'id': t.id, 'question': null}));
-        }
-        if (sp.outcome.isNotEmpty) {
-          await run(
-              ToolCall('record_outcome', {'id': t.id, 'outcome': sp.outcome}));
-        }
-        final ack = sp.outcome.isEmpty
-            ? ''
-            : await _converse(
-                sp.outcome,
-                [_line(t)],
-                'Thanks for telling me how it went; I noted it.',
-                'This is finished and the user said how it went (it may not have happened). Acknowledge that in one sentence; do not ask how it went.');
-        return [
-          reply,
-          if (ack.isNotEmpty) ack,
-          sp.request == null
-              ? 'If anything from it needs a reminder, just tell me.'
-              : 'To set a reminder from it, send it on its own, e.g. "${sp.request}".',
-        ].join(' ');
-      }
-      if (!before.event) return reply;
-      if ((await tools.preferences?.get())?.followUp ?? false) {
-        await run(ToolCall('set_awaiting',
-            {'id': t.id, 'question': TaskRepo.outcomeQuestion}));
-        return '$reply How did it go? Anything from it you want me to remind you about later?';
-      }
-      if (t.awaiting == TaskRepo.details) {
-        await run(ToolCall('set_awaiting', {'id': t.id, 'question': null}));
-      }
-      return reply;
-    } on ToolError {
-      return reply; // cancelled mid-reply: the committed write still reports itself
-    } catch (e) {
-      debugPrint('follow-through metadata failed');
-      return reply;
-    }
-  }
-
   // ---- commit: validate, then the executor is the only writer ----
 
-  Future<String> _commit(CandidatePlan plan, String text,
-      Map<String, int> timing, OperationJournal? journal,
-      {bool recovering = false}) async {
-    var p = plan;
-    final v = validatePlan(p);
-    _diag['validation'] = v.accepted ? 'ok' : v.reason!;
-    if (!v.accepted) {
-      _note = _header = _prefix = null;
-      p = CandidatePlan(
-          interpreter: p.interpreter,
-          route: p.route,
-          call: _say(v.reply!),
-          evidence: p.evidence,
-          authorization: p.authorization,
-          modelAuthorization: p.modelAuthorization);
-    }
-    final memo = _memoryEffect != null && _auth.permitsReport && !recovering
-        ? _memoryEffect
-        : null;
-    if (p.call.tool != 'respond' || p.effects.isNotEmpty) {
-      _go(SessionState.executing);
-    }
-    _diag['tool'] = p.call.tool;
-    _diag['db'] = p.call.tool == 'respond' ? 'none' : 'error';
-    if ((p.writes || memo != null) && !recovering) {
-      await journal?.mark(_op, OperationJournal.executing,
-          action: p.toActionJson());
-    }
-    final receipts = <ExecutionReceipt>[];
-    final opId = journal == null ? null : _op;
-    Future<ExecutionReceipt> run(ToolCall c) async {
-      final r = await tools.run(c, operationId: opId, recovering: recovering);
-      receipts.add(r);
-      return r;
-    }
-
-    final exec = Stopwatch()..start();
-    try {
-      if (memo != null) {
-        await run(memo);
-        _saved.add(memo.args['content'] as String);
-      }
-      for (final e in p.effects) {
-        await run(e);
-      }
-      await _applyPending(p.pending);
-      final before = await _before(p.call);
-      final main = await run(p.call);
-      if (p.call.tool != 'respond') _diag['db'] = 'ok';
-      _diag['receipt'] = main.status.name;
-      if (main.alarm != AlarmStatus.none) _diag['alarm'] = main.alarm.name;
-      await _rememberTask(p.call);
-      final reply = await _after(p.call, before, main.reply, text, run);
-      lastTurn = TurnRecord(
-          operationId: _op,
-          plan: p,
-          validation: v,
-          receipts: receipts,
-          reply: reply);
-      if (receipts.any((r) => r.wrote)) {
-        await journal?.mark(_op, OperationJournal.committed,
-            receipt: jsonEncode(lastTurn!.toJson()));
-      }
-      return reply;
-    } on ToolError catch (e) {
-      receipts.add(ExecutionReceipt(
-          tool: p.call.tool,
-          status: ReceiptStatus.failed,
-          operationId: opId,
-          reply: e.message,
-          error: e.message));
-      _diag['receipt'] = 'failed';
-      lastTurn = TurnRecord(
-          operationId: _op,
-          plan: p,
-          validation: v,
-          receipts: receipts,
-          reply: e.message);
-      rethrow;
-    } finally {
-      timing['execution'] = exec.elapsedMilliseconds;
-    }
-  }
-
-  // ---- model-first semantic planning ----
-
-  /// One grammar-constrained model call -> [Semantic] -> validated tool call.
-  /// Null = no usable plan (rules take over; [lastFallbackReason] says why).
-  /// The legacy interpreter uses plan-v1, the unified one plan-v2.
-  Future<ToolCall?> _semantic(String text, Map<String, int> timing) async {
-    var loaded = true;
-    if (loadEngine != null) {
-      try {
-        loaded = await loadEngine!();
-      } catch (_) {
-        loaded = false;
-      }
-    }
-    if (_cancelled) throw ToolError('cancelled');
-    if (!loaded) {
-      lastFallbackReason = 'the local model is not loaded';
-      _diag['model'] = 'unavailable';
-      _diag['fallback'] = 'not_loaded';
-      return null;
-    }
-    final v2 = _mode == Interpreter.unified;
-    final contract = v2 ? planContractV2 : promptContractVersion;
-    final ctx = Stopwatch()..start();
-    final open = await taskRepo.relevantTasks(text, cap: _taskCap);
-    final draft = await _draft();
-    final last = _lastTask == null ? null : await taskRepo.get(_lastTask!);
-    // Only the user's own earlier words: assistant replies (old lists) never.
-    final earlier = (await conversations.recent(id, n: 5))
-        .where((m) =>
-            m.role == 'user' &&
-            m.content.trim() != text.trim() &&
-            _safeHistorical(m.content))
-        .map((m) =>
-            m.content.length > 120 ? m.content.substring(0, 120) : m.content)
-        .toList();
-    // Context is global: the user's related words from any chat.
-    final related = (await _related(text))
-        .map((m) =>
-            m.content.length > 120 ? m.content.substring(0, 120) : m.content)
-        .where((m) => !earlier.contains(m))
-        .toList();
-    final p = Prompt(PromptKind.plan, text,
-        now: _now(),
-        contract: contract,
-        // The most relevant tasks, listed by id: a stable order keeps the
-        // KV-cached prefix valid from one message to the next.
-        tasks: open.isEmpty
-            ? '(none)'
-            : [
-                for (final t
-                    in open.take(_taskCap).toList()
-                      ..sort((a, b) => a.id.compareTo(b.id)))
-                  _line(t),
-                if (open.length > _taskCap)
-                  '(and ${open.length - _taskCap} more)',
-              ].join('\n'),
-        context: [
-          if (last != null && !last.done) 'Last task mentioned: ${_line(last)}',
-          for (final m in earlier.reversed.take(2).toList().reversed)
-            'Earlier user message: $m',
-          for (final m in related.take(2))
-            'Related earlier user message (any chat): $m',
-        ].join('\n'),
-        pending: draft == null
-            ? null
-            : '${draft.tool == 'create_reminder' ? 'reminder' : 'task'} '
-                '"${draft.title}" still needs a time',
-        // Profile (name, tone) stays in the KV-cached system prompt; the
-        // memories picked for this message go in the user turn.
-        memories: (await _personalMemories(text))
-            .where(isUsefulPersonalMemory)
-            .take(3)
-            .toList(),
-        tone: (await profile.get())?.tone,
-        personalContext: buildPersonalContext(
-            await profile.get() ?? const UserProfile(), const []));
-    timing['context'] = ctx.elapsedMilliseconds;
-    if (_cancelled) throw ToolError('cancelled');
-    _diag['model'] = 'called';
-    _diag['prompt'] = promptIdentity(contract);
-    final Semantic s;
-    try {
-      // Streamed: the mood envelope (first field of the contract) is emitted
-      // as soon as it completes, and a chat plan's reply prose flows into the
-      // live draft while the plan is still generating. Only `chat` streams:
-      // its reply is the answer itself and passes the same checks now that
-      // the final text must pass later. Write/list/recall plans buffer —
-      // their reply is a follow-up the app appends after its own exact
-      // confirmation, and never a success claim (nothing has committed yet).
-      final raw = await _complete(p, onRaw: (chunk) {
-        if (_cancelled) return;
-        final view = planStreamView(chunk);
-        if (view.mood != null) {
-          _emitMood(view.mood!, source: 'model:$contract');
-        }
-        if (view.intent != 'chat' || view.replyText == null) return;
-        final next = _streamedDraft(
-            view.replyText!,
-            (t) =>
-                safeReply(t, text) &&
-                !echoes(t, text) &&
-                !_groundless(t, open));
-        if (next == null) return;
-        _sendLive(next);
-        _diag['stream'] = next.isEmpty ? 'withheld' : 'plan';
-      });
-      if (raw == null) {
-        lastFallbackReason = 'the model was already asked this turn';
-        _diag['fallback'] = 'model_budget';
-        return null;
-      }
-      if (_logRaw) debugPrint('raw plan: $raw');
-      s = parseSemantic(raw, version: v2 ? 2 : 1);
-    } on PlatformException catch (e) {
-      if (e.code == 'llama_cancelled' || _cancelled) {
-        _cancelled = true;
-        throw ToolError('cancelled');
-      }
-      if (e.code == 'prompt_too_long') return _say(tooLongReply);
-      lastFallbackReason = 'the local model failed (${e.code})';
-      _diag['model'] = 'failed';
-      _diag['fallback'] = 'native_${e.code}';
-      return null;
-    } on ToolError {
-      lastFallbackReason = 'the model reply was not a valid plan';
-      _diag['model'] = 'invalid';
-      _diag['fallback'] = 'invalid_plan';
-      return null;
-    } catch (_) {
-      lastFallbackReason = 'the local model failed';
-      _diag['model'] = 'failed';
-      _diag['fallback'] = 'engine_exception';
-      return null;
-    }
-    if (_cancelled) throw ToolError('cancelled');
-    _diag['intent'] = s.intent;
-    _modelAuth = s.authorization;
-    if (s.authorization != null) _diag['auth_model'] = s.authorization!;
-    final c = await _act(s, text, open, draft);
-    final line = s.reply;
-    if (c != null &&
-        line != null &&
-        c.tool == 'respond' &&
-        _diag['clarify'] == 'event_time' &&
-        isSafeFollowUp(line, text)) {
-      _diag['reply'] = 'model_line';
-      return _say('${c.args['text']} ${line.trim()}');
-    }
-    if (c != null && line != null && _writes.contains(c.tool)) {
-      if (_diag['clarify'] != null) {
-        _diag['line'] = 'clarify';
-      } else if (!isSafeFollowUp(line, text)) {
-        _diag['line'] = 'unsafe';
-      } else {
-        _modelLine = line.trim();
-      }
-    }
-    if (c == null) {
-      lastFallbackReason ??=
-          'the model\'s reading (${s.intent}) did not fit your message';
-      _diag['fallback'] ??= 'rejected_${s.intent}';
-    }
-    return c;
-  }
-
-  /// "#3 buy milk (due tomorrow (Thu 15 Oct) at 9:00 AM)": dates from SQLite.
-  String _line(Task t) => '#${t.id} ${t.done ? '[done] ' : ''}${t.title}'
-      '${t.dueAt == null ? '' : ' (due ${friendlyTime(t.dueAt!, _now())})'}'
-      '${t.subject == null ? '' : ', about ${t.subject}'}';
-
-  Future<void> _rememberTask(ToolCall c) async {
-    if (c.tool == 'list_tasks') _lastTask = null;
-    final id = c.args['id'];
-    if (id is int && c.tool.endsWith('_task')) _lastTask = id;
-    if (c.tool == 'create_task' || c.tool == 'create_reminder') {
-      // The task this call is about: its explicit link, or the one pending task
-      // with its title (a repeated reminder resolves to its existing task). A
-      // standalone reminder (no preferences = no task) or an ambiguous title
-      // clears the context; never "newest id", which may be unrelated.
-      final link = c.args['task_id'];
-      final standalone =
-          c.tool == 'create_reminder' && tools.preferences == null;
-      final same = standalone || link is int
-          ? const <Task>[]
-          : await taskRepo.byTitle(c.args['title'] as String);
-      _lastTask = link is int
-          ? link
-          : same.length == 1
-              ? same.single.id
-              : null;
-    }
-  }
+  /// The rules' and explicit route's memory confirmations ("Okay, I'll
+  /// remember that." / "... through Mon 2 Nov."), shown only after a write.
+  static final _memoryClaim =
+      RegExp(r"^Okay, I'll remember that\b", caseSensitive: false);
+  static const _memoryRecoveryWithheld =
+      'Memory recovery is unresolved; the earlier memory action was withheld.';
+  static const _memoryWriteFailed =
+      "I couldn't save that memory just now. Please try again.";
 
   /// Development only (`--dart-define=CORENYTH_LOG_RAW=true`): logs the
   /// model's raw plan, which quotes the user. Off in every normal build.
@@ -2301,182 +1500,6 @@ class AssistantSession {
     'list_reminders'
   };
 
-  /// The app's side of a semantic plan: every title/ref must come from the
-  /// message, every date from the app's own parser, every id from SQLite.
-  Future<ToolCall?> _act(
-      Semantic s, String text, List<Task> open, ClarifyDraft? draft) async {
-    final explicit = _fallback.fastRoute(text);
-    final et = explicit?['type'] == 'tool' ? explicit!['tool'] as String : null;
-    if (_ruleOnly.contains(et) ||
-        (et == 'edit_task' &&
-            (explicit!['arguments'] as Map).containsKey('title'))) {
-      return null;
-    }
-    // A clear command the model filed as chat/list/recall: the rules handle it.
-    bool command() =>
-        _fallback.parseCreate(text) != null ||
-        RuleEngine.doneRef(text) != null ||
-        (_auth.kind == Authorization.request &&
-            RegExp(r'^(?:please )?(?:delete|remove|mark|complete|move|push|postpone|change|rename|reschedule)\b',
-                    caseSensitive: false)
-                .hasMatch(text.trim()));
-    // plan-v2: the model said "don't"/"only asking"/"what if" about a message
-    // the app reads as an authorizing request. Its label never authorizes or
-    // forbids alone: the plan is set aside and the deterministic rules,
-    // which only act on fully recognized commands, decide.
-    const doubtful = {'negated', 'question', 'hypothetical'};
-    if (_mode == Interpreter.unified &&
-        doubtful.contains(s.authorization) &&
-        _auth.permitsWrite &&
-        familyOf(_intentTool(s.intent)) != ActionFamily.read) {
-      _diag['fallback'] = 'authorization_disagreement';
-      lastFallbackReason =
-          'the model read your message as ${s.authorization}, which did not match it';
-      return null;
-    }
-    // A question about the user's own plans is answered from SQLite, never prose.
-    final dataQuestion = !command() &&
-        !RuleEngine.isNegated(text) &&
-        (_dataQuestion.hasMatch(text) || _rangeIn(text) != null) &&
-        RegExp(r"\b(?:what|which|any|anything|show|list|tell|pending|left|got)\b|\?",
-                caseSensitive: false)
-            .hasMatch(text);
-    switch (s.intent) {
-      case 'chat':
-        if (command()) return null;
-        // "did I miss anything", "am I behind on anything": the overdue list.
-        if (_overdueQuestion.hasMatch(text) && !RuleEngine.isNegated(text)) {
-          _header = rangeLabel('overdue');
-          return ToolCall('list_tasks', rangeArgs('overdue', _now()));
-        }
-        if (dataQuestion) {
-          _header = rangeLabel(_rangeIn(text) ?? 'all');
-          return ToolCall(
-              'list_tasks', rangeArgs(_rangeIn(text) ?? 'all', _now()));
-        }
-        final r = s.reply;
-        final planned =
-            r != null && !_groundless(r, open) && !echoes(r, text) ? r : null;
-        // One call per turn: the plan already carries the toned answer.
-        if (planned != null && safeReply(planned, text)) {
-          _diag['reply'] = 'model';
-          return _say(_corePolicy.concise(planned.trim(), text));
-        }
-        final said = await _converse(text, const [], planned ?? '',
-            'Small talk or a general message. Reply naturally to what the user actually said, in one or two sentences.',
-            history: await _chatHistory());
-        if (said.isNotEmpty && !_groundless(said, open)) {
-          return _say(_corePolicy.concise(said, text));
-        }
-        return planned == null ? null : _say(planned);
-      case 'list':
-        if (command()) return null;
-        // "which reminders are coming up", "got any alarms lined up": the
-        // reminders, not the task list.
-        if (_reminderNoun.hasMatch(text) && !RuleEngine.isNegated(text)) {
-          return ToolCall('list_reminders', const {});
-        }
-        if (!dataQuestion) {
-          final read = _fallback.plan(text);
-          if (read['type'] == 'tool' && read['tool'] == 'search_memory') {
-            return _recall(text);
-          }
-          // The model heard a request to see plans in words the app's own
-          // patterns miss ("gimme a rundown of tmrw", "did i miss anything").
-          // Listing only reads, so that reading stands unless the user said
-          // not to.
-          if (!RuleEngine.isNegated(text)) {
-            final range = _rangeIn(text) ?? RuleEngine.agendaRange(text);
-            _header = rangeLabel(range);
-            return ToolCall('list_tasks', rangeArgs(range, _now()));
-          }
-          final r = s.reply;
-          if (r != null &&
-              safeReply(r, text) &&
-              !_groundless(r, open) &&
-              !echoes(r, text)) {
-            _diag['reply'] = 'model';
-            return _say(r.trim());
-          }
-          return _say(await _converse(text, const [], 'Tell me a little more.',
-              'Respond to the actual message. No tasks, reminders or actions were requested.',
-              history: await _chatHistory()));
-        }
-        // The day the user said wins over a missing or different model range.
-        final range = _rangeIn(text) ?? RuleEngine.agendaRange(text);
-        _header = rangeLabel(range);
-        return ToolCall('list_tasks', rangeArgs(range, _now()));
-      case 'recall':
-        if (command()) return null;
-        if (_auth.kind == Authorization.hypothetical) {
-          final relevant = named(open, text);
-          final fallback = relevant.isEmpty
-              ? "I haven't changed anything. Tell me if you decide to make that change."
-              : '${relevant.map((t) => t.title).join(', ')} is still on your list. Let me know if you decide to change it.';
-          return _say(await _converse(
-              text,
-              relevant.map(_line).toList(),
-              fallback,
-              'Discuss this possibility briefly. The user has not decided; no action was taken.',
-              history: await _chatHistory()));
-        }
-        if (RuleEngine.isGeneralKnowledge(text)) {
-          return _say(
-              "I can't look that up offline, and I'd rather not guess.");
-        }
-        if (!isQuestionLike(text) &&
-            !RegExp(r'\bremember\b', caseSensitive: false).hasMatch(text))
-          return null;
-        return _recall(text);
-      case 'cancel_pending':
-        if (draft == null) return null;
-        _clearDraft();
-        return _say('Okay, I dropped "${draft.title}".');
-      case 'answer_pending':
-        if (draft == null) return null;
-        final w = s.when;
-        final answer = w != null && _mentioned(w, text) ? w : text;
-        final r = _fallback.resolveClarify(draft, answer);
-        return await _answer(draft, r, answer) ?? _say(draft.prompt);
-      case 'create_task':
-      case 'create_reminder':
-        return _create(s, text);
-      case 'complete':
-      case 'delete':
-      case 'postpone':
-        return _change(s, text, open);
-      // plan-v2 follow-through intents: the same handlers as the
-      // deterministic routes, reached when those did not recognize it.
-      case 'progress':
-      case 'outcome':
-      case 'details':
-        if (_mode != Interpreter.unified || !_auth.permitsReport) return null;
-        return _followIntent(s, text, open);
-    }
-    return null;
-  }
-
-  /// The deterministic plan as a call. A memory lookup goes through [_recall],
-  /// which also checks earlier chats; a bare search_memory call would not.
-  Future<ToolCall> _rulePlanCall(String text) async {
-    final plan = _fallback.plan(text);
-    if (plan['type'] == 'tool' && plan['tool'] == 'search_memory') {
-      return _recall(text);
-    }
-    return parseToolCall(jsonEncode(plan));
-  }
-
-  Future<ToolCall> _recall(String text) async {
-    final hits = await memory.search(text, limit: 3);
-    if (hits.isNotEmpty) return ToolCall('search_memory', {'query': text});
-    final related = await _related(text);
-    if (related.isNotEmpty) {
-      return _say(
-          'Earlier you said: ${related.map((m) => _cut(m.content)).join('; ')}');
-    }
-    return _say('I have nothing stored about that.');
-  }
-
   static String _intentTool(String intent) => switch (intent) {
         'create_task' => 'create_task',
         'create_reminder' => 'create_reminder',
@@ -2490,298 +1513,6 @@ class AssistantSession {
         'details' => 'set_event_details',
         _ => 'respond',
       };
-
-  /// plan-v2 progress / outcome / details: the target must be named in the
-  /// message (every word of the model's ref) among the tasks that intent
-  /// applies to; meeting details are read by the app's own parser.
-  Future<ToolCall?> _followIntent(
-      Semantic s, String text, List<Task> open) async {
-    final ref = s.ref ?? s.title;
-    final asked = await taskRepo.awaitingAnswers();
-    final pool = switch (s.intent) {
-      'outcome' => [
-          for (final t in asked)
-            if (t.awaiting == TaskRepo.outcomeQuestion) t
-        ],
-      'details' => [
-          for (final t in asked)
-            if (t.awaiting == TaskRepo.details && !t.done && t.dueAt != null) t
-        ],
-      _ => open,
-    };
-    if (pool.isEmpty) return null;
-    List<Task> l;
-    if (ref != null) {
-      if (!_grounded(ref, text, all: true)) return null;
-      l = await _matching(ref, pool);
-      if (l.isEmpty) l = named(pool, ref);
-    } else {
-      l = pool.length == 1 ? pool : named(pool, text);
-    }
-    if (l.isEmpty) return null;
-    if (l.length > 1) {
-      return _ask(s.intent == 'progress' ? 'discuss' : s.intent, l, text,
-          'Which one do you mean?');
-    }
-    final t = l.single;
-    _evidence['target'] = 'model_ref';
-    return switch (s.intent) {
-      'progress' => _discuss(t, text),
-      'outcome' => _recordOutcome(t, text),
-      _ => _applyDetails(t, text),
-    };
-  }
-
-  Future<ToolCall?> _create(Semantic s, String text) async {
-    // Reminder vs silent task follows what the user said: "remind me…" always
-    // notifies; a plain statement never gets an alarm it didn't ask for.
-    if (RegExp(r'^(?:please )?(?:(?:can|could|would|will) (?:you|u) )?(?:book|order|send|pay|call|email)\b',
-                caseSensitive: false)
-            .hasMatch(text.trim()) &&
-        !RegExp(r'\b(?:task|remind|reminder|need to|have to)\b',
-                caseSensitive: false)
-            .hasMatch(text)) {
-      return _say(
-          "I can't do that action for you. Would you like me to save it as a task or reminder?");
-    }
-    final asked = _fallback.parseCreate(text)?.tool == 'create_reminder' ||
-        _notifyAsk.hasMatch(text);
-    final reminder = asked;
-    if (s.negated || RuleEngine.isNegated(text)) {
-      return _say("Okay, I won't save that.");
-    }
-    if (RuleEngine.isQuestionOrNegated(text))
-      return null; // "How do I buy milk?"
-    if (RuleEngine.isTentative(text)) {
-      _diag['clarify'] = 'tentative';
-      return _say("I haven't set anything since that sounds undecided. "
-          'If you want a reminder, tell me what and when.');
-    }
-    final parsed = _fallback.parseCreate(text);
-    final title = parsed != null
-        ? (parsed.note == RuleEngine.conflict
-            ? parsed.title
-                .replaceFirst(RegExp(r'^the ', caseSensitive: false), '')
-            : parsed.title)
-        : RuleEngine.cleanTitle(_fallback.readWhen(s.title ?? '').rest);
-    if (RegExp(r'^(?:it|that|this)(?: later)?$', caseSensitive: false)
-        .hasMatch(title)) {
-      _diag['clarify'] = 'target';
-      return _say('What should I remind you about?');
-    }
-    // Every content word of the title as the user said it: no invented object.
-    if (title.isEmpty || !_grounded(title, text, all: true)) return null;
-    _evidence['title'] = 'said';
-    // Two commitments in the message: save both or neither, never a subset.
-    if (RuleEngine.isMulti(title) || RuleEngine.isMulti(text)) {
-      return _say(RuleEngine.multiReply(title));
-    }
-    // Overrides only when the message talks about them; explicit words win.
-    final (mult, follow, _) = RuleEngine.extractFlags(text);
-    final multiple = mult ??
-        (RegExp(r'\b(?:multiple|several|times|alerts?|again)\b',
-                    caseSensitive: false)
-                .hasMatch(text)
-            ? s.multiple
-            : null);
-    final followUp = follow ??
-        (RegExp(r'\bfollow', caseSensitive: false).hasMatch(text)
-            ? s.followUp
-            : null);
-    final tool = reminder ? 'create_reminder' : 'create_task';
-    // Asking for one value keeps everything else that was understood.
-    Future<ToolCall> askTime(String code, String lead,
-        {String? time, DateTime? day}) async {
-      _diag['clarify'] = code;
-      final d = ClarifyDraft(
-          tool: tool,
-          title: title,
-          multiple: multiple,
-          followUp: followUp,
-          time: time,
-          day: day?.toIso8601String().substring(0, 10));
-      await _setDraft(d);
-      return _say('$lead${d.prompt}');
-    }
-
-    // The same resolver as the rules, over the whole message: the model's
-    // time words never outvote other time words the user also said.
-    final whole = _fallback.readWhen(text);
-    if (whole.conflict) {
-      return askTime('temporal_conflict',
-          '${RuleEngine.timeProblem(whole, reminder, _now())} ');
-    }
-    // Whole-message words the app can't schedule ("in 2 weeks", "every
-    // week", "30 February", or time words left over after the parts it did
-    // read) outrank any valid-looking subset the model copied.
-    if (whole.unsupported ||
-        (whole.at != null && RuleEngine.hasUnsupportedDate(whole.rest))) {
-      return askTime('unsupported_date', "I can't schedule that date yet. ");
-    }
-    DateTime? at;
-    String? note;
-    var reading = whole;
-    final w = s.when;
-    if (whole.at != null) {
-      at = whole.at;
-      note = whole.note;
-      _evidence['time'] = whole.spans.isEmpty
-          ? 'resolved'
-          : whole.spans.map((s) => s.text).join(' | ');
-    } else if (w != null && _mentioned(w, text)) {
-      final r = _fallback.resolveWhen(w);
-      if (!r.ok) {
-        // Words the app can't schedule: ask, keep the item, never guess.
-        return askTime(
-            'model_when_unresolved', 'I couldn\'t read "$w" as a time. ');
-      }
-      at = r.at;
-      note = r.note;
-      reading = _fallback.readWhen(w);
-      _evidence['time'] = 'model_copied: $w';
-    } else if (RuleEngine.hasUnsupportedDate(text)) {
-      return askTime('unsupported_date', "I can't schedule that date yet. ");
-    }
-    final anchor = reading.anchor;
-    final deadline = at != null &&
-        reading.role == TemporalRole.deadline &&
-        (anchor?.relation == TemporalRelation.within ||
-            anchor?.relation == TemporalRelation.before);
-    if (deadline && _pronounTitle.hasMatch(title)) {
-      // "Finish this within 10 minutes": a deadline for something unnamed.
-      _diag['clarify'] = 'deadline_target';
-      return _say('What needs to be done ${anchor!.text}? Tell me and I can '
-          'add it as a task or set a reminder.');
-    }
-    // "I have a meeting tomorrow": a day but no time for an event the user
-    // only mentioned. Ask its time (the day is kept) instead of guessing 9 AM.
-    if (!reminder &&
-        at != null &&
-        reading.dated &&
-        !reading.timed &&
-        (isEventTitle(title) ||
-            RegExp(r'^call(?: with .+)?$', caseSensitive: false)
-                .hasMatch(title.trim()))) {
-      return askTime('event_time', '', day: at);
-    }
-    final problem = RuleEngine.timeProblem(reading, reminder, _now());
-    if (problem != null) return askTime('deadline_not_alert', '$problem ');
-    if (at == null && !reminder) return ToolCall(tool, {'title': title});
-    if (at == null || at.isBefore(_now())) {
-      return askTime(at == null ? 'no_time_found' : 'time_passed',
-          at == null ? '' : '${friendlyTime(at, _now())} has already passed. ',
-          time: at == null || note != null ? null : RuleEngine.clockText(at));
-    }
-    if (note != null) _note = _note == null ? note : '$note $_note';
-    return ToolCall(
-        tool,
-        reminder
-            ? {
-                'title': title,
-                'at': at,
-                if (multiple != null) 'multiple': multiple,
-                if (followUp != null) 'follow_up': followUp,
-              }
-            : {'title': title, 'due': at});
-  }
-
-  Future<ToolCall?> _change(Semantic s, String text, List<Task> open) async {
-    if (s.negated || RuleEngine.isQuestionOrNegated(text)) {
-      return _say("I didn't change anything.");
-    }
-    // "Add a task to clean my room" never completes or deletes: the user's
-    // words ask to create, so this plan is unsafe, not merely different.
-    if (s.intent != 'postpone' && _fallback.parseCreate(text) != null) {
-      return null;
-    }
-    final tool = const {
-      'complete': 'complete_task',
-      'delete': 'delete_task',
-      'postpone': 'edit_task'
-    }[s.intent]!;
-    var ref = s.ref ?? s.title;
-    var id = ref == null
-        ? null
-        : RegExp(r'^#?(\d+)(?:\s+\D.*)?$').firstMatch(ref.trim());
-    var modelPicked = false;
-    // The prompt offers "#id" from Current tasks: a model-picked id stands
-    // when that task's own words are in the message, as if the user named it.
-    if (id != null && !RegExp('(?:#|\\b)${id.group(1)}\\b').hasMatch(text)) {
-      final picked =
-          open.where((t) => t.id == int.parse(id!.group(1)!)).toList();
-      if (picked.length != 1 || !_grounded(picked.single.title, text)) {
-        return null;
-      }
-      ref = picked.single.title;
-      id = null;
-      modelPicked = true;
-    }
-    // Words must come from the message.
-    if (ref != null &&
-        id == null &&
-        !modelPicked &&
-        !_grounded(ref, text, all: true)) {
-      return null;
-    }
-    Duration? shift;
-    Map<String, Object?> args = const {};
-    if (tool == 'edit_task') {
-      final w = s.when;
-      // The user's own "by 30 minutes" wins when the model reworded it.
-      final by = RegExp(r'^.*\b(?:by|for)\s+(.+?)[.!?]*$', caseSensitive: false)
-          .firstMatch(text);
-      final d = (w == null || !_mentioned(w, text)
-              ? null
-              : RuleEngine.parseDuration(w)) ??
-          (by == null ? null : RuleEngine.parseDuration(by.group(1)!));
-      final r = w == null || d != null || !_mentioned(w, text)
-          ? null
-          : _fallback.resolveWhen(w);
-      if (d != null) {
-        shift = d;
-      } else if (r != null && r.ok && r.at!.isAfter(_now())) {
-        args = {'due': r.at};
-      } else {
-        return _say(
-            'When should I move it to? Try "by 2 hours" or "tomorrow at 5pm".');
-      }
-      _evidence['time'] = 'model_copied: $w';
-    }
-    final pronoun = ref != null &&
-        RegExp(r'^(?:it|that|this|that one|this one|the last one|the same one)$',
-                caseSensitive: false)
-            .hasMatch(ref.trim());
-    final last = pronoun ? open.where((t) => t.id == _lastTask).toList() : null;
-    var l = last ?? (ref == null ? <Task>[] : await _matching(ref, open));
-    // A ref that names nothing ("postpone"): the task the message names.
-    if (l.isEmpty && !modelPicked && id == null) {
-      final said = named(open, text);
-      if (said.length == 1) l = said;
-    }
-    final pick = TargetPick(
-        tool: tool,
-        args: args,
-        shift: shift,
-        ids: [for (final t in l) t.id],
-        askedAt: _now());
-    if (l.length == 1) {
-      return _withId(pick, l.first.id,
-          pronoun ? 'pronoun' : (id != null ? 'typed' : 'named'));
-    }
-    final choices = l.isEmpty ? open : l;
-    if (choices.isEmpty) return _say("You don't have any pending tasks.");
-    _setPick(TargetPick(
-        tool: tool,
-        args: args,
-        shift: shift,
-        ids: [for (final t in choices) t.id],
-        askedAt: _now()));
-    _lastTask = null;
-    return _say(
-        '${l.isEmpty ? 'I couldn\'t find ${ref == null ? 'which task you mean' : 'a pending task matching "$ref"'}.' : 'Several tasks match "$ref":'}\n'
-        '${choices.take(_taskCap).map((t) => '#${t.id} ${t.title}${t.dueAt == null ? '' : ' (${friendlyTime(t.dueAt!, _now())})'}').join('\n')}\n'
-        'Which one? Say the number, e.g. #${choices.first.id}.');
-  }
 
   /// A title naming nothing: "finish this", "do it".
   static final _pronounTitle = RegExp(
@@ -2903,98 +1634,6 @@ class AssistantSession {
     final r = ' ${normTitle(reply)} ';
     return open.any((t) =>
         normTitle(t.title).length > 3 && r.contains(' ${normTitle(t.title)} '));
-  }
-
-  // ---- typed pending interactions (applied only when a turn commits) ----
-  // The time question is global (main chat key; old per-chat rows remain
-  // readable). A "Which one?" belongs to the chat that asked it (key
-  // `pick:<chat>`) and lives for its next turn, across restarts.
-
-  Future<ClarifyDraft?> _draft() async {
-    final repo = pending;
-    final raw = repo == null
-        ? _memDraft
-        : await repo.get(ConversationRepo.mainChatId) ?? await repo.get(id);
-    if (raw == null) return null;
-    try {
-      return ClarifyDraft.fromJson(
-          Map<String, Object?>.from(jsonDecode(raw) as Map));
-    } catch (_) {
-      return null; // unreadable draft: treated as none
-    }
-  }
-
-  Future<void> _setDraft(ClarifyDraft d) async {
-    final old = await _draft();
-    if (old != null && old.title != d.title) {
-      _note = '(I replaced the unfinished "${old.title}" with this one.)';
-    }
-    _changes.add(PendingChange.setDraft(d));
-  }
-
-  void _clearDraft() => _changes.add(const PendingChange.clearDraft());
-
-  void _setPick(TargetPick p) => _changes.add(PendingChange.setPick(p));
-
-  String get _pickKey => 'pick:$id';
-
-  /// This chat's "Which one?" if still fresh. Reading it consumes it at
-  /// commit (unless this turn asks again).
-  Future<TargetPick?> _loadPick() async {
-    final raw = pending == null ? _memPick : await pending!.get(_pickKey);
-    if (raw == null) return null;
-    _pickStored = true;
-    try {
-      final p = TargetPick.fromJson(
-          Map<String, Object?>.from(jsonDecode(raw) as Map));
-      if (p == null) return null;
-      final age = _now().difference(p.askedAt);
-      if (age > TargetPick.maxAge || age < const Duration(minutes: -1)) {
-        return null;
-      }
-      return p;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _storePick(TargetPick? p) async {
-    final raw = p == null ? null : jsonEncode(p.toJson());
-    final repo = pending;
-    if (repo == null) {
-      _memPick = raw;
-    } else if (raw == null) {
-      await repo.clear(_pickKey);
-    } else {
-      await repo.put(_pickKey, raw);
-    }
-  }
-
-  Future<void> _applyPending(List<PendingChange> changes) async {
-    var pickSet = false;
-    for (final c in changes) {
-      if (c.draft != null) {
-        final raw = jsonEncode(c.draft!.toJson());
-        final repo = pending;
-        if (repo == null) {
-          _memDraft = raw;
-        } else {
-          await repo.put(ConversationRepo.mainChatId, raw);
-        }
-      } else if (c.pick != null) {
-        await _storePick(c.pick);
-        pickSet = true;
-      } else if (c.clearDraft) {
-        final repo = pending;
-        if (repo == null) {
-          _memDraft = null;
-        } else {
-          await repo.clear(ConversationRepo.mainChatId);
-          if (id != ConversationRepo.mainChatId) await repo.clear(id);
-        }
-      }
-    }
-    if (_pickStored && !pickSet) await _storePick(null);
   }
 
   // ---- rules fallback (no model, or no usable plan) ----
@@ -3160,12 +1799,50 @@ class AssistantSession {
   /// close-time pass). Written by the executor (`save_memory`) at commit.
   ({String content, String category})? _memoryCandidate(
       String text, bool explicit) {
-    final j = _fallback.extractMemory(text);
+    // Plan 1.4: an explicit "remember" also keeps a short-lived fact (stored
+    // with an expiry); implicit statements of plans are still not saved.
+    final j = _fallback.extractMemory(text, timeBound: explicit);
     final m = j['memory'];
     if (j['remember'] != true || m is! String) return null;
     if (m.trim().isEmpty || m.length > 300) return null;
-    if (!explicit && !isUsefulPersonalMemory(m)) return null;
-    return (content: m, category: j['category'] as String? ?? 'fact');
+    // Plan 1.5: the extractor keeps trailing filler (", you know"; on an
+    // explicit request also ", will you"); drop that one anchored tag, as the
+    // instruction scan does, so the stored text is the fact alone.
+    final content = stripMemoryFillerTag(m,
+        request: memoryRequestCue.hasMatch(text.trim()));
+    if (content.isEmpty) return null;
+    if (!explicit && !isUsefulPersonalMemory(content)) return null;
+    return (content: content, category: j['category'] as String? ?? 'fact');
+  }
+
+  /// Plan 1.5: the extracted [content] or the user's own words (less a
+  /// leading "remember that"/"note:" cue) read as an instruction for the
+  /// assistant ([memoryInstructionIssue]). The raw text is scanned too, so an
+  /// extraction that drops the directive never launders it into a fact; this
+  /// fails closed. A removed request cue still lets the scan drop a trailing
+  /// ", will you?" courtesy tag ([stripMemoryFillerTag]); only that tag.
+  static bool _instructionLikeMemory(String text, String? content) {
+    if (content != null && memoryInstructionIssue(content) != null) {
+      return true;
+    }
+    final request = memoryRequestCue.hasMatch(text.trim());
+    final words = text.trim().replaceFirst(
+        RegExp(
+            r"^(?:please\s+)?(?:remember|note|fyi|keep\s+in\s+mind|don'?t\s+forget|do\s+not\s+forget)"
+            r'(?:\s+that\b\s*[:,]?|\s*[:,])\s*',
+            caseSensitive: false),
+        '');
+    return memoryInstructionIssue(words, request: request) != null;
+  }
+
+  /// The last local day (in [at]'s offset) a memory expiring at
+  /// [expiresAtMs] is still current, e.g. "Mon 2 Nov".
+  static String _lastDayBefore(int expiresAtMs, DateTime at) {
+    final offset = at.timeZoneOffset;
+    final last =
+        DateTime.fromMillisecondsSinceEpoch(expiresAtMs - 1, isUtc: true)
+            .add(offset);
+    return shortDate(last);
   }
 
   static const tooLongReply =
@@ -3219,12 +1896,20 @@ class AssistantSession {
     }
   }
 
-  /// Stops the in-flight turn and waits for it to settle. A turn cancelled
-  /// before its action runs executes nothing; an action already running finishes.
+  /// Stops foreground and optional generation, waiting only for the foreground
+  /// turn to settle. A turn cancelled before its action runs executes nothing;
+  /// an action already running finishes.
   Future<void> cancel() async {
     final op = _active;
-    if (op == null) return;
+    // Optional work can outlive the foreground future (or still be preparing
+    // its prompt). Invalidate it before native cancel can deliver callbacks;
+    // the epoch keeps it stale even when a later turn clears _cancelled.
     _cancelled = true;
+    _generationEpoch++;
+    // Drops only this session's queued calls (other sessions keep their
+    // place) and silences its running one; the scheduler keeps the worker
+    // slot occupied until the native generation really ends.
+    models.cancelEngine(engine);
     try {
       await engine.cancel();
     } catch (_) {}

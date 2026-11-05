@@ -168,16 +168,20 @@ Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject thiz
 
     // KV reuse: keep the longest common token prefix with what is decoded, drop the rest.
     // At least one prompt token is always decoded so the last position has fresh logits.
+    // Always trim, even when every cached token is reused: an aborted decode may leave
+    // cells past g_cached.size() (llama.cpp rolls back only the failed ubatch), and
+    // positions continue after seq_pos_max, so a stray cell would shift and leak into this prompt.
     llama_memory_t mem = llama_get_memory(g_ctx);
     int reuse = 0;
     while (reuse < (int) g_cached.size() && reuse < n - 1 && g_cached[reuse] == tokens[reuse]) reuse++;
-    if (reuse < (int) g_cached.size()) {
-        if (llama_memory_seq_rm(mem, 0, reuse, -1)) g_cached.resize(reuse);
-        else { reset_cache(); reuse = 0; }
-    }
+    if (llama_memory_seq_rm(mem, 0, reuse, -1)) g_cached.resize(reuse);
+    else { reset_cache(); reuse = 0; }
 
     jmethodID on_text = stream ? env->GetMethodID(env->GetObjectClass(thiz), "onNativeText", "([B)V") : nullptr;
     const char *err = nullptr;
+    // g_cached is exact unless the prompt decode failed (earlier ubatches of a long prompt
+    // may stay in memory untracked) or a decode failed for a reason other than cancel.
+    bool cache_untrusted = false;
     std::string out;
     size_t sent = 0;
     int generated = 0;
@@ -187,6 +191,7 @@ Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject thiz
     // llama_batch_get_one leaves positions to the memory: they continue after seq_pos_max.
     if (llama_decode(g_ctx, llama_batch_get_one(tokens.data() + reuse, n - reuse)) != 0) {
         err = cancelled() ? "llama_cancelled" : "llama_decode failed on prompt";
+        cache_untrusted = true;
     } else {
         g_cached = tokens;
         prompt_ms = ms_since(t0);
@@ -210,7 +215,10 @@ Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject thiz
             }
             if (i + 1 == max_tokens) break;  // no need to decode a token nobody samples after
             if (llama_decode(g_ctx, llama_batch_get_one(&tok, 1)) != 0) {
-                err = cancelled() ? "llama_cancelled" : "llama_decode failed";
+                // Cancelled: g_cached is still exactly the decoded tokens; the next request's
+                // unconditional trim removes any cell this aborted decode left behind.
+                if (cancelled()) err = "llama_cancelled";
+                else { err = "llama_decode failed"; cache_untrusted = true; }
                 break;
             }
             g_cached.push_back(tok);
@@ -222,7 +230,8 @@ Java_com_corenyth_assistant_LlamaBridge_nativeGenerate(JNIEnv *env, jobject thiz
     LOGI("prompt %d tok (%d reused) in %lld ms; first token %lld ms; generated %d tok in %lld ms%s", n, reuse,
          prompt_ms, first_ms, generated, ms_since(t0) - prompt_ms, err ? " (failed)" : "");
     if (err) {
-        reset_cache();  // partially decoded state is not trustworthy for reuse
+        // A cancel during generation keeps the decoded prefix warm for the next request.
+        if (cache_untrusted) reset_cache();
         throw_state(env, err);
         return nullptr;
     }

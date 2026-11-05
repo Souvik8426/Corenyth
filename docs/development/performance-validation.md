@@ -1,5 +1,7 @@
 # On-device performance and reliability validation
 
+> Snapshot: commit `c6492e2` · model `Corenyth-Qwen3-0.6B-mood-Q4_0` (sha256 `f2086705…`) · `flutter test` 538 pass / 3 skipped · host macOS, device POCO F5 · 2026-10-30. Historical; current state lives in reliability-status.md.
+
 Use a physical Android phone with the pinned Qwen3-0.6B Q4_0 model. Desktop widget tests do not measure native inference, alarm delivery, thermal throttling, or Android process lifecycle.
 
 ## Record the environment

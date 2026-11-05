@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../data/repos.dart' show indexedOperationParent;
 import '../../mascot/mascot_emotion.dart';
 
 /// Version of the backup format this build writes and accepts.
@@ -10,7 +11,13 @@ import '../../mascot/mascot_emotion.dart';
 /// v2 adds `messageMoods` (per-turn mascot mood records). Version 1 archives
 /// still restore: their mood section is simply absent, so every restored
 /// conversation displays unknown/calm until new turns are recorded.
-const int backupFormatVersion = 2;
+/// v3 adds the memory columns `observedAtUtc`, `observationOffsetMin`,
+/// `factDate`, `deletedAt` and `expiresAt`, the memory statuses `deleted`
+/// and `suggested`, and an optional `memoryHistory` section (the
+/// `memory_history` audit trail). Version 1 and 2 archives still restore:
+/// the new memory fields are absent there and restore as null, and an
+/// absent history section restores as no history.
+const int backupFormatVersion = 3;
 
 /// Tag every Corenyth backup carries in its manifest. A file without it is
 /// not a Corenyth backup, whatever else it may contain.
@@ -53,7 +60,11 @@ class _Col {
   final String column;
   final String key;
   final _Kind kind;
-  const _Col(this.column, this.key, this.kind);
+
+  /// First format version that writes this column. An older archive may
+  /// lack it; the column then restores as null (only nullable kinds).
+  final int since;
+  const _Col(this.column, this.key, this.kind, {this.since = 1});
 }
 
 /// One table in the backup: its columns, its primary key and the extra
@@ -69,8 +80,7 @@ class _Table {
   /// Extra checks (allowed values, ranges) run after the type checks.
   final void Function(Map<String, Object?> row, List<String> errors)? check;
 
-  const _Table(this.table, this.key, this.cols, this.idColumns,
-      {this.check});
+  const _Table(this.table, this.key, this.cols, this.idColumns, {this.check});
 }
 
 // --- the tables ---------------------------------------------------------
@@ -159,9 +169,31 @@ const _tables = <_Table>[
       _Col('source', 'source', _Kind.textOrNull),
       _Col('status', 'status', _Kind.text),
       _Col('superseded_by', 'supersededBy', _Kind.intOrNull),
+      _Col('observed_at_utc', 'observedAtUtc', _Kind.intOrNull, since: 3),
+      _Col('observation_offset_min', 'observationOffsetMin', _Kind.intOrNull,
+          since: 3),
+      _Col('fact_date', 'factDate', _Kind.textOrNull, since: 3),
+      _Col('deleted_at', 'deletedAt', _Kind.intOrNull, since: 3),
+      _Col('expires_at', 'expiresAt', _Kind.intOrNull, since: 3),
     ],
     ['id'],
     check: _checkMemory,
+  ),
+  _Table(
+    'memory_history',
+    'memoryHistory',
+    [
+      _Col('id', 'id', _Kind.int),
+      _Col('memory_id', 'memoryId', _Kind.int),
+      _Col('event', 'event', _Kind.text),
+      _Col('old_content', 'oldContent', _Kind.textOrNull),
+      _Col('new_content', 'newContent', _Kind.textOrNull),
+      _Col('actor', 'actor', _Kind.text),
+      _Col('op_id', 'opId', _Kind.textOrNull),
+      _Col('created_at', 'createdAt', _Kind.int),
+    ],
+    ['id'],
+    check: _checkMemoryHistory,
   ),
   _Table(
     'pending_clarifications',
@@ -193,6 +225,8 @@ const _tables = <_Table>[
     ],
     ['day', 'task_id'],
   ),
+  // source_message_id and memory_write_sources are intentionally omitted.
+  // Imported operations are legacy/unknown, never proof of a memory write.
   _Table(
     'operations',
     'operations',
@@ -273,12 +307,48 @@ void _checkConversation(Map<String, Object?> r, List<String> errors) {
 
 void _checkMemory(Map<String, Object?> r, List<String> errors) {
   final status = r['status'];
-  if (status != 'active' && status != 'superseded') {
-    errors.add('Memory ${r['id']}: status must be "active" or "superseded".');
+  if (!const {'active', 'superseded', 'deleted', 'suggested'}
+      .contains(status)) {
+    errors.add('Memory ${r['id']}: status must be "active", "superseded", '
+        '"deleted" or "suggested".');
   }
   final importance = r['importance'];
   if (importance is! num || importance < 0.0 || importance > 1.0) {
     errors.add('Memory ${r['id']}: importance must be between 0 and 1.');
+  }
+  final factDate = r['fact_date'];
+  if (factDate != null &&
+      (factDate is! String ||
+          !RegExp(r'^(?:\d{4}|-)-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$')
+              .hasMatch(factDate))) {
+    errors.add('Memory ${r['id']}: factDate must be YYYY-MM-DD or --MM-DD.');
+  }
+  final offset = r['observation_offset_min'];
+  if (offset is int && offset.abs() > 18 * 60) {
+    errors.add('Memory ${r['id']}: observationOffsetMin must be within '
+        '18 hours.');
+  }
+}
+
+void _checkMemoryHistory(Map<String, Object?> r, List<String> errors) {
+  const events = {
+    'add',
+    'bump',
+    'supersede',
+    'delete',
+    'restore',
+    'purge',
+    'edit',
+    'accept',
+    'reject',
+  };
+  if (!events.contains(r['event'])) {
+    errors.add('Memory history ${r['id']}: "${r['event']}" is not a memory '
+        'event.');
+  }
+  if (!const {'user', 'rules', 'model', 'system'}.contains(r['actor'])) {
+    errors.add('Memory history ${r['id']}: "${r['actor']}" is not a memory '
+        'actor.');
   }
 }
 
@@ -393,6 +463,7 @@ class BackupData {
   final List<Map<String, Object?>> reviewItems;
   final List<Map<String, Object?>> operations;
   final List<Map<String, Object?>> messageMoods;
+  final List<Map<String, Object?>> memoryHistory;
 
   BackupData({
     this.formatVersion = backupFormatVersion,
@@ -409,6 +480,7 @@ class BackupData {
     this.reviewItems = const [],
     this.operations = const [],
     this.messageMoods = const [],
+    this.memoryHistory = const [],
   });
 
   /// Rows of one table by its JSON key.
@@ -423,6 +495,7 @@ class BackupData {
         'reviewItems' => reviewItems,
         'operations' => operations,
         'messageMoods' => messageMoods,
+        'memoryHistory' => memoryHistory,
         _ => const [],
       };
 
@@ -431,6 +504,7 @@ class BackupData {
         'chats': chats.length,
         'conversations': conversations.length,
         'memories': memories.length,
+        'memoryHistory': memoryHistory.length,
         'messageMoods': messageMoods.length,
         'operations': operations.length,
         'pendingClarifications': pendingClarifications.length,
@@ -464,9 +538,7 @@ class BackupData {
               },
         'model': {'selectedId': selectedModelId},
         for (final t in _tables)
-          t.key: [
-            for (final r in rowsOf(t.key)) rowToJson(t, r)
-          ],
+          t.key: [for (final r in rowsOf(t.key)) rowToJson(t, r)],
       };
 }
 
@@ -549,8 +621,10 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
   for (final spec in _tables) {
     final value = map[spec.key];
     if (value == null) {
-      // A version-1 archive has no mood section; everything else is required.
-      if (version < 2 && spec.key == 'messageMoods') {
+      // A version-1 archive has no mood section, and the memory history
+      // section is optional (absent before v3); everything else is required.
+      if ((version < 2 && spec.key == 'messageMoods') ||
+          spec.key == 'memoryHistory') {
         rows[spec.key] = const [];
         continue;
       }
@@ -573,7 +647,8 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
             'object.');
         return null;
       }
-      final row = _parseRow(spec, entry.cast<Object?, Object?>(), errors);
+      final row =
+          _parseRow(spec, entry.cast<Object?, Object?>(), errors, version);
       if (row == null) return null;
       parsed.add(row);
     }
@@ -582,7 +657,8 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
     for (final row in parsed) {
       final id = [for (final c in spec.idColumns) '${row[c]}'].join('\u0000');
       if (!seen.add(id)) {
-        errors.add('The "${spec.key}" section repeats the id ${id.replaceAll('\u0000', ', ')}.');
+        errors.add(
+            'The "${spec.key}" section repeats the id ${id.replaceAll('\u0000', ', ')}.');
         return null;
       }
     }
@@ -621,7 +697,8 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
       proactiveEvents: rows['proactiveEvents']!,
       reviewItems: rows['reviewItems']!,
       operations: rows['operations']!,
-      messageMoods: rows['messageMoods']!);
+      messageMoods: rows['messageMoods']!,
+      memoryHistory: rows['memoryHistory']!);
 
   _checkRelations(data, errors);
   if (errors.isNotEmpty) return null;
@@ -631,9 +708,14 @@ BackupData? parseBackupData(Object? raw, List<String> errors) {
 /// One row of one table, in database form, or null with the reason in
 /// [errors].
 Map<String, Object?>? _parseRow(
-    _Table spec, Map<Object?, Object?> raw, List<String> errors) {
+    _Table spec, Map<Object?, Object?> raw, List<String> errors, int version) {
   final row = <String, Object?>{};
   for (final col in spec.cols) {
+    if (!raw.containsKey(col.key) && version < col.since) {
+      // Written only by a later format: an older archive restores it as null.
+      row[col.column] = null;
+      continue;
+    }
     if (!raw.containsKey(col.key)) {
       errors.add('A ${spec.key} entry is missing "${col.key}".');
       return null;
@@ -728,6 +810,9 @@ void _checkRelations(BackupData d, List<String> errors) {
   final memoryIds = _idsOf(d.memories, 'id');
   final opIds = _idsOf(d.operations, 'op_id');
   final conversationIds = _idsOf(d.conversations, 'id');
+  bool hasOperation(Object op) =>
+      opIds.contains(op) ||
+      (op is String && opIds.contains(indexedOperationParent(op)));
 
   for (final r in d.reminders) {
     final t = r['task_id'];
@@ -736,7 +821,7 @@ void _checkRelations(BackupData d, List<String> errors) {
           'backup.');
     }
     final op = r['op_id'];
-    if (op != null && !opIds.contains(op)) {
+    if (op != null && !hasOperation(op)) {
       errors.add('Reminder ${r['id']} points at a turn that is not in the '
           'backup.');
     }
@@ -775,7 +860,7 @@ void _checkRelations(BackupData d, List<String> errors) {
   }
   for (final r in d.tasks) {
     final op = r['op_id'];
-    if (op != null && !opIds.contains(op)) {
+    if (op != null && !hasOperation(op)) {
       errors.add('Task ${r['id']} points at a turn that is not in the backup.');
     }
   }
@@ -859,7 +944,9 @@ Map<String, Object?>? _parsePreferences(Object? raw, List<String> errors) {
     errors.add('Early alerts must be between 1 and 1440 minutes.');
     return null;
   }
-  if (followUpMinutes is! int || followUpMinutes < 5 || followUpMinutes > 1440) {
+  if (followUpMinutes is! int ||
+      followUpMinutes < 5 ||
+      followUpMinutes > 1440) {
     errors.add('The follow-up delay must be between 5 and 1440 minutes.');
     return null;
   }
@@ -906,6 +993,7 @@ BackupData buildBackupData({
   required List<Map<String, Object?>> reviewItems,
   required List<Map<String, Object?>> operations,
   List<Map<String, Object?>> messageMoods = const [],
+  List<Map<String, Object?>> memoryHistory = const [],
   Map<String, Object?>? profile,
   Map<String, Object?>? preferences,
   String? selectedModelId,
@@ -923,7 +1011,8 @@ BackupData buildBackupData({
         proactiveEvents: proactiveEvents,
         reviewItems: reviewItems,
         operations: operations,
-        messageMoods: messageMoods);
+        messageMoods: messageMoods,
+        memoryHistory: memoryHistory);
 
 /// The JSON form of one database row, per the table's column spec.
 Map<String, Object?> rowToJson(_Table spec, Map<String, Object?> row) {

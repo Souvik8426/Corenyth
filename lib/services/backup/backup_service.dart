@@ -15,6 +15,26 @@ import '../reminder_scheduler.dart';
 import 'backup_format.dart';
 import 'backup_gateway.dart';
 
+/// What a backup import needs from the live chat sessions: stop new writes,
+/// settle the turns in flight, and let them continue afterwards.
+abstract interface class SessionGate {
+  /// Blocks new turns and cancels/waits for the ones in flight. Throws
+  /// [SessionsNotSettled] when they cannot be settled; nothing stays blocked then.
+  Future<void> suspend();
+
+  /// Lets sessions take turns again. Safe to call when not suspended.
+  void resume();
+}
+
+/// The sessions could not be settled, so the import must not run.
+class SessionsNotSettled implements Exception {
+  final String message;
+  const SessionsNotSettled(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Reads the user's saved context, writes it to a portable archive and reads
 /// such an archive back.
 ///
@@ -24,6 +44,10 @@ class BackupService {
   final Database db;
   final ReminderRepo reminders;
   final ReminderScheduler scheduler;
+
+  /// Settles chat sessions around an import. Set by [AppServices]; null (no
+  /// sessions, e.g. tests of the file format) skips the step.
+  SessionGate? sessions;
 
   /// The persisted model choice, when there is one. Set after construction
   /// by [AppServices], which learns it while booting.
@@ -106,8 +130,7 @@ class BackupService {
         } catch (_) {}
         rethrow;
       }
-      final result =
-          BackupResult(target, data.counts(), manifest.createdAt);
+      final result = BackupResult(target, data.counts(), manifest.createdAt);
       lastExport.value = result;
       return result;
     } on BackupException catch (e) {
@@ -170,9 +193,10 @@ class BackupService {
   /// Every user row, read in one transaction so the backup is a single
   /// consistent view of the database.
   Future<BackupData> _snapshot() async => db.transaction((tx) async {
-        Future<List<Map<String, Object?>>> rows(String table) => tx.query(table);
-        final profileRows = await tx.query('assistant_profile',
-            where: 'id = 1');
+        Future<List<Map<String, Object?>>> rows(String table) =>
+            tx.query(table);
+        final profileRows =
+            await tx.query('assistant_profile', where: 'id = 1');
         final prefRows =
             await tx.query('assistant_preferences', where: 'id = 1');
         return buildBackupData(
@@ -184,13 +208,19 @@ class BackupService {
           pendingClarifications: await rows('pending_clarifications'),
           proactiveEvents: await rows('proactive_events'),
           reviewItems: await rows('review_items'),
-          operations: await rows('operations'),
+          // Linkage is local proof, not portable without its write markers.
+          // Omit it even from the in-memory snapshot used for a recovery copy.
+          operations: [
+            for (final row in await rows('operations'))
+              Map<String, Object?>.from(row)..remove('source_message_id')
+          ],
           messageMoods: await rows('message_moods'),
-          profile:
-              profileRows.isEmpty ? null : profileRows.first.cast<String, Object?>(),
-          preferences: prefRows.isEmpty
+          memoryHistory: await rows('memory_history'),
+          profile: profileRows.isEmpty
               ? null
-              : prefRows.first.cast<String, Object?>(),
+              : profileRows.first.cast<String, Object?>(),
+          preferences:
+              prefRows.isEmpty ? null : prefRows.first.cast<String, Object?>(),
           selectedModelId: selection?.readId(),
         );
       });
@@ -198,8 +228,7 @@ class BackupService {
   /// The archive bytes: exactly the two entries, no directory entries.
   List<int> _encode(BackupManifest manifest, BackupData data) {
     final archive = Archive()
-      ..add(ArchiveFile.string(
-          manifestEntryName, encodeManifest(manifest)))
+      ..add(ArchiveFile.string(manifestEntryName, encodeManifest(manifest)))
       ..add(ArchiveFile.string(dataEntryName, encodeData(data)));
     return ZipEncoder().encodeBytes(archive);
   }
@@ -336,8 +365,25 @@ class BackupService {
     busy.value = true;
     lastError.value = null;
     var modelChanged = false;
+    var suspended = false;
     String? previousModelId;
     try {
+      // Sessions settle before anything is read or written: a turn must not
+      // commit between the recovery copy and the restore. If they cannot be
+      // settled, nothing has been touched yet.
+      final gate = sessions;
+      if (gate != null) {
+        try {
+          await gate.suspend();
+          suspended = true;
+        } on SessionsNotSettled catch (e) {
+          throw BackupException(
+              'The backup was not imported, and your data is unchanged: '
+              '${e.message} Wait for the chat to finish, then try again.');
+        }
+      }
+      await testHook?.call('settled');
+
       // The recovery copy comes first: without it, nothing is touched.
       final recovery = await writeRecoveryBackup();
       await testHook?.call('recovery');
@@ -362,8 +408,8 @@ class BackupService {
       }
 
       await _reconcileReminders(before, preview.data);
-      return BackupResult(recovery.path, preview.manifest.counts,
-          preview.manifest.createdAt);
+      return BackupResult(
+          recovery.path, preview.manifest.counts, preview.manifest.createdAt);
     } on BackupException catch (e) {
       lastError.value = e.message;
       rethrow;
@@ -379,6 +425,7 @@ class BackupService {
           await selection?.writeId(previousModelId);
         } catch (_) {}
       }
+      if (suspended) sessions?.resume();
       busy.value = false;
     }
   }
@@ -400,6 +447,7 @@ class BackupService {
       'conversations',
       'reminders',
       'chats',
+      'memory_history',
       'memories',
       'tasks',
     ]) {
@@ -430,6 +478,22 @@ class BackupService {
     // The backup carries memory text only; the lookup keys that dedupe and
     // supersede by are derived from it again, as the v10 migration does.
     await indexMemoryRows(tx);
+    // Plan 1.4 (D2): an expiring row takes no preference slot (as in
+    // MemoryRepo.add), so re-deriving the keys must not give it one; it
+    // would block restoring or superseding the lasting fact in that slot.
+    // Kept here, not in indexMemoryRows: the v10 migration runs it before
+    // the expires_at column exists.
+    await tx.update('memories', {'subject_key': null, 'attribute_key': null},
+        where: 'expires_at IS NOT NULL');
+    // The insert trigger indexed every memory for search; only active ones
+    // belong there (as after a live delete or supersede), and a restore of
+    // a deleted memory re-adds its own entry.
+    final fts = await tx.query('sqlite_master',
+        columns: ['name'], where: 'name = ?', whereArgs: ['memories_fts']);
+    if (fts.isNotEmpty) {
+      await tx.execute('DELETE FROM memories_fts WHERE docid IN '
+          "(SELECT id FROM memories WHERE status != 'active')");
+    }
   }
 
   /// Brings the platform alarms in line with the imported reminders.

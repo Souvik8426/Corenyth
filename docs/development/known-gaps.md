@@ -1,5 +1,15 @@
 # Known gaps
 
+## Current working-tree context — 31 October 2026
+
+The historical dated results below describe earlier snapshots and must not be read as current verification. The last full baseline was 898 passed, 6 skipped before the latest purge fixes; the targeted purge/backup gate after those fixes was 62 passed. The full suite has not been rerun after the latest fixes, so neither count is a final current-suite result.
+
+- Memory extraction plumbing exists, but automatic extraction is disabled and has not been qualified by a real model/device run.
+- Model/retrain qualification and physical-device gates remain not run, including actual native inference qualification, phone delivery, process/reboot recovery, and device latency/RAM. No unsourced performance claim is made.
+- Scheduler cancellation timeout/failure quarantines the worker to prevent unsafe overlapping inference. A stuck cancellation can therefore leave later model work unavailable; quarantine is containment, not recovery.
+- Historical host held-out evaluation failed its proposed acceptance gate. Unit tests and the latest targeted purge/backup tests do not close that model-generalization or device gap.
+- Legacy memory history: old builds copied replacement text into `memory_history` supersede events with no target identity. Automatic purge (`cleanupDeleted`/`purgeDeleted`) and accepting a suggestion still fail closed on any such row, so automatic cleanup of Recently deleted stays blocked until it is resolved. The user's explicit erase (`deletePermanently`, rejecting a suggestion) is never blocked: in one transaction it removes the row, its FTS entry and links, and redacts the `new_content` of every unattributed supersede copy (event, actor, time are kept; the successor keeps its own text in its own history). Covered by `test/memory_legacy_erasure_test.dart`. Superseded rows are not listed in the UI and no path erases them individually; deleted rows with no `deleted_at` are skipped by automatic purge and can only be erased by hand.
+
 ## Reliability acceptance
 
 The current candidate is **not accepted for broad language reliability**. Actual Qwen3-0.6B host runs recorded 97 passes / 0 failures / 5 incomplete on development cases, but 12 passes / 18 failures / 4 incomplete on held-out cases. The latter fails the proposed accuracy gate. The historical model-unavailable development result was 87 passes / 10 failures / 5 incomplete. The 29 October checkout run recorded 83 passes / 14 failures / 5 incomplete; see the dated results in [reliability status](reliability-status.md). Incomplete checks are not passes. See [reliability status](reliability-status.md) and the [P5 report](../archive/plans/reliability-workflow/P5-report.md).

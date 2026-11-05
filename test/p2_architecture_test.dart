@@ -86,10 +86,10 @@ void main() {
     await prefs.save(const ReminderPreferences(followUp: false));
   });
 
-  ToolExecutor createTools() => ToolExecutor(
+  ToolExecutor createTools({MemoryRepo? memoryRepo}) => ToolExecutor(
         tasks,
         reminders,
-        FakeMemory(),
+        memoryRepo ?? FakeMemory(),
         scheduler,
         clock: () => fixedClock,
         preferences: prefs,
@@ -99,11 +99,12 @@ void main() {
     Interpreter? interpreter,
     String chatId = 'p2-chat',
     LlmEngine? customEngine,
+    MemoryRepo? memoryRepo,
   }) {
     return AssistantSession(
       engine: customEngine ?? engine,
-      tools: createTools(),
-      memory: FakeMemory(),
+      tools: createTools(memoryRepo: memoryRepo),
+      memory: memoryRepo ?? FakeMemory(),
       profile: ProfileRepo(db),
       taskRepo: tasks,
       conversations: convs,
@@ -499,12 +500,14 @@ void main() {
     });
 
     test('explicit memory route takes highest priority and stores memory', () async {
-      final s = createSession(interpreter: Interpreter.unified);
+      await db.execute('CREATE VIRTUAL TABLE memories_fts USING fts4(content, tokenize=unicode61)');
+      final s = createSession(interpreter: Interpreter.unified, memoryRepo: MemoryRepo(db));
       await s.start();
 
       final reply = await s.handle('remember that Alice is my manager');
       expect(reply, contains("remember that"));
       expect(s.lastTurn!.plan.route, RouteId.explicitMemory);
+      expect(await db.query('memory_write_sources'), hasLength(1));
       await s.close();
     });
 

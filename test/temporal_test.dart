@@ -242,4 +242,94 @@ void main() {
         r.fastRoute('set an alarm for half an hour from now to check the oven')!['arguments'],
         {'title': 'check the oven', 'at': '2026-10-19T08:11:00.000'});
   });
+
+  // Plan 1.3 phrase table, observed Fri 30 Oct 2026 14:00 local.
+  group('resolveFactDate', () {
+    final observed = DateTime(2026, 10, 30, 14);
+    String? fact(String s, [DateTime? at]) =>
+        resolveFactDate(s, at ?? observed)?.value;
+
+    test('every supported phrase resolves against the observation day', () {
+      for (final (say, want) in [
+        // today / yesterday / tomorrow
+        ('my exam is today', '2026-10-30'),
+        ('I saw the doctor yesterday', '2026-10-29'),
+        ('my exam is tomorrow', '2026-10-31'),
+        // N days/weeks ago, in N days/weeks
+        ('I moved house 3 days ago', '2026-10-27'),
+        ('I started the course two weeks ago', '2026-10-16'),
+        ('I quit sugar a week ago', '2026-10-23'),
+        ('my trip starts in 3 days', '2026-11-02'),
+        ('my visa expires in 2 weeks', '2026-11-13'),
+        // last / next / this <weekday>
+        ('I met Priya last Monday', '2026-10-26'),
+        ('I went to Goa last Friday', '2026-10-23'),
+        ('the exam is next Monday', '2026-11-02'),
+        ('the party is next Friday', '2026-11-06'),
+        ('the review is this Monday', '2026-11-02'),
+        ('the review is this Friday', '2026-10-30'),
+        // absolute dates
+        ('my exam is on 2026-11-02', '2026-11-02'),
+        ('my exam is on 2 November 2026', '2026-11-02'),
+        ('my exam is on Nov 2 2026', '2026-11-02'),
+        ('my exam is on November 2nd, 2026', '2026-11-02'),
+        ('my exam is on the 2nd of November 2026', '2026-11-02'),
+        // month-day with a yearly cue
+        ("my mom's birthday is June 4", '--06-04'),
+        ('our anniversary is the 4th of June', '--06-04'),
+        ('every year on 29 February we celebrate', '--02-29'),
+        // "on <weekday>" with a future / past cue
+        ('my exam is on Monday', '2026-11-02'),
+        ('I will see the dentist on Friday', '2026-11-06'),
+        ("I'm going to call Ravi on Wednesday", '2026-11-04'),
+        ('I have a meeting on Tuesday', '2026-11-03'),
+        ('I met Priya on Monday', '2026-10-26'),
+        ('I went to Goa on Friday', '2026-10-23'),
+        ('we had dinner on Thursday', '2026-10-29'),
+      ]) {
+        expect(fact(say), want, reason: say);
+      }
+    });
+
+    test('recurring is set only for a yearly month-day', () {
+      expect(resolveFactDate("my mom's birthday is June 4", observed),
+          (value: '--06-04', recurring: true));
+      expect(resolveFactDate('my exam is on Monday', observed),
+          (value: '2026-11-02', recurring: false));
+    });
+
+    test('anything without a clear single day is null, never a guess', () {
+      for (final say in [
+        'I went to Goa recently',
+        'I like tea',
+        'my exam is Monday', // bare weekday, no "on"
+        'the party on Saturday', // no tense cue
+        'I had an exam on Monday and will have another', // mixed cues
+        'the meeting is on June 4', // month-day, no year, no yearly cue
+        'my exam is on 2026-02-30', // impossible date
+        'my exam is on 31 April 2026',
+        "my friend's birthday is February 30",
+        'I met her yesterday and will see her tomorrow', // two days
+      ]) {
+        expect(fact(say), isNull, reason: say);
+      }
+    });
+
+    test('the same phrase twice is one day, not a conflict', () {
+      expect(fact('tomorrow, yes tomorrow, is my exam'), '2026-10-31');
+    });
+
+    test('only the calendar day of the observation is used', () {
+      expect(fact('my exam is tomorrow', DateTime(2026, 10, 30, 23, 59)),
+          '2026-10-31');
+      expect(fact('my exam is tomorrow', DateTime(2026, 10, 31, 0, 1)),
+          '2026-11-01');
+      // A UTC value carrying the local wall clock (what MemoryRepo passes).
+      expect(fact('my exam is tomorrow', DateTime.utc(2026, 10, 30, 1, 30)),
+          '2026-10-31');
+      // Month and year boundaries.
+      expect(fact('it was yesterday', DateTime(2027, 1, 1, 9)), '2026-12-31');
+      expect(fact('in 2 days', DateTime(2028, 2, 28, 9)), '2028-03-01');
+    });
+  });
 }

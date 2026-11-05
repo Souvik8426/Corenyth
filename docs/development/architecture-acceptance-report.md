@@ -1,5 +1,7 @@
 # Architecture execution evidence
 
+> Snapshot: commit `c6492e2` · model `Corenyth-Qwen3-0.6B-mood-Q4_0` (sha256 `f2086705…`) · `flutter test` 538 pass / 3 skipped · host macOS, device POCO F5 · 2026-10-30. Historical; current state lives in reliability-status.md.
+
 Status: **Implementation complete (P0–P6)**. Host qualification passing. Physical device qualification remains open (P7 Android device gates not run).
 
 ## Package status

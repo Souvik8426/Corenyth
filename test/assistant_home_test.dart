@@ -38,6 +38,25 @@ void main() {
       .instance.defaultBinaryMessenger
       .setMockMethodCallHandler(native, null));
 
+  testWidgets('AssistantHome forwards lifecycle to model scheduler',
+      (tester) async {
+    await tester.runAsync(() async {
+      services = AppServices(
+          await openMigratedV2(), NoopScheduler(), '/nonexistent/model.gguf');
+    });
+    await tester.pumpWidget(MaterialApp(home: AssistantHome(services)));
+    expect(services.modelScheduler.backgroundEnabled,
+        tester.binding.lifecycleState == AppLifecycleState.resumed);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(services.modelScheduler.backgroundEnabled, isFalse);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    expect(services.modelScheduler.backgroundEnabled, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
   testWidgets('initial chat, send, new chat, switch with history, delete',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 900); // persistent sidebar

@@ -1227,6 +1227,16 @@ class RuleEngine extends LlmEngine {
   static bool isTemporary(String text) =>
       _temporary.hasMatch(text) && !_durable.hasMatch(text);
 
+  /// A habit or standing preference cue ("usually", "every", "prefer"):
+  /// such a fact never expires (plan 1.4).
+  static bool isDurable(String text) => _durable.hasMatch(text);
+
+  /// An obligation ("I have to", "need to", "must", "remind"): a task or
+  /// reminder, never stored as a memory even with an expiry (plan 1.4).
+  static bool isObligation(String text) => _obligation.hasMatch(text);
+  static final _obligation =
+      _ci(r'\b(?:(?:have|has|need|needs|got) to|gotta|must|remind)\b');
+
   /// "remember (that) X", "note that X", "fyi X", "keep in mind X",
   /// "don't forget that X", "X, keep that in mind" — but not "remember to X",
   /// which is a task/reminder. A correction ("I no longer …") counts too.
@@ -1258,7 +1268,10 @@ class RuleEngine extends LlmEngine {
     return m == null ? null : (m.group(2) ?? m.group(4))!.trim();
   }
 
-  Map<String, Object?> extractMemory(String raw) {
+  /// [timeBound] (plan 1.4): also extract a short-lived fact ("my exam is
+  /// next Monday") instead of refusing it; the caller stores it with an
+  /// expiry. Obligations are still refused.
+  Map<String, Object?> extractMemory(String raw, {bool timeBound = false}) {
     final text = raw
         .trim()
         .replaceFirst(RegExp(r'^actually[, ]+', caseSensitive: false), '')
@@ -1267,14 +1280,16 @@ class RuleEngine extends LlmEngine {
         .replaceFirst(RegExp(r'[, ]+\bnot\s+.*$', caseSensitive: false), '')
         .replaceAll(RegExp(r'[.!?]+$'), '');
     final t = text.toLowerCase();
-    if (isTemporary(t)) return {'remember': false};
+    if (isTemporary(t) && (!timeBound || isObligation(t))) {
+      return {'remember': false};
+    }
     final fix = _correction.firstMatch(text);
     if (fix != null) return _corrected(fix);
     final r = _memoryCue.firstMatch(text) ?? _memoryTail.firstMatch(text);
     if (r != null) {
       final said = r.group(1)!.trim();
-      final inner =
-          extractMemory(said); // "remember I like tea" -> "User likes tea"
+      final inner = extractMemory(said,
+          timeBound: timeBound); // "remember I like tea" -> "User likes tea"
       if (inner['remember'] == true) return inner;
       // "fyi my brother's name is Kabir" -> "User's brother's name is Kabir"
       final mine = RegExp(r'^my\s+(.+)$', caseSensitive: false).firstMatch(said);

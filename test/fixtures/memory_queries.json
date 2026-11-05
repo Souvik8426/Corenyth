@@ -1,0 +1,302 @@
+[
+  {
+    "query": "jasmine tea without sugar",
+    "expect_contains": [
+      "jasmine tea without sugar"
+    ]
+  },
+  {
+    "query": "What beverage do I prefer?",
+    "expect_contains": [
+      "jasmine tea without sugar"
+    ]
+  },
+  {
+    "query": "Indiranagar Bengaluru",
+    "expect_contains": [
+      "Indiranagar Bengaluru"
+    ]
+  },
+  {
+    "query": "Where is my residence in Bengaluru?",
+    "expect_contains": [
+      "Indiranagar Bengaluru"
+    ]
+  },
+  {
+    "query": "marine biologist",
+    "expect_contains": [
+      "marine biologist"
+    ]
+  },
+  {
+    "query": "What do I do for a living?",
+    "expect_contains": [
+      "marine biologist"
+    ]
+  },
+  {
+    "query": "10 am on Tuesdays",
+    "expect_contains": [
+      "10 am on Tuesdays"
+    ]
+  },
+  {
+    "query": "When do I prefer meetings?",
+    "expect_contains": [
+      "10 am on Tuesdays"
+    ]
+  },
+  {
+    "query": "concise answers with bullet points",
+    "expect_contains": [
+      "concise answers with bullet points"
+    ]
+  },
+  {
+    "query": "How should you format your replies?",
+    "expect_contains": [
+      "concise answers with bullet points"
+    ]
+  },
+  {
+    "query": "Priya",
+    "expect_contains": [
+      "My sister Priya lives in Pune"
+    ]
+  },
+  {
+    "query": "Where does my sister Priya live?",
+    "expect_contains": [
+      "My sister Priya lives in Pune"
+    ]
+  },
+  {
+    "query": "Arjun",
+    "expect_contains": [
+      "My brother Arjun works in robotics"
+    ]
+  },
+  {
+    "query": "What field does my brother work in?",
+    "expect_contains": [
+      "My brother Arjun works in robotics"
+    ]
+  },
+  {
+    "query": "Meera",
+    "expect_contains": [
+      "My mother Meera likes orchids"
+    ]
+  },
+  {
+    "query": "Which flowers does my mother enjoy?",
+    "expect_contains": [
+      "My mother Meera likes orchids"
+    ]
+  },
+  {
+    "query": "Ravi",
+    "expect_contains": [
+      "My father Ravi loves astronomy"
+    ]
+  },
+  {
+    "query": "What does my father love studying?",
+    "expect_contains": [
+      "My father Ravi loves astronomy"
+    ]
+  },
+  {
+    "query": "Nisha",
+    "expect_contains": [
+      "Nisha lives in Jaipur"
+    ]
+  },
+  {
+    "query": "Where does Nisha reside?",
+    "expect_contains": [
+      "Nisha lives in Jaipur"
+    ]
+  },
+  {
+    "query": "watercolor painting",
+    "expect_contains": [
+      "watercolor painting on weekends"
+    ]
+  },
+  {
+    "query": "What artistic hobby do I enjoy on weekends?",
+    "expect_contains": [
+      "watercolor painting on weekends"
+    ]
+  },
+  {
+    "query": "birdwatching",
+    "expect_contains": [
+      "birdwatching near Ulsoor lake"
+    ]
+  },
+  {
+    "query": "What wildlife hobby do I enjoy by Ulsoor?",
+    "expect_contains": [
+      "birdwatching near Ulsoor lake"
+    ]
+  },
+  {
+    "query": "badminton",
+    "expect_contains": [
+      "playing badminton on Saturdays"
+    ]
+  },
+  {
+    "query": "Which sport do I play on Saturdays?",
+    "expect_contains": [
+      "playing badminton on Saturdays"
+    ]
+  },
+  {
+    "query": "sourdough bread",
+    "expect_contains": [
+      "baking sourdough bread"
+    ]
+  },
+  {
+    "query": "What kind of bread do I enjoy baking?",
+    "expect_contains": [
+      "baking sourdough bread"
+    ]
+  },
+  {
+    "query": "vintage postcards",
+    "expect_contains": [
+      "collecting vintage postcards"
+    ]
+  },
+  {
+    "query": "What old souvenirs do I collect?",
+    "expect_contains": [
+      "collecting vintage postcards"
+    ]
+  },
+  {
+    "query": "Kyoto ceramics workshop",
+    "expect_contains": [
+      "Kyoto ceramics workshop on 2027-02-14"
+    ]
+  },
+  {
+    "query": "When is my ceramics class in Japan?",
+    "expect_contains": [
+      "Kyoto ceramics workshop on 2027-02-14"
+    ]
+  },
+  {
+    "query": "dentist appointment",
+    "expect_contains": [
+      "dentist appointment on 2027-03-09"
+    ]
+  },
+  {
+    "query": "When is my dental checkup?",
+    "expect_contains": [
+      "dentist appointment on 2027-03-09"
+    ]
+  },
+  {
+    "query": "pottery course",
+    "expect_contains": [
+      "pottery course on 2027-04-12"
+    ]
+  },
+  {
+    "query": "When do I begin learning pottery?",
+    "expect_contains": [
+      "pottery course on 2027-04-12"
+    ]
+  },
+  {
+    "query": "passport renewal",
+    "expect_contains": [
+      "passport renewal appointment on 2027-05-18"
+    ]
+  },
+  {
+    "query": "When is my travel document appointment?",
+    "expect_contains": [
+      "passport renewal appointment on 2027-05-18"
+    ]
+  },
+  {
+    "query": "Mysuru museum",
+    "expect_contains": [
+      "Mysuru museum on 2027-06-21"
+    ]
+  },
+  {
+    "query": "When am I going to the Mysuru museum?",
+    "expect_contains": [
+      "Mysuru museum on 2027-06-21"
+    ]
+  },
+  {
+    "query": "cobalt comp",
+    "expect_contains": [
+      "cobalt compass is in drawer seven"
+    ]
+  },
+  {
+    "query": "Where is the blue navigation instrument?",
+    "expect_contains": [
+      "cobalt compass is in drawer seven"
+    ]
+  },
+  {
+    "query": "amber note",
+    "expect_contains": [
+      "amber notebook has grid pages"
+    ]
+  },
+  {
+    "query": "Which notebook has squared paper?",
+    "expect_contains": [
+      "amber notebook has grid pages"
+    ]
+  },
+  {
+    "query": "silver lant",
+    "expect_contains": [
+      "silver lantern uses rechargeable batteries"
+    ]
+  },
+  {
+    "query": "Which lamp takes rechargeable batteries?",
+    "expect_contains": [
+      "silver lantern uses rechargeable batteries"
+    ]
+  },
+  {
+    "query": "velvet cush",
+    "expect_contains": [
+      "velvet cushion has a triangular pattern"
+    ]
+  },
+  {
+    "query": "Which cushion has triangles?",
+    "expect_contains": [
+      "velvet cushion has a triangular pattern"
+    ]
+  },
+  {
+    "query": "copper kett",
+    "expect_contains": [
+      "copper kettle holds two litres"
+    ]
+  },
+  {
+    "query": "How much water does the copper kettle hold?",
+    "expect_contains": [
+      "copper kettle holds two litres"
+    ]
+  }
+]

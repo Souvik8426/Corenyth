@@ -1,5 +1,15 @@
 # Reliability status
 
+## Current working-tree snapshot — 31 October 2026
+
+This is a documentation snapshot, not a release qualification. Since the dated historical reports below, the working tree has changed. The last recorded full baseline is **898 passed, 6 skipped**, from before the most recent memory-purge fixes; it is not the current final-suite result. After those fixes, the targeted purge/backup gate reported **62 passed**. Do not combine these counts or present either as a full current-suite run. On 2 November 2026, the current uncommitted tree at HEAD c6492e2 passed flutter analyze with 0 errors, 0 warnings, 116 infos; flutter test --no-pub passed 1013, skipped 6, failed 0; Python 3.15 host tests passed 46, skipped 4 (skips need PROMPT_EXPORT_PATH).
+
+Current code includes local extraction plumbing, but automatic extraction remains **disabled**; its presence is not evidence that extraction was run or qualified. Model/native and physical-device acceptance gates remain not run: no current native-model accuracy/retrain qualification, device delivery/restart/reboot checks, or device performance results are established here. The historical held-out generalization failure remains relevant and is not superseded by the current unit-test results.
+
+The shared model scheduler quarantines its worker after cancellation timeout/failure rather than admitting overlapping generation. This is a safety fallback, not recovery: if cancellation remains stuck, subsequent model work remains unavailable for that scheduler's lifetime. No performance improvement is claimed.
+
+The 20–29 October sections and linked P0–P5 reports are preserved as dated historical snapshots, not assertions about the current checkout. In particular, their APK identity, model measurements, test totals and device state describe that recorded candidate. See [known gaps](known-gaps.md) for current limitations.
+
 **Broad reliability acceptance was rejected.** The repairs below are implemented, but unseen phrasing still fails. This is a review candidate, not a claim that the assistant is fully fixed. The candidate was not installed on the phone.
 
 ## Update — 29 October 2026: scope, clarification and first display

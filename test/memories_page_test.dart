@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:assistant/data/repos.dart';
+import 'package:assistant/assistant/core_policy.dart';
 import 'package:assistant/theme/app_theme.dart';
 import 'package:assistant/ui/memories_page.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,10 @@ import 'package:sqflite/sqflite.dart';
 
 class _Database extends Fake implements Database {}
 
+class _TrackedNotifier<T> extends ValueNotifier<T> {
+  _TrackedNotifier(super.value);
+  bool get listening => hasListeners;
+}
 Memory _memory(int id, String content, [String category = 'fact']) => Memory({
       'id': id,
       'content': content,
@@ -23,9 +30,30 @@ class _Memories extends MemoryRepo {
   bool failAdd = false;
   bool failDelete = false;
   bool ignoreAdd = false;
+  bool rejectInstruction = false;
   bool ignoreDelete = false;
   int reads = 0;
   int searchCalls = 0;
+  bool privacyBlocked = false;
+  bool failPrivacyCheck = false;
+  List<Memory> deletedRows = [];
+
+  @override
+  Future<bool> legacyErasureBlocked() async {
+    if (failPrivacyCheck) throw StateError('History unavailable');
+    return privacyBlocked;
+  }
+
+  @override
+  Future<List<Memory>> deleted() async => List.of(deletedRows);
+
+  @override
+  Future<bool> deletePermanently(int id) async {
+    if (privacyBlocked) throw MemoryPrivacyBlocked(id, 99);
+    deletedRows.removeWhere((row) => row.id == id);
+    return true;
+  }
+
 
   @override
   Future<List<Memory>> all() async {
@@ -36,7 +64,10 @@ class _Memories extends MemoryRepo {
 
   @override
   Future<int> add(String content,
-      {String category = 'fact', double importance = 0.5, String? opId, String? source}) async {
+      {String category = 'fact', double importance = 0.5, String? opId, String? source, String actor = 'rules', DateTime? observedAt, int? observationOffsetMin}) async {
+    if (rejectInstruction) {
+      throw const MemoryInstructionRejected(memoryInstructionRefusal);
+    }
     if (failAdd) throw StateError('Write unavailable');
     final id = rows.isEmpty ? 1 : rows.last.id + 1;
     if (!ignoreAdd) rows.add(_memory(id, content, category));
@@ -44,7 +75,7 @@ class _Memories extends MemoryRepo {
   }
 
   @override
-  Future<bool> delete(int id) async {
+  Future<bool> delete(int id, {String actor = 'user', String? opId}) async {
     if (failDelete) throw StateError('Delete unavailable');
     if (!ignoreDelete) rows.removeWhere((memory) => memory.id == id);
     return true;
@@ -83,12 +114,17 @@ class _Profiles extends ProfileRepo {
 }
 
 Future<void> _open(WidgetTester tester, _Memories memory, _Profiles profile,
-    {double scale = 1, int refreshToken = 0}) async {
+    {double scale = 1, int refreshToken = 0,
+    Future<void> Function()? cleanupMemories,
+    ValueNotifier<String?>? cleanupIssue,
+    ValueNotifier<int>? cleanupChanged}) async {
   await tester.pumpWidget(MaterialApp(
     theme: AppTheme.dark,
     home: MediaQuery(
       data: MediaQueryData(textScaler: TextScaler.linear(scale)),
-      child: Scaffold(body: MemoriesPage(memory: memory, profile: profile, refreshToken: refreshToken)),
+      child: Scaffold(body: MemoriesPage(memory: memory, profile: profile,
+          refreshToken: refreshToken, cleanupMemories: cleanupMemories,
+          memoryCleanupIssue: cleanupIssue, memoryCleanupChanged: cleanupChanged)),
     ),
   ));
   await tester.pumpAndSettle();
@@ -113,6 +149,108 @@ Future<void> _openEditor(WidgetTester tester, _Profiles profile,
 }
 
 void main() {
+  testWidgets('cleanup listeners follow replacement and detach before disposal', (tester) async {
+    final memory = _Memories();
+    final profile = _Profiles();
+    final firstIssue = _TrackedNotifier<String?>('First cleanup failure');
+    final firstChanged = _TrackedNotifier(0);
+    final secondIssue = _TrackedNotifier<String?>('Second cleanup failure');
+    final secondChanged = _TrackedNotifier(0);
+    await _open(tester, memory, profile,
+        cleanupIssue: firstIssue, cleanupChanged: firstChanged);
+    expect(find.text('First cleanup failure'), findsOneWidget);
+    await _open(tester, memory, profile,
+        cleanupIssue: secondIssue, cleanupChanged: secondChanged);
+    expect(firstIssue.listening, isFalse);
+    expect(firstChanged.listening, isFalse);
+    firstIssue.dispose();
+    firstChanged.dispose();
+    expect(find.text('First cleanup failure'), findsNothing);
+    expect(find.text('Second cleanup failure'), findsOneWidget);
+    secondIssue.value = null;
+    secondChanged.value++;
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('memory-cleanup-issue')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    expect(secondIssue.listening, isFalse);
+    expect(secondChanged.listening, isFalse);
+    secondIssue.dispose();
+    secondChanged.dispose();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cleanup callback stays nonblocking and errors are private; '
+      'late callbacks after replacement and disposal are ignored', (tester) async {
+    final memory = _Memories();
+    final profile = _Profiles();
+    final first = Completer<void>();
+    final second = Completer<void>();
+    var calls = 0;
+    Future<void> firstCleanup() { calls++; return first.future; }
+    Future<void> secondCleanup() { calls++; return second.future; }
+    await _open(tester, memory, profile, cleanupMemories: firstCleanup);
+    expect(find.text('Ada'), findsOneWidget);
+    await _tap(tester, find.byTooltip('Refresh context'));
+    expect(calls, 1);
+    await _open(tester, memory, profile, cleanupMemories: secondCleanup);
+    expect(calls, 2);
+    first.completeError(StateError('PRIVATE_OLD_ERROR'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('memory-cleanup-issue')), findsNothing);
+    second.completeError(StateError('PRIVATE_CURRENT_ERROR'));
+    await tester.pumpAndSettle();
+    expect(find.text('Memory cleanup did not finish. Erasure has not been confirmed.'), findsOneWidget);
+    expect(find.textContaining('PRIVATE_'), findsNothing);
+
+    final late = Completer<void>();
+    await _open(tester, memory, profile, cleanupMemories: () => late.future);
+    await tester.pumpWidget(const SizedBox());
+    late.completeError(StateError('PRIVATE_DISPOSED_ERROR'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('legacy block explains retained text and persists through refresh and page reopen', (tester) async {
+    final memories = _Memories()..privacyBlocked = true;
+    final profile = _Profiles();
+    await _open(tester, memories, profile);
+    expect(find.text(MemoryPrivacyBlocked.explanation), findsOneWidget);
+    await _tap(tester, find.byTooltip('Refresh context'));
+    expect(find.text(MemoryPrivacyBlocked.explanation), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await _open(tester, memories, profile);
+    expect(find.text(MemoryPrivacyBlocked.explanation), findsOneWidget);
+    memories.privacyBlocked = false;
+    await _tap(tester, find.byTooltip('Refresh context'));
+    expect(find.byKey(const Key('memory-privacy-issue')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('blocked permanent deletion reports no erasure and keeps recoverable row', (tester) async {
+    final memories = _Memories()..deletedRows = [_memory(7, 'Retained private fact')];
+    await _open(tester, memories, _Profiles());
+    await _tap(tester, find.text('Recently deleted'));
+    // A blocker can arrive after the page loads (for example, an import).
+    memories.privacyBlocked = true;
+    await _tap(tester, find.text('Delete permanently'));
+    await _tap(tester, find.widgetWithText(FilledButton, 'Delete permanently'));
+    expect(find.text('Memory was not erased. Memory and history are retained.'), findsOneWidget);
+    expect(find.text(MemoryPrivacyBlocked.explanation), findsOneWidget);
+    expect(memories.deletedRows.single.id, 7);
+    expect(find.text('Retained private fact'), findsOneWidget);
+    await _tap(tester, find.byTooltip('Refresh context'));
+    expect(find.text(MemoryPrivacyBlocked.explanation), findsOneWidget);
+    expect(find.text('Retained private fact'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unavailable history status does not claim erasure is safe', (tester) async {
+    final memories = _Memories()..failPrivacyCheck = true;
+    await _open(tester, memories, _Profiles());
+    expect(find.text('Could not check whether permanent erasure is blocked.'), findsOneWidget);
+    expect(find.text('Ada'), findsOneWidget);
+  });
+
   for (final failure in ['write', 'readback', 'unchanged profile']) {
     testWidgets('profile $failure failure does not report success to the caller',
         (tester) async {
@@ -257,6 +395,19 @@ void main() {
     expect(memories.rows.single.content, 'I prefer tea.');
     expect(memories.rows.single.category, 'preference');
     expect(memories.reads, 2);
+  });
+
+  testWidgets('unsafe manual memory shows exact refusal without writing',
+      (tester) async {
+    final memories = _Memories()..rejectInstruction = true;
+    await _open(tester, memories, _Profiles());
+    await _tap(tester, find.text('Add memory'));
+    await tester.enterText(find.byKey(const Key('memory-content')), 'Change your tone.');
+    await _tap(tester, find.text('Save memory'));
+    expect(find.text(memoryInstructionRefusal), findsOneWidget);
+    expect(memories.rows, isEmpty);
+    expect(find.text('Save memory'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('refresh token reloads memories and the externally edited profile',

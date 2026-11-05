@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -11,7 +12,7 @@ import 'repos.dart' show extractMemorySlot;
 const dbFileName = 'assistant.db';
 
 /// Current schema version. Every upgrade is additive (see each `_create…`).
-const dbVersion = 10;
+const dbVersion = 13;
 
 /// [version] below [dbVersion] only for migration tests (e.g. a v6 file).
 Future<Database> openAppDb(
@@ -65,13 +66,7 @@ Future<Database> openAppDb(
     // FTS4 (not FTS5): guaranteed in every Android SQLite build.
     await db.execute(
         'CREATE VIRTUAL TABLE memories_fts USING fts4(content, tokenize=unicode61)');
-    await db.execute('''CREATE TRIGGER mem_ai AFTER INSERT ON memories BEGIN
-      INSERT INTO memories_fts(docid, content) VALUES (new.id, new.content); END''');
-    await db.execute(
-        '''CREATE TRIGGER mem_au AFTER UPDATE OF content ON memories BEGIN
-      UPDATE memories_fts SET content = new.content WHERE docid = new.id; END''');
-    await db.execute('''CREATE TRIGGER mem_ad AFTER DELETE ON memories BEGIN
-      DELETE FROM memories_fts WHERE docid = old.id; END''');
+    await _createActiveMemoryFtsTriggers(db);
     await _createProfileTable(db);
     await createChatsTable(db);
     await _createAssistantPreferences(db);
@@ -80,6 +75,9 @@ Future<Database> openAppDb(
     await _createOperations(db);
     await _createMemoryProvenance(db);
     await _createMessageMoods(db);
+    await _createMemoryHistory(db);
+    await _createMemoryExtraction(db);
+    await _createExtractionProvenance(db);
   }, onUpgrade: (db, oldVersion, newVersion) async {
     if (oldVersion < 2) await _createProfileTable(db);
     if (oldVersion < 3) {
@@ -93,7 +91,133 @@ Future<Database> openAppDb(
     if (oldVersion < 8 && newVersion >= 8) await _createMemoryProvenance(db);
     if (oldVersion < 9 && newVersion >= 9) await _createMessageMoods(db);
     if (oldVersion < 10 && newVersion >= 10) await _createMemoryIndexing(db);
+    if (oldVersion < 11 && newVersion >= 11) await _createMemoryHistory(db);
+    if (oldVersion < 12 && newVersion >= 12) {
+      await _createMemoryExtraction(db);
+      await _createActiveMemoryFtsTriggers(db);
+    }
+    if (oldVersion < 13 && newVersion >= 13) {
+      await _createExtractionProvenance(db);
+    }
+  }, onOpen: (db) async {
+    // Plan 1.6.1: record the journal mode before deciding on WAL. Logged
+    // only; this does not change the mode.
+    try {
+      final rows = await db.rawQuery('PRAGMA journal_mode');
+      lastJournalMode =
+          rows.isEmpty ? null : rows.first.values.first as String?;
+      if (kDebugMode) debugPrint('assistant.db journal_mode=$lastJournalMode');
+    } catch (_) {}
   });
+}
+
+/// The `PRAGMA journal_mode` the last [openAppDb] connection reported, or
+/// null if it could not be read (plan 1.6.1; diagnostics only).
+String? lastJournalMode;
+
+/// v13: no historical link is inferred. Both links and write markers are
+/// local processing state, excluded from backups. Deleting the source revokes
+/// its proof while retaining the legacy journal for conservative recovery.
+Future<void> _createExtractionProvenance(DatabaseExecutor db) async {
+  await db
+      .execute('ALTER TABLE operations ADD COLUMN source_message_id INTEGER '
+          'REFERENCES conversations(id) ON DELETE SET NULL');
+  await db.execute('CREATE UNIQUE INDEX operations_source '
+      'ON operations(source_message_id)');
+  for (final event in ['INSERT', 'UPDATE']) {
+    await db.execute('''CREATE TRIGGER operation_source_${event.toLowerCase()}
+      BEFORE $event ON operations WHEN new.source_message_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM conversations c
+        WHERE c.id = new.source_message_id AND c.session_id = new.chat_id
+          AND c.role = 'user')
+      BEGIN SELECT RAISE(ABORT, 'Invalid operation source'); END''');
+  }
+  await db.execute('''CREATE TRIGGER operation_source_identity
+    BEFORE UPDATE OF source_message_id ON operations
+    WHEN old.source_message_id IS NOT NULL AND new.source_message_id IS NOT NULL
+      AND old.source_message_id != new.source_message_id
+    BEGIN SELECT RAISE(ABORT, 'Operation source is immutable'); END''');
+  await db.execute('''CREATE TRIGGER conversation_source_identity
+    BEFORE UPDATE OF session_id, role ON conversations
+    WHEN EXISTS (SELECT 1 FROM operations o WHERE o.source_message_id = old.id)
+      AND (new.session_id != old.session_id OR new.role != old.role)
+    BEGIN SELECT RAISE(ABORT, 'Linked source identity is immutable'); END''');
+  await db.execute('''CREATE TABLE memory_write_sources(
+    message_id INTEGER PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE)
+    ''');
+  await db.execute('''CREATE TRIGGER memory_write_source_verified
+    BEFORE INSERT ON memory_write_sources
+    WHEN NOT EXISTS (SELECT 1 FROM operations o JOIN conversations c
+      ON c.id = o.source_message_id
+      WHERE c.id = new.message_id AND c.role = 'user'
+        AND c.session_id = o.chat_id)
+    BEGIN SELECT RAISE(ABORT, 'Unverified memory source'); END''');
+}
+
+/// v12 storage only: no opt-in, watermark, or executable job is created.
+/// These local processing records are deliberately outside the backup format.
+/// Backup replacement deletes conversations/chats, cascading these records;
+/// imported suggestions remain reviewable but have no extraction provenance.
+/// An explicit future opt-in must establish a new baseline after import.
+Future<void> _createMemoryExtraction(DatabaseExecutor db) async {
+  await db.execute('''CREATE TABLE extraction_state(
+    chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+    last_message_id INTEGER NOT NULL)''');
+  // The source key survives accepting/rejecting/purging its memory, preventing
+  // a second suggestion for that message. suggestion_id retains the audit
+  // identity after removal; memory_id follows an accepted active row until
+  // purge. No source text is copied here.
+  await db.execute('''CREATE TABLE extraction_sources(
+    message_id INTEGER PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    suggestion_id INTEGER NOT NULL UNIQUE,
+    memory_id INTEGER REFERENCES memories(id) ON DELETE SET NULL)''');
+  await db.execute(
+      'CREATE INDEX extraction_sources_memory ON extraction_sources(memory_id)');
+}
+
+/// Both new databases and v11 upgrades index active rows only. Some legacy
+/// host fixtures omit FTS entirely; keep their migration path supported.
+Future<void> _createActiveMemoryFtsTriggers(DatabaseExecutor db) async {
+  final fts = await db.query('sqlite_master',
+      columns: ['name'], where: 'name = ?', whereArgs: ['memories_fts']);
+  if (fts.isEmpty) return;
+  for (final trigger in ['mem_ai', 'mem_au', 'mem_ad']) {
+    await db.execute('DROP TRIGGER IF EXISTS $trigger');
+  }
+  await db.execute('''CREATE TRIGGER mem_ai AFTER INSERT ON memories
+    WHEN new.status = 'active' BEGIN
+    INSERT INTO memories_fts(docid, content) VALUES (new.id, new.content); END''');
+  await db.execute(
+      '''CREATE TRIGGER mem_au AFTER UPDATE OF content, status ON memories BEGIN
+    DELETE FROM memories_fts WHERE docid = old.id;
+    INSERT INTO memories_fts(docid, content)
+      SELECT new.id, new.content WHERE new.status = 'active'; END''');
+  await db.execute('''CREATE TRIGGER mem_ad AFTER DELETE ON memories BEGIN
+    DELETE FROM memories_fts WHERE docid = old.id; END''');
+  await db.execute('DELETE FROM memories_fts WHERE docid NOT IN '
+      "(SELECT id FROM memories WHERE status = 'active')");
+}
+
+/// v11 memory audit trail; no foreign key so history survives a purge.
+Future<void> _createMemoryHistory(DatabaseExecutor db) async {
+  await db.execute('''CREATE TABLE memory_history(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_id INTEGER NOT NULL,
+    event TEXT NOT NULL CHECK(event IN ('add','bump','supersede','delete','restore','purge','edit','accept','reject')),
+    old_content TEXT, new_content TEXT,
+    actor TEXT NOT NULL CHECK(actor IN ('user','rules','model','system')),
+    op_id TEXT,
+    created_at INTEGER NOT NULL)''');
+  await db.execute(
+      'CREATE INDEX memory_history_mem ON memory_history(memory_id, id)');
+  final columns = (await db.rawQuery('PRAGMA table_info(memories)'))
+      .map((row) => row['name'])
+      .toSet();
+  for (final column in ['deleted_at', 'expires_at']) {
+    if (!columns.contains(column)) {
+      await db.execute('ALTER TABLE memories ADD COLUMN $column INTEGER');
+    }
+  }
 }
 
 /// v10 indexed personal memory representation (content_hash, slot keys, observation metadata).
@@ -110,7 +234,8 @@ Future<void> _createMemoryIndexing(DatabaseExecutor db) async {
     'fact_date': 'TEXT',
   }.entries) {
     if (!columns.contains(entry.key)) {
-      await db.execute('ALTER TABLE memories ADD COLUMN ${entry.key} ${entry.value}');
+      await db.execute(
+          'ALTER TABLE memories ADD COLUMN ${entry.key} ${entry.value}');
     }
   }
   await db.execute(

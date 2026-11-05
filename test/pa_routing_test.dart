@@ -24,7 +24,7 @@ class _Memory extends MemoryRepo {
       {String category = 'fact',
       double importance = 0.5,
       String? opId,
-      String? source}) async {
+      String? source, String actor = 'rules', DateTime? observedAt, int? observationOffsetMin}) async {
     items.add(content);
     return items.length;
   }
@@ -396,16 +396,22 @@ void main() {
         {'title': 'Buy milk'});
   });
 
-  test('durable preferences mentioning meetings are saved; plans are not',
+  test('durable preferences mentioning meetings are saved; plans expire',
       () async {
     final s = await started();
     expect(await s.handle('Remember that I prefer meetings in the afternoon'),
         contains("I'll remember"));
     expect(memory.items, ['User prefers meetings in the afternoon']);
+    // Plan 1.4: an explicit time-bound fact is kept until its day ends
+    // (_now is Wed 7 Oct 2099); an obligation is still refused.
     expect(await s.handle('Remember I have a meeting tomorrow'),
-        contains("won't store short-lived plans"));
-    await s.handle('I usually have meetings on Monday');
+        "Okay, I'll remember that through Thu 8 Oct.");
     expect(memory.items, hasLength(2));
+    expect(await s.handle('Remember I have to call mom tomorrow'),
+        contains("won't store short-lived plans"));
+    expect(memory.items, hasLength(2));
+    await s.handle('I usually have meetings on Monday');
+    expect(memory.items, hasLength(3));
     expect(jsonEncode(r.extractMemory('I have to buy eggs')),
         '{"remember":false}');
   });

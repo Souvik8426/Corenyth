@@ -1,5 +1,7 @@
 # Device evaluation (real Qwen)
 
+> Snapshot: commit `c6492e2` · model `Corenyth-Qwen3-0.6B-mood-Q4_0` (sha256 `f2086705…`) · `flutter test` 538 pass / 3 skipped · host macOS, device POCO F5 · 2026-10-30. Historical; current state lives in reliability-status.md.
+
 Unit tests use stand-in engines that return the plan a correct model would give. They prove the app's validation
 and SQLite behaviour, not what Qwen3 actually outputs. Before claiming the assistant understands a phrasing, run
 this on a phone with the model installed and loaded (Settings shows it loaded), using a fresh chat.

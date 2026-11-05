@@ -2,11 +2,18 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../data/repos.dart';
 import '../services/reminder_scheduler.dart';
+import 'core_policy.dart' show memoryInstructionIssue;
 import 'follow_through.dart' show briefingText;
 import 'turn_contract.dart';
+
+/// [ExecutionReceipt.error] of a `save_memory` refused by the plan 1.5
+/// instruction scan (nothing was written).
+const memoryInstructionError = 'memory_instruction';
+const memoryRecoveryUnresolved = 'memory_recovery_unresolved';
 
 class ToolError implements Exception {
   final String message;
@@ -291,10 +298,73 @@ class ToolExecutor {
   /// cancellation that already took effect counts as done. Throws
   /// [ToolError] when nothing (or a rolled-back attempt) was written.
   Future<ExecutionReceipt> run(ToolCall c,
-      {String? operationId, bool recovering = false}) async {
-    final r = _Receipt(c.tool, operationId);
+      {String? operationId,
+      bool recovering = false,
+      MemoryWriteSource? memorySource}) async {
+    final r = _Receipt(c.tool, operationId)..memorySource = memorySource;
     final reply = await _execute(c, r, recovering);
     return r.build(reply);
+  }
+
+  /// Independent creates get separate indexed stamps. Older actions shared
+  /// the parent stamp: replay only rows matching this create, never a
+  /// reminder's backing task as an independent task.
+  Future<ExecutionReceipt> runIndependentCreate(ToolCall c,
+      {required String operationId,
+      required String legacyOperationId,
+      required bool recovering}) async {
+    if ((await tasks.byOperation(operationId)).isNotEmpty ||
+        (await reminders.byOperation(operationId)).isNotEmpty) {
+      return run(c, operationId: operationId, recovering: recovering);
+    }
+    final a = c.args;
+    final oldTasks = await tasks.byOperation(legacyOperationId);
+    final oldReminders = await reminders.byOperation(legacyOperationId);
+    final rec = _Receipt(c.tool, legacyOperationId);
+    switch (c.tool) {
+      case 'create_task':
+        final backing = {for (final r in oldReminders) r.taskId};
+        rec.replayTasks = oldTasks.where((t) {
+          final due = a['due'] as DateTime?;
+          return !backing.contains(t.id) &&
+              t.dailyMinute == null &&
+              t.title == a['title'] &&
+              (t.notes ?? '') == (a['notes'] ?? '') &&
+              t.dueAt?.millisecondsSinceEpoch == due?.millisecondsSinceEpoch &&
+              t.priority == (a['priority'] ?? 1);
+        }).toList();
+      case 'create_daily':
+        rec.replayTasks = oldTasks.where((t) {
+          final until = a['until'] as DateTime?;
+          return t.title == a['title'] &&
+              t.dailyMinute == a['minute'] &&
+              t.deadlineAt?.millisecondsSinceEpoch ==
+                  until?.millisecondsSinceEpoch;
+        }).toList();
+      case 'create_reminder':
+        final primary = oldReminders.where((r) {
+          final at = a['at'] as DateTime?;
+          return r.kind == 'reminder' &&
+              r.title == a['title'] &&
+              r.triggerAt.millisecondsSinceEpoch ==
+                  at?.millisecondsSinceEpoch &&
+              (a['task_id'] == null || r.taskId == a['task_id']);
+        }).firstOrNull;
+        if (primary != null) {
+          rec.replayReminders = oldReminders.where((r) =>
+              primary.taskId == null ? r.id == primary.id :
+              r.taskId == primary.taskId).toList();
+        }
+      default:
+        throw ArgumentError('Not an independent create: ${c.tool}');
+    }
+    if (rec.replayTasks?.isNotEmpty == true ||
+        rec.replayReminders?.isNotEmpty == true) {
+      return rec.build(await _execute(c, rec, true));
+    }
+    // Keep the ordinary executor entry point (including callers' overrides)
+    // for every new/scoped write. Legacy lookup above never writes anything.
+    return run(c, operationId: operationId, recovering: recovering);
   }
 
   Future<String> _execute(ToolCall c, _Receipt rec, bool recovering) async {
@@ -303,8 +373,13 @@ class ToolExecutor {
     switch (c.tool) {
       case 'respond':
         return a['text'] as String;
+      // App-built only, like create_daily: keep the model grammar (and its
+      // rendered prompts) unchanged. Children use the existing create tools.
+      case 'create_batch':
+        return _createBatch(a, rec, recovering);
       case 'create_task':
-        final prior = op == null ? const <Task>[] : await tasks.byOperation(op);
+        final prior = rec.replayTasks ??
+            (op == null ? const <Task>[] : await tasks.byOperation(op));
         final Task t;
         if (prior.isNotEmpty) {
           t = prior.first;
@@ -519,7 +594,9 @@ class ToolExecutor {
             '${r.taskId == null ? "" : " The task is still in Tasks."}';
       case 'search_memory':
         final m = await memory.search(a['query'] as String);
-        return m.isEmpty ? 'I have nothing stored about that.' : m.join('\n');
+        return m.isEmpty
+            ? 'I have nothing stored about that.'
+            : m.map((x) => x.dated).join('\n');
       // App-built only (not in [toolSchemas], so no model output can name them).
       case 'briefing':
         return briefingText(
@@ -558,53 +635,98 @@ class ToolExecutor {
         return '';
       case 'save_memory':
         final content = a['content'] as String;
-        if (recovering) {
-          try {
-            if ((await memory.all()).any((m) => m.content == content)) {
-              rec.status = ReceiptStatus.replayed;
-              return '';
-            }
-          } catch (_) {}
+        // Plan 1.5: instruction-like text is never stored, live or replayed
+        // (a journaled memory from an older build included). The receipt
+        // fails without throwing, so the turn's main action still runs.
+        if (memoryInstructionIssue(content.trim()) != null) {
+          rec
+            ..status = ReceiptStatus.failed
+            ..error = memoryInstructionError;
+          return '';
         }
-        final saved = await memory.add(content,
-            category: a['category'] as String? ?? 'fact',
-            opId: rec.op,
-            source: a['source'] as String? ?? 'chat');
+        var identity = rec.memorySource;
+        if (identity == null && op != null) {
+          identity = await MemoryWriteSource.forOperation(tasks.db, op);
+        }
+        if ((recovering && identity == null) ||
+            (identity != null && identity.operationId != op)) {
+          rec
+            ..status = ReceiptStatus.failed
+            ..error = memoryRecoveryUnresolved;
+          return '';
+        }
         // A correction ("I don't drink coffee anymore") retires the memories
         // that still state what was dropped; a vague one touching many rows
         // retires none.
         final replaces = a['replaces'] as String?;
-        if (replaces != null) {
-          final words = MemoryRepo.terms(replaces);
-          final old = words.isEmpty
-              ? const <Memory>[]
-              : (await memory.all())
-                  .where((m) =>
-                      m.id != saved &&
-                      words.every(MemoryRepo.terms(m.content).contains))
-                  .toList();
-          if (old.length <= 3) {
-            for (final m in old) {
-              await memory.supersede(m.id, saved);
-            }
+        final actor = a['explicit'] == true ? 'user' : 'rules';
+        // When it was said (plan 1.3), as journal-safe integers: the UTC
+        // instant and its offset. A replay after a crash reads the same
+        // numbers, so it stores the same observation and fact date whatever
+        // the clock or time zone is now. Anything malformed stores none.
+        final observedMs = a['observed_at_utc'];
+        final offsetMin = a['observation_offset_min'];
+        final observed =
+            observedMs is int && offsetMin is int && offsetMin.abs() <= 18 * 60
+                ? DateTime.fromMillisecondsSinceEpoch(observedMs, isUtc: true)
+                : null;
+        try {
+          if (identity != null) {
+            final wrote = await memory.saveLinked(content,
+                identity: identity,
+                replaces: replaces,
+                category: a['category'] as String? ?? 'fact',
+                source: a['source'] as String? ?? 'chat',
+                actor: actor,
+                observedAt: observed,
+                observationOffsetMin:
+                    observed == null ? null : offsetMin as int);
+            if (!wrote) rec.status = ReceiptStatus.replayed;
+          } else if (replaces != null) {
+            await memory.addCorrection(content,
+                replaces: replaces,
+                category: a['category'] as String? ?? 'fact',
+                opId: rec.op,
+                source: a['source'] as String? ?? 'chat',
+                actor: actor,
+                observedAt: observed,
+                observationOffsetMin:
+                    observed == null ? null : offsetMin as int);
+          } else {
+            await memory.add(content,
+                category: a['category'] as String? ?? 'fact',
+                opId: rec.op,
+                source: a['source'] as String? ?? 'chat',
+                actor: actor,
+                observedAt: observed,
+                observationOffsetMin:
+                    observed == null ? null : offsetMin as int);
           }
+        } on MemorySourceUnverified {
+          rec
+            ..status = ReceiptStatus.failed
+            ..error = memoryRecoveryUnresolved;
+        } on MemoryInstructionRejected {
+          // The repo wrote nothing (it checks before its transaction).
+          rec
+            ..status = ReceiptStatus.failed
+            ..error = memoryInstructionError;
         }
         return '';
       case 'delete_memory':
         final id = a['id'];
-        if (id is int) {
-          await memory.delete(id);
-          return 'Deleted that memory.';
-        }
-        final query = a['query'] as String?;
-        if (query != null) {
-          final hits = await memory.search(query);
-          for (final h in hits) {
-            await memory.delete(h.id);
+        if (id is! int) throw ToolError('delete_memory needs an id');
+        final rows = await memory.db.query('memories',
+            columns: ['content', 'status'], where: 'id = ?', whereArgs: [id]);
+        if (rows.isEmpty) throw ToolError('That memory no longer exists.');
+        final deleted = await memory.delete(id, actor: 'user', opId: rec.op);
+        if (!deleted) {
+          if (!recovering || rows.single['status'] != 'deleted') {
+            throw ToolError('That memory is no longer active.');
           }
-          return 'Deleted memory.';
+          rec.status = ReceiptStatus.replayed;
         }
-        return '';
+        return 'Forgot "${rows.single['content']}". Say "undo" to bring it back.';
     }
     throw ToolError('unknown tool ${c.tool}');
   }
@@ -650,6 +772,105 @@ class ToolExecutor {
     ].join(' ');
   }
 
+  /// Reuses the single-create executors on one SQLite transaction. The scoped
+  /// database flattens their nested transactions; platform work is deferred
+  /// until every item has committed. A retry retains each preview's index.
+  Future<String> _createBatch(
+    Map<String, Object?> args,
+    _Receipt rec,
+    bool recovering,
+  ) async {
+    final raw = args['items'];
+    if (raw is! List || raw.isEmpty || raw.length > 20) {
+      throw ToolError('create_batch needs a non-empty item list.');
+    }
+    final calls = <(int, ToolCall)>[];
+    final indices = <int>{};
+    for (final value in raw) {
+      if (value is! Map) throw ToolError('Invalid batch item.');
+      final index = value['index'], tool = value['tool'];
+      final childArgs = value['arguments'];
+      if (index is! int ||
+          index < 1 ||
+          !indices.add(index) ||
+          !const {
+            'create_task',
+            'create_reminder',
+            'create_daily',
+          }.contains(tool) ||
+          childArgs is! Map) {
+        throw ToolError('Invalid batch item.');
+      }
+      final a = Map<String, Object?>.from(childArgs);
+      // Journal/pending JSON restores timestamps as strings.
+      for (final key in ['due', 'at', 'until']) {
+        if (a[key] is String) {
+          final at = DateTime.tryParse(a[key] as String);
+          if (at == null) throw ToolError('Invalid batch timestamp.');
+          a[key] = at;
+        }
+      }
+      if (a['title'] is! String ||
+          (a['title'] as String).trim().isEmpty ||
+          (tool == 'create_task' &&
+              a['due'] != null &&
+              a['due'] is! DateTime) ||
+          (tool == 'create_reminder' && a['at'] is! DateTime) ||
+          (tool == 'create_daily' &&
+              (a['minute'] is! int ||
+                  (a['minute'] as int) < 0 ||
+                  (a['minute'] as int) >= 1440))) {
+        throw ToolError('Invalid batch create arguments.');
+      }
+      calls.add((index, ToolCall(tool as String, a)));
+    }
+    final savedPrefs = await preferences?.get();
+    final now = clock();
+    final receipts = await tasks.db.transaction((tx) async {
+      final scoped = _BatchDatabase(tx);
+      final executor = ToolExecutor(
+        TaskRepo(scoped),
+        ReminderRepo(scoped, clock: () => now),
+        memory,
+        _BatchScheduler(),
+        clock: () => now,
+        preferences:
+            savedPrefs == null ? null : _BatchPreferences(scoped, savedPrefs),
+      );
+      return <ExecutionReceipt>[
+        for (final (index, call) in calls)
+          await executor.run(
+            call,
+            operationId: rec.op == null ? null : '${rec.op}#$index',
+            recovering: recovering,
+          ),
+      ];
+    });
+    rec
+      ..taskIds = receipts.expand((r) => r.taskIds).toSet().toList()
+      ..reminderIds = receipts.expand((r) => r.reminderIds).toSet().toList();
+    if (receipts.every((r) => r.status == ReceiptStatus.replayed)) {
+      rec.status = ReceiptStatus.replayed;
+    } else if (receipts.every((r) => !r.wrote)) {
+      rec.status = ReceiptStatus.noWrite;
+    }
+    final sync = rec.reminderIds.isEmpty ? '' : await _sync();
+    if (rec.reminderIds.isNotEmpty) {
+      rec.alarm = sync.isNotEmpty ? AlarmStatus.pendingRetry : await _alarm();
+    }
+    _changed();
+    return [
+      'Saved ${calls.length} items:',
+      for (var i = 0; i < calls.length; i++)
+        '${calls[i].$1}. ${calls[i].$2.args['title']} '
+            '(${[
+          for (final id in receipts[i].taskIds) 'task #$id',
+          for (final id in receipts[i].reminderIds) 'reminder #$id'
+        ].join(', ')})',
+      if (sync.isNotEmpty) sync.trim(),
+    ].join('\n');
+  }
+
   /// A pending task reminded every day at [minute] (after midnight) until
   /// [until] (inclusive; null = until done). All or nothing: if its alarm
   /// can't be set, the task is removed again.
@@ -660,7 +881,8 @@ class ToolExecutor {
         "Okay, I'll remind you every day at ${_clock(first)}, starting ${_when(first)}, "
         '${until == null ? 'until you mark it done' : 'until ${fullDate(until)}'}: $title.';
     final op = rec.op;
-    final prior = op == null ? const <Task>[] : await tasks.byOperation(op);
+    final prior = rec.replayTasks ??
+        (op == null ? const <Task>[] : await tasks.byOperation(op));
     if (prior.isNotEmpty && prior.first.dueAt != null) {
       // Committed under this operation before a crash: report, don't repeat.
       final t = prior.first;
@@ -736,8 +958,8 @@ class ToolExecutor {
     final title = a['title'] as String, at = a['at'] as DateTime;
     final now = clock();
     final op = rec.op;
-    final stamped =
-        op == null ? const <Reminder>[] : await reminders.byOperation(op);
+    final stamped = rec.replayReminders ??
+        (op == null ? const <Reminder>[] : await reminders.byOperation(op));
     if (stamped.isNotEmpty) {
       // Committed under this operation before a crash: arm whatever is still
       // pending and report it; nothing is written twice.
@@ -1016,11 +1238,110 @@ class ToolExecutor {
   }
 }
 
+/// Transaction-scoped view used only by create_batch's existing executors.
+/// Keep schedule intents durable until the one post-commit platform sync.
+class _BatchDatabase implements Database {
+  final Transaction tx;
+  _BatchDatabase(this.tx);
+  @override
+  Future<T> transaction<T>(
+    Future<T> Function(Transaction txn) action, {
+    bool? exclusive,
+  }) =>
+      action(tx);
+  @override
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) =>
+      tx.insert(
+        table,
+        values,
+        nullColumnHack: nullColumnHack,
+        conflictAlgorithm: conflictAlgorithm,
+      );
+  @override
+  Future<List<Map<String, Object?>>> query(
+    String table, {
+    bool? distinct,
+    List<String>? columns,
+    String? where,
+    List<Object?>? whereArgs,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) =>
+      tx.query(
+        table,
+        distinct: distinct,
+        columns: columns,
+        where: where,
+        whereArgs: whereArgs,
+        groupBy: groupBy,
+        having: having,
+        orderBy: orderBy,
+        limit: limit,
+        offset: offset,
+      );
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(
+    String sql, [
+    List<Object?>? arguments,
+  ]) =>
+      tx.rawQuery(sql, arguments);
+  @override
+  Future<int> update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
+    if (table == 'reminders' &&
+        values.length == 1 &&
+        values.containsKey('sync') &&
+        values['sync'] == null) return 0;
+    return tx.update(
+      table,
+      values,
+      where: where,
+      whereArgs: whereArgs,
+      conflictAlgorithm: conflictAlgorithm,
+    );
+  }
+
+  @override
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) =>
+      tx.delete(table, where: where, whereArgs: whereArgs);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _BatchScheduler extends NoopScheduler {
+  @override
+  Future<List<int>> syncPending(ReminderRepo repo) async => [];
+}
+
+class _BatchPreferences extends ReminderPreferencesRepo {
+  final ReminderPreferences value;
+  _BatchPreferences(super.db, this.value);
+  @override
+  Future<ReminderPreferences> get() async => value;
+}
+
 /// Filled in while a call runs; [build] freezes it.
 class _Receipt {
   final String tool;
   final String? op;
+  MemoryWriteSource? memorySource;
+  List<Task>? replayTasks;
+  List<Reminder>? replayReminders;
   ReceiptStatus? status;
+  String? error;
   List<int> taskIds = const [], reminderIds = const [];
   DateTime? at;
   AlarmStatus alarm = AlarmStatus.none;
@@ -1040,6 +1361,7 @@ class _Receipt {
         at: at,
         alarm: alarm,
         reply: reply,
+        error: error,
       );
 }
 

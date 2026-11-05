@@ -1,5 +1,7 @@
 # Corenyth: next steps after the Mem0 and Hermes study
 
+> Snapshot: commit `c6492e2` · model `Corenyth-Qwen3-0.6B-mood-Q4_0` (sha256 `f2086705…`) · `flutter test` 538 pass / 3 skipped · host macOS, device POCO F5 · 2026-10-30. Historical; current state lives in reliability-status.md.
+
 Date: 29 October 2026. Reviewed source revision: `0ee7905`, including the existing untracked `CORE_RULES.md` and architecture study. This document retains the proposed sequence and records partial implementation and verification in the checkpoint below.
 
 ## Detailed execution plan

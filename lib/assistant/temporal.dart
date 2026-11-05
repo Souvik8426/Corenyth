@@ -823,3 +823,258 @@ class Temporal {
 }
 
 enum _DateProblem { invalid, conflict }
+
+// ---- remembered-fact dates (plan 1.3) ----
+
+const _factWeekdays = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday'
+];
+const _factWeekday =
+    '(monday|tuesday|wednesday|thursday|friday|saturday|sunday)';
+const _factMonthNumbers = {
+  'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3,
+  'april': 4, 'apr': 4, 'may': 5, 'june': 6, 'jun': 6, 'july': 7, 'jul': 7,
+  'august': 8, 'aug': 8, 'september': 9, 'sept': 9, 'sep': 9,
+  'october': 10, 'oct': 10, 'november': 11, 'nov': 11, 'december': 12,
+  'dec': 12,
+};
+const _factMonth = '(january|february|march|april|may|june|july|august|'
+    'september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|'
+    'sep|oct|nov|dec)';
+const _factCounts = {
+  'a': 1, 'an': 1, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+  'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11,
+  'twelve': 12,
+};
+const _factCount =
+    r'(\d{1,3}|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)';
+const _factOrdinal = r'(\d{1,2})(?:st|nd|rd|th)?';
+
+/// The calendar date a remembered fact refers to, resolved against when it
+/// was said. Null when there is none or it is ambiguous; never a guess.
+///
+/// Only the wall-clock calendar day of [observedAt] is used (its year, month
+/// and day fields), so pass the observation's local time. Values are
+/// `YYYY-MM-DD`, or `--MM-DD` with `recurring` for a yearly date ("my mom's
+/// birthday is June 4"). Supported phrases (plan 1.3):
+/// - today / yesterday / tomorrow;
+/// - N days/weeks ago, in N days/weeks;
+/// - last / next / this <weekday>: the previous one before today, the first
+///   one after today, and the next one with today included;
+/// - ISO `2026-11-02`, "2 November 2026", "Nov 2 2026";
+/// - a month-day without a year only with a yearly cue (birthday,
+///   anniversary, every year);
+/// - "on <weekday>" with a future cue (is/are on, will, going to, have/has)
+///   is the next one; with a past cue (was, were, went, had, met, did) the
+///   previous one.
+/// Anything else that names a day (a bare weekday with no or mixed cues, a
+/// month-day with no year and no yearly cue, an impossible date), or two
+/// phrases naming different days, makes the whole fact unresolved.
+({String value, bool recurring})? resolveFactDate(
+    String text, DateTime observedAt) {
+  var t = text.toLowerCase();
+  final original = t;
+  final today = DateTime.utc(observedAt.year, observedAt.month, observedAt.day);
+  final found = <String>{};
+  var unresolved = false;
+
+  String two(int v) => v.toString().padLeft(2, '0');
+  String iso(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+      '${two(d.month)}-${two(d.day)}';
+  DateTime? real(int y, int m, int d) {
+    if (y < 1900 || y > 2200) return null;
+    final x = DateTime.utc(y, m, d);
+    return x.year == y && x.month == m && x.day == d ? x : null;
+  }
+
+  void addDay(DateTime? d) {
+    if (d == null) {
+      unresolved = true;
+    } else {
+      found.add(iso(d));
+    }
+  }
+
+  DateTime shift(int days) =>
+      DateTime.utc(today.year, today.month, today.day + days);
+  int weekdayOf(String name) => _factWeekdays.indexOf(name) + 1;
+  // Strictly after / strictly before today.
+  DateTime nextWeekday(int wd) {
+    final ahead = (wd - today.weekday) % 7;
+    return shift(ahead == 0 ? 7 : ahead);
+  }
+
+  DateTime previousWeekday(int wd) {
+    final back = (today.weekday - wd) % 7;
+    return shift(-(back == 0 ? 7 : back));
+  }
+
+  int count(String s) => _factCounts[s] ?? int.parse(s);
+
+  /// Runs [onMatch] for every match of [pattern], then blanks the matched
+  /// text so a later, looser pattern cannot read the same words again.
+  void take(String pattern, void Function(Match m) onMatch) {
+    t = t.replaceAllMapped(RegExp(pattern), (m) {
+      onMatch(m);
+      return ' ' * m.group(0)!.length;
+    });
+  }
+
+  // Full dates first, so their month-day is not read again without a year.
+  take(r'\b(\d{4})-(\d{2})-(\d{2})\b', (m) {
+    addDay(real(int.parse(m.group(1)!), int.parse(m.group(2)!),
+        int.parse(m.group(3)!)));
+  });
+  take('\\b$_factOrdinal\\s+(?:of\\s+)?$_factMonth\\.?,?\\s+(\\d{4})\\b', (m) {
+    addDay(real(int.parse(m.group(3)!), _factMonthNumbers[m.group(2)!]!,
+        int.parse(m.group(1)!)));
+  });
+  take('\\b$_factMonth\\.?\\s+$_factOrdinal,?\\s+(\\d{4})\\b', (m) {
+    addDay(real(int.parse(m.group(3)!), _factMonthNumbers[m.group(1)!]!,
+        int.parse(m.group(2)!)));
+  });
+
+  // A month-day without a year: yearly only with a yearly cue.
+  final yearly = RegExp(
+          r'\b(?:birthdays?|bday|anniversar(?:y|ies)|every\s+year)\b')
+      .hasMatch(original);
+  void monthDay(int month, int day) {
+    // 2024 is a leap year, so 29 February stays a valid yearly date.
+    if (!yearly || real(2024, month, day) == null) {
+      unresolved = true;
+    } else {
+      found.add('--${two(month)}-${two(day)}');
+    }
+  }
+
+  take('\\b$_factOrdinal\\s+(?:of\\s+)?$_factMonth\\b', (m) {
+    monthDay(_factMonthNumbers[m.group(2)!]!, int.parse(m.group(1)!));
+  });
+  take('\\b$_factMonth\\.?\\s+$_factOrdinal\\b(?!\\s*:)', (m) {
+    monthDay(_factMonthNumbers[m.group(1)!]!, int.parse(m.group(2)!));
+  });
+
+  take(r'\b(today|yesterday|tomorrow)\b', (m) {
+    addDay(shift(const {'yesterday': -1, 'today': 0, 'tomorrow': 1}[
+        m.group(1)!]!));
+  });
+  take('\\b$_factCount\\s+(days?|weeks?)\\s+ago\\b', (m) {
+    final n = count(m.group(1)!) * (m.group(2)!.startsWith('week') ? 7 : 1);
+    addDay(shift(-n));
+  });
+  take('\\bin\\s+$_factCount\\s+(days?|weeks?)\\b', (m) {
+    final n = count(m.group(1)!) * (m.group(2)!.startsWith('week') ? 7 : 1);
+    addDay(shift(n));
+  });
+  take('\\b(last|next|this)\\s+$_factWeekday\\b', (m) {
+    final wd = weekdayOf(m.group(2)!);
+    addDay(switch (m.group(1)!) {
+      'last' => previousWeekday(wd),
+      'next' => nextWeekday(wd),
+      _ => shift((wd - today.weekday) % 7),
+    });
+  });
+
+  // "on Monday": the tense of the fact decides; no cue or both is a guess.
+  final future = RegExp(
+          r"\b(?:is|are)\s+on\b|\bwill\b|'ll\b|\bgoing\s+to\b|\b(?:have|has)\b")
+      .hasMatch(original);
+  final past = RegExp(r'\b(?:was|were|went|had|met|did)\b').hasMatch(original);
+  take('\\bon\\s+$_factWeekday\\b', (m) {
+    final wd = weekdayOf(m.group(1)!);
+    if (future == past) {
+      unresolved = true;
+    } else {
+      addDay(future ? nextWeekday(wd) : previousWeekday(wd));
+    }
+  });
+  // Any weekday left over (e.g. "my exam is Monday") has no rule.
+  if (RegExp('\\b$_factWeekday\\b').hasMatch(t)) unresolved = true;
+
+  if (unresolved || found.length != 1) return null;
+  final value = found.single;
+  return (value: value, recurring: value.startsWith('--'));
+}
+
+/// When a remembered fact stops being current (plan 1.4), as UTC epoch ms;
+/// null for a fact that does not expire.
+///
+/// Pure and deterministic: it reads only [text], the observation instant
+/// [observedUtcMs], the UTC offset it was said at [offsetMin] and its
+/// [factDate] (see [resolveFactDate]), never the clock or the device zone,
+/// so a journal replay on another day or in another zone stores the same
+/// value. Every window ends at a local midnight in [offsetMin] (a later DST
+/// change does not move it).
+/// - [temporary] text (a short-lived plan or state, e.g. "my exam is next
+///   Monday", "I'm in Goa this week") expires at the end of its window: the
+///   end of its one-off fact day, of today for tonight / this morning /
+///   afternoon / evening, of this or next week (weeks end on Sunday), or of
+///   next month. A window already over (a past fact day) falls back to the
+///   one-off rule below; an unresolved window (no fact day) lasts 7 days
+///   from when it was said.
+/// - Other text with a one-off `YYYY-MM-DD` fact date expires at the end of
+///   the 30th day after it. A yearly (`--MM-DD`) or absent date never
+///   expires, nor does a birth date or anniversary.
+/// - A one-off expiry at or before [observedUtcMs] (a historical fact such
+///   as "I graduated on 2 June 2020") is null: it never expires, instead of
+///   being stored already expired.
+int? factExpiresAt(String text,
+    {required int observedUtcMs,
+    required int offsetMin,
+    required String? factDate,
+    required bool temporary}) {
+  final shift = offsetMin * 60000;
+  final local =
+      DateTime.fromMillisecondsSinceEpoch(observedUtcMs + shift, isUtc: true);
+  // The instant a local calendar day starts (DateTime.utc normalizes
+  // overflowing days and months).
+  int startOf(int y, int m, int d) =>
+      DateTime.utc(y, m, d).millisecondsSinceEpoch - shift;
+  final day =
+      RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(factDate ?? '');
+  int? dayEnd(int plusDays) => day == null
+      ? null
+      : startOf(int.parse(day.group(1)!), int.parse(day.group(2)!),
+          int.parse(day.group(3)!) + 1 + plusDays);
+  // A 30-day expiry that has already passed when the fact was said means a
+  // historical fact ("I graduated on 2 June 2020"): it never expires,
+  // rather than being stored already expired and hidden from every read.
+  int? oneOff() {
+    final end = dayEnd(30);
+    return end != null && end > observedUtcMs ? end : null;
+  }
+
+  final t = text.toLowerCase();
+  if (!temporary) {
+    // Birth dates and anniversaries with a year stay true for good.
+    if (RegExp(r'\b(?:born|birthdays?|bday|anniversar(?:y|ies))\b')
+        .hasMatch(t)) {
+      return null;
+    }
+    return oneOff();
+  }
+
+  var window = dayEnd(0);
+  if (window == null) {
+    final y = local.year, m = local.month, d = local.day;
+    if (RegExp(r'\b(?:today|tonight|this\s+(?:morning|afternoon|evening))\b')
+        .hasMatch(t)) {
+      window = startOf(y, m, d + 1);
+    } else if (RegExp(r'\bthis\s+week\b').hasMatch(t)) {
+      window = startOf(y, m, d + 8 - local.weekday);
+    } else if (RegExp(r'\bnext\s+week\b').hasMatch(t)) {
+      window = startOf(y, m, d + 15 - local.weekday);
+    } else if (RegExp(r'\bnext\s+month\b').hasMatch(t)) {
+      window = startOf(y, m + 2, 1);
+    }
+  }
+  if (window != null && window > observedUtcMs) return window;
+  if (day != null) return oneOff();
+  return observedUtcMs + const Duration(days: 7).inMilliseconds;
+}

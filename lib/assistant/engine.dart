@@ -94,6 +94,10 @@ class Prompt {
   /// plan only: the profile tone, repeated next to the message (small models
   /// follow the nearest instruction); null = none.
   final String? tone;
+
+  /// Optional mood job: the same rendered prompt, but the grammar stops after
+  /// the mood envelope ([moodOnlyGrammar]), so only the envelope is decoded.
+  final bool moodOnly;
   Prompt(this.kind, this.user,
       {this.memories = const [],
       this.tone,
@@ -104,10 +108,16 @@ class Prompt {
       this.pending,
       this.context,
       this.now,
-      this.contract = promptContractVersion});
+      this.contract = promptContractVersion,
+      this.moodOnly = false});
+
+  /// Just `{"emotion":{…}}`: once complete, the grammar sampler allows only
+  /// end-of-generation, so decoding stops by itself.
+  static final moodOnlyGrammar =
+      'root ::= "{\\"emotion\\":" emotion "}"\n$emotionGrammar';
 
   /// The grammar the native side constrains this prompt with.
-  String get grammar => switch (kind) {
+  String get grammar => moodOnly ? moodOnlyGrammar : switch (kind) {
         PromptKind.action => toolGrammar,
         PromptKind.plan =>
           contract == planContractV2 ? semanticGrammarV2 : semanticGrammar,
@@ -325,7 +335,8 @@ Reply with ONE JSON object: {"remember":true,"memory":"User ...","category":"pre
           pending: pending,
           context: context,
           now: now,
-          contract: contract);
+          contract: contract,
+          moodOnly: moodOnly);
 
   /// Candidate renders from fullest to smallest: drop oldest history first, then
   /// optional context (memories, personal context; tasks answer the request so stay).
@@ -372,6 +383,14 @@ abstract class LlmEngine {
           {void Function(String text)? onText,
           void Function(String raw)? onRaw}) =>
       complete(p);
+
+  /// Low-priority work that a foreground request may cancel via [cancelOptional].
+  Future<String> completeOptional(Prompt p,
+          {void Function(String raw)? onRaw}) =>
+      completeStreaming(p, onRaw: onRaw);
+
+  /// Cancels in-flight or queued [completeOptional] requests only.
+  Future<void> cancelOptional() async {}
 
   /// Cancels this engine's in-flight/queued requests; they throw instead of returning.
   Future<void> cancel() async {}
@@ -525,6 +544,7 @@ class LlamaChannelEngine extends LlmEngine {
   final String modelPath;
   final int contextSize;
   final _active = <int>{};
+  final _optional = <int>{};
   LlamaChannelEngine(this.modelPath, {this.contextSize = 2048});
 
   @override
@@ -559,9 +579,21 @@ class LlamaChannelEngine extends LlmEngine {
   @override
   Future<String> completeStreaming(Prompt p,
       {void Function(String text)? onText,
-      void Function(String raw)? onRaw}) async {
+      void Function(String raw)? onRaw}) =>
+      _generate(p, onText: onText, onRaw: onRaw);
+
+  @override
+  Future<String> completeOptional(Prompt p,
+          {void Function(String raw)? onRaw}) =>
+      _generate(p, onRaw: onRaw, optional: true);
+
+  Future<String> _generate(Prompt p,
+      {void Function(String text)? onText,
+      void Function(String raw)? onRaw,
+      bool optional = false}) async {
     final id = ++_nextId;
-    final maxTokens = switch (p.kind) {
+    // Mood-only stops at the envelope's end (~25 tokens); 32 is the backstop.
+    final maxTokens = p.moodOnly ? 32 : switch (p.kind) {
       PromptKind.action => 160,
       // The mood envelope adds ~15 tokens ahead of the plan fields; without
       // headroom near-limit plans truncate before their reply.
@@ -586,6 +618,7 @@ class LlamaChannelEngine extends LlmEngine {
       };
     }
     _active.add(id);
+    if (optional) _optional.add(id);
     try {
       return await _ch.invokeMethod<String>('generate', {
             'id': id,
@@ -597,13 +630,19 @@ class LlamaChannelEngine extends LlmEngine {
           '';
     } finally {
       _active.remove(id);
+      _optional.remove(id);
       _listeners.remove(id);
     }
   }
 
   @override
-  Future<void> cancel() async {
-    for (final id in _active.toList()) {
+  Future<void> cancel() => _cancelRequests(_active.toList());
+
+  @override
+  Future<void> cancelOptional() => _cancelRequests(_optional.toList());
+
+  Future<void> _cancelRequests(List<int> ids) async {
+    for (final id in ids) {
       _listeners.remove(id); // no streamed text after stop
       try {
         await _ch.invokeMethod('cancel', {'id': id});

@@ -22,7 +22,7 @@ import sys
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I drops the script folder
-from app_prompts import PERSONALITIES, PLAN_SYSTEM, REPLY_SYSTEM, TONE_STYLES  # noqa: E402
+from app_prompts import PERSONALITIES, PLAN_SYSTEM, PLAN_SYSTEM_V2, REPLY_SYSTEM, TONE_STYLES  # noqa: E402
 
 PERSONAS = list(PERSONALITIES)
 # Profile tones that older installs may still hold; the app maps them to a personality.
@@ -82,9 +82,10 @@ def personal_context(name, occupation, tone, memories=()):
     return ' '.join(parts)
 
 
-def render(message, now, tasks_text, tone, personal='', context=(), pending=None, memories=()):
-    """Prompt._renderPlan (plan-v1)."""
-    s = '<|im_start|>system\n' + PLAN_SYSTEM + '\n' + PERSONALITIES[canonical(tone)]
+def render(message, now, tasks_text, tone, personal='', context=(), pending=None, memories=(), contract='plan-v1'):
+    """Prompt._renderPlan. The plan renderer is shared; only the system string differs by contract."""
+    system = PLAN_SYSTEM_V2 if contract == 'plan-v2' else PLAN_SYSTEM
+    s = '<|im_start|>system\n' + system + '\n' + PERSONALITIES[canonical(tone)]
     if personal:
         s += '\nAbout the user:\n' + personal
     s += '<|im_end|>\n<|im_start|>user\n'
@@ -101,6 +102,11 @@ def render(message, now, tasks_text, tone, personal='', context=(), pending=None
         s += f'Reply tone: {tone} ({TONE_STYLES[tone]})\n'
     s += f'Message: {message} /no_think<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n'
     return s
+
+
+def render_v2(message, now, tasks_text, tone, personal='', context=(), pending=None, memories=()):
+    """Prompt._renderPlan with contract plan-v2."""
+    return render(message, now, tasks_text, tone, personal, context, pending, memories, contract='plan-v2')
 
 
 def render_reply(history, message, now, tone, personal='', facts=None):
@@ -478,6 +484,7 @@ def generated(rng, n):
         (14, gen_statement), (12, gen_remind), (9, gen_add), (12, gen_complete), (8, gen_postpone),
         (5, gen_delete), (6, gen_list), (5, gen_recall), (6, gen_answer), (3, gen_cancel_pending),
         (6, gen_greet), (4, gen_thanks), (4, gen_feeling), (3, gen_negated), (4, gen_add_hard_negative),
+        (4, gen_list_item), (4, gen_status_note),
     ]
     total = sum(w for w, _ in makers)
     for w, f in makers:
@@ -576,6 +583,38 @@ def gen_list(rng):
     return row(sc, maybe_cap(msg, rng), plan_json('list', range=rg, reply=rng.choice(R['list'][sc.voice])), 'g:list')
 
 
+def strip_list_markup(text):
+    """Remove common markdown/list decoration without changing item wording."""
+    text = re.sub(r'^\s*(?:(?:[-*+]\s+|\d+[.)]\s+)?\[[ xX]\]\s*|[-*+]\s+|\d+[.)]\s+)', '', text)
+    return re.sub(r'[`*_~#]+', '', text).strip()
+
+
+def gen_list_item(rng):
+    """Single task named in list-item style; plan-v1 supports create_task."""
+    sc = Scene(rng)
+    title = strip_list_markup(rng.choice(LIST_ITEM_TEMPLATES))
+    msg = maybe_cap(title, rng)
+    return row(sc, msg, plan_json('create_task', title=title,
+                                  reply=rng.choice(R['task'][sc.voice])), 'g:list_item')
+
+
+LIST_ITEM_TEMPLATES = [
+        '- buy oat milk', '* review the budget', '1. call Priya', '[ ] renew passport',
+        '- [ ] buy batteries', '* [x] file receipts', '+ [X] book dentist',
+        '2) check the boiler', '`send the signed form`', '**water the balcony plants**',
+]
+
+
+def gen_status_note(rng):
+    """Status notes are chat in active plan-v1, which has no progress intent."""
+    sc = Scene(rng)
+    msg = maybe_cap(rng.choice([
+        'the vendor is still unconfirmed', 'on hold until the client replies',
+        'the draft is waiting on legal', 'the delivery remains delayed',
+    ]), rng)
+    return row(sc, msg, plan_json('chat', reply=rng.choice(CHAT['thanks'][sc.voice])), 'g:progress')
+
+
 def gen_recall(rng):
     sc = Scene(rng)
     who = rng.choice(['Kabir', 'Priya', 'my brother', 'my boss', 'Ravi', 'my diet', 'my landlord'])
@@ -639,6 +678,7 @@ def gen_negated(rng):
 def check(export_path):
     d = json.load(open(export_path, encoding='utf-8'))
     assert d['planSystem'] == PLAN_SYSTEM, 'PLAN_SYSTEM differs from the app'
+    assert d['planSystemV2'] == PLAN_SYSTEM_V2, 'PLAN_SYSTEM_V2 differs from the app'
     assert d['replySystem'] == REPLY_SYSTEM, 'REPLY_SYSTEM differs from the app'
     assert d['toneStyles'] == TONE_STYLES, 'TONE_STYLES differs from the app'
     assert d['personalities'] == PERSONALITIES, 'personalities differ from the app'
@@ -651,6 +691,14 @@ def check(export_path):
     empty = render('hi', datetime(2026, 1, 4, 9, 0), '(none)', 'professional', personal_context('', '', 'professional'))
     assert empty == s['planEmpty'], 'plan render (empty) differs from Prompt._renderPlan'
     assert render('hi', datetime(2026, 1, 4, 9, 0), '(none)', None) == s['planNoTone'], 'plan render (no tone) differs'
+    v2_full = render_v2('remind me to call mom at 5pm', datetime(2026, 10, 20, 14, 5),
+                        '#3 buy milk\n#7 meeting (due tomorrow (Wed 21 Oct) at 3:00 PM)', 'loving',
+                        personal_context('Asha', 'teacher', 'loving'), ['Last task mentioned: #3 buy milk'],
+                        'task "dentist" still needs a time', ['User likes tea'])
+    assert v2_full == s['planV2Full'], 'plan-v2 render differs from Prompt._renderPlan'
+    v2_empty = render_v2('hi', datetime(2026, 1, 4, 9, 0), '(none)', 'professional', personal_context('', '', 'professional'))
+    assert v2_empty == s['planV2Empty'], 'plan-v2 render (empty) differs from Prompt._renderPlan'
+    assert render_v2('hi', datetime(2026, 1, 4, 9, 0), '(none)', None) == s['planV2NoTone'], 'plan-v2 render (no tone) differs'
     hist = render_reply([('user', 'I have a big meeting at 3'), ('assistant', 'Good luck, you are ready for it.')],
                         'It went well, thanks', datetime(2026, 10, 20, 14, 5), 'caring',
                         personal_context('Ravi', '', 'caring'), 'Last task mentioned: #7 meeting')
@@ -659,7 +707,7 @@ def check(export_path):
     assert plain == s['replyPlain'], 'reply render (plain) differs from Prompt._renderReply'
     now = datetime(2026, 10, 20, 14, 5)
     assert friendly(datetime(2026, 10, 21, 15, 0), now) == 'tomorrow (Wed 21 Oct) at 3:00 PM'
-    print('render check: identical to the app (plan and reply)')
+    print('render check: plan-v1, plan-v2 and reply identical to the app')
 
 
 def main():

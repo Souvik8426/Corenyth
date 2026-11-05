@@ -25,7 +25,7 @@ class _Memory extends MemoryRepo {
       {String category = 'fact',
       double importance = 0.5,
       String? opId,
-      String? source}) async {
+      String? source, String actor = 'rules', DateTime? observedAt, int? observationOffsetMin}) async {
     items.add(content);
     return items.length;
   }
@@ -220,9 +220,12 @@ void main() {
     final s = await open(_early);
     await screenshotTasks();
     // a valid plan of the wrong kind (list for a create) is not executed
-    model.output = '{"intent":"list","range":"all"}';
+    model.output = '{"intent":"list","range":"all",'
+        '"reply":"Here is your task list: phantom item."}';
     final reply = await s.handle('remind me next monday to call Bob');
     expect(reply, isNot(contains('bring milk')));
+    expect(reply, isNot(contains('Here is your task list')));
+    expect(reply, isNot(contains('phantom item')));
     expect(s.lastFallbackReason, contains('did not fit'));
     model.output = '{"intent":"recall","title":"Bob"}';
     expect(await s.handle('remind me next monday to call Bob'),
